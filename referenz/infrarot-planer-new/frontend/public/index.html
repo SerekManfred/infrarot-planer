@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Infrarot-Heizungsplaner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #1f2937;
+  --border:   #30363d;
+  --accent:   #f97316;
+  --accent2:  #fb923c;
+  --blue:     #3b82f6;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --radius:   10px;
+  --mono:     'DM Mono', monospace;
+  --sans:     'Inter', sans-serif;
+  --display:  'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* TOPBAR */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar-brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--accent); }
+.topbar-brand svg { width: 28px; height: 28px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+.topbar-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+/* LAYOUT */
+.app-layout { display: flex; flex: 1; height: calc(100vh - 56px); }
+
+/* SIDEBAR */
+.sidebar { width: 220px; min-width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 0; overflow-y: auto; }
+.nav-section { padding: 8px 16px 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; border-left: 3px solid transparent; transition: all .15s; }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: rgba(249,115,22,.08); color: var(--accent); border-left-color: var(--accent); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-badge { margin-left: auto; background: var(--accent); color: white; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
+
+/* MAIN */
+.main-content { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+/* VIEWS */
+.view { display: none; flex-direction: column; gap: 20px; }
+.view.active { display: flex; }
+
+/* PAGE HEADER */
+.page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.page-title { font-family: var(--display); font-size: 22px; font-weight: 700; }
+.page-subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* CARDS */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-title { font-family: var(--display); font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.card-title svg { width: 16px; height: 16px; color: var(--accent); }
+.card-body { padding: 18px; }
+
+/* FORMS */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.form-label .req { color: var(--accent); }
+.form-input, .form-select {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 12px; color: var(--text); font-size: 13px; font-family: var(--sans);
+  transition: border-color .15s; width: 100%;
+}
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(249,115,22,.15); }
+.form-select option { background: var(--surface2); }
+
+/* BUTTONS */
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: var(--sans); transition: all .15s; white-space: nowrap; }
+.btn svg { width: 15px; height: 15px; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: var(--red); color: white; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* UPLOAD */
+.upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
+.upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: rgba(249,115,22,.05); }
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 40px; margin-bottom: 12px; }
+.upload-text { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.upload-hint { font-size: 12px; color: var(--muted); }
+.upload-file-item { display: flex; align-items: center; gap: 10px; background: var(--surface2); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-top: 12px; }
+.upload-file-item svg { width: 16px; height: 16px; color: var(--accent); }
+
+/* TABLES */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { background: var(--surface2); padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.data-table td { padding: 9px 12px; border-bottom: 1px solid rgba(48,54,61,.5); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,.02); }
+.editable { background: var(--bg); border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 13px; width: 100%; font-family: var(--sans); }
+.editable:focus { outline: none; border-color: var(--accent); }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-orange { background: rgba(249,115,22,.15); color: var(--accent); }
+.badge-blue   { background: rgba(59,130,246,.15);  color: var(--blue); }
+.badge-green  { background: rgba(34,197,94,.15);   color: var(--green); }
+.badge-gray   { background: var(--surface2);        color: var(--muted); }
+
+/* STATS */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.stat-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+.stat-value { font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--accent); margin: 4px 0; }
+.stat-sub { font-size: 11px; color: var(--muted); }
+
+/* ROOMS */
+.rooms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.room-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.room-card:hover { border-color: var(--accent); }
+.room-card-header { padding: 10px 14px; background: rgba(249,115,22,.06); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.room-name { font-weight: 700; font-size: 13px; }
+.room-body { padding: 12px 14px; }
+.room-module-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 5px; padding: 5px 10px; font-size: 12px; margin-bottom: 4px; }
+.module-icon { width: 20px; height: 20px; border-radius: 3px; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: white; flex-shrink: 0; }
+.module-icon.corner { background: var(--blue); }
+
+/* FLOOR TABS */
+.floor-nav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.floor-tab { padding: 6px 14px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); transition: all .15s; }
+.floor-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* ALERTS */
+.alert { padding: 10px 16px; border-radius: 6px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+.alert svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert-info    { background: rgba(59,130,246,.1);  border: 1px solid rgba(59,130,246,.3);  color: #93c5fd; }
+.alert-success { background: rgba(34,197,94,.1);   border: 1px solid rgba(34,197,94,.3);   color: #86efac; }
+.alert-warning { background: rgba(234,179,8,.1);   border: 1px solid rgba(234,179,8,.3);   color: #fde047; }
+
+/* LOADING */
+.loading-overlay { position: fixed; inset: 0; background: rgba(13,17,23,.8); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
+.loading-overlay.active { display: flex; }
+.loading-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px 40px; text-align: center; max-width: 320px; }
+.spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-title { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.loading-sub { font-size: 12px; color: var(--muted); }
+
+/* TOASTS */
+#toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+.toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 13px; min-width: 250px; display: flex; align-items: center; gap: 10px; animation: slideIn .2s ease; box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+.toast.info    { border-left: 3px solid var(--blue); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* COST SUMMARY */
+.cost-summary { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.cost-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid rgba(48,54,61,.4); font-size: 13px; }
+.cost-row:last-child { border-bottom: none; }
+.cost-row.total { background: var(--accent); color: white; font-weight: 700; font-size: 15px; }
+.cost-value { font-family: var(--mono); font-weight: 600; }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <div class="loading-title" id="loadingTitle">Wird geladen...</div>
+    <div class="loading-sub" id="loadingSub">Bitte warten</div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+      <path d="M2 17l10 5 10-5"/>
+      <path d="M2 12l10 5 10-5"/>
+    </svg>
+    Infrarot-Heizungsplaner
+  </div>
+  <span class="version-badge" style="font-size:11px;background:rgba(249,115,22,0.15);color:var(--accent);padding:3px 8px;border-radius:10px;font-family:var(--mono);margin-right:12px">v1.3.2</span>
+  <div class="topbar-status">
+    <div class="status-dot"></div>
+    <span id="projectStatus">Kein Projekt aktiv</span>
+  </div>
+</header>
+
+<div class="app-layout">
+
+  <nav class="sidebar">
+    <div class="nav-section">Projekt</div>
+    <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" id="nav-projects" onclick="showView('projects')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Projekte
+    </div>
+    <div class="nav-item" id="nav-project" onclick="showView('project')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Neues Projekt
+    </div>
+    <div class="nav-item" id="nav-floors" onclick="showView('floors')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Baupläne
+      <span class="nav-badge" id="floorsBadge" style="display:none">0</span>
+    </div>
+    <div class="nav-item" id="nav-rooms" onclick="showView('rooms')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Räume & Module
+      <span class="nav-badge" id="roomsBadge" style="display:none">0</span>
+    </div>
+    <div class="nav-item" id="nav-offer" onclick="showView('offer')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Angebot
+    </div>
+    <div class="nav-section" style="margin-top:12px">Stammdaten</div>
+    <div class="nav-item" id="nav-modules-editor" onclick="showView('modules-editor')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      Module
+    </div>
+    <div class="nav-item" id="nav-rules-editor" onclick="showView('rules-editor')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+      Planungsregeln
+    </div>
+    <div class="nav-item" id="nav-settings" onclick="showView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Einstellungen
+    </div>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <div class="page-header">
+        <div><div class="page-title">Dashboard</div><div class="page-subtitle">Übersicht des aktuellen Projekts</div></div>
+        <button class="btn btn-primary" onclick="showView('project')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neues Projekt
+        </button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Räume gesamt</div><div class="stat-value" id="stat-rooms">0</div><div class="stat-sub">erkannte Räume</div></div>
+        <div class="stat-card"><div class="stat-label">Module geplant</div><div class="stat-value" id="stat-modules">0</div><div class="stat-sub">Infrarot-Module</div></div>
+        <div class="stat-card"><div class="stat-label">Gesamtleistung</div><div class="stat-value" id="stat-power">0 W</div><div class="stat-sub">installierte Leistung</div></div>
+        <div class="stat-card"><div class="stat-label">Kosten netto</div><div class="stat-value" id="stat-cost">0 €</div><div class="stat-sub">inkl. Montage</div></div>
+      </div>
+      <div id="dashboardEmpty" class="alert alert-info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Noch kein Projekt aktiv. Klicke auf <strong>&nbsp;Neues Projekt&nbsp;</strong> oder öffne ein vorhandenes unter <strong>&nbsp;Projekte</strong>.
+      </div>
+      <div id="dashboardContent" style="display:none">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Projektübersicht</div></div>
+          <div class="card-body" id="dashboardFloorList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROJEKTLISTE -->
+    <div class="view" id="view-projects">
+      <div class="page-header">
+        <div><div class="page-title">Projekte</div><div class="page-subtitle">Alle gespeicherten Projekte</div></div>
+        <button class="btn btn-primary" onclick="showView('project')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neues Projekt
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr><th>Nr.</th><th>Bezeichnung</th><th>Kunde</th><th>Ort</th><th>Geschosse</th><th>Räume</th><th>Geändert</th><th></th></tr>
+            </thead>
+            <tbody id="projectsTableBody">
+              <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Keine Projekte vorhanden</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEUES PROJEKT -->
+    <div class="view" id="view-project">
+      <div class="page-header">
+        <div><div class="page-title">Neues Projekt</div><div class="page-subtitle">Projekt- und Kundendaten erfassen</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Projektinformationen</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Projektnummer <span class="req">*</span></label>
+              <input class="form-input" id="projNumber" placeholder="z.B. IR-2025-042">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Projektbezeichnung <span class="req">*</span></label>
+              <input class="form-input" id="projName" placeholder="z.B. EFH Müller, Hauptstraße 5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Anzahl Geschosse</label>
+              <select class="form-select" id="projFloorCount" onchange="updateFloorInputs()">
+                <option value="1">1 Geschoss</option>
+                <option value="2">2 Geschosse</option>
+                <option value="3">3 Geschosse</option>
+                <option value="4">4 Geschosse</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Kundendaten</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Firma (optional)</label><input class="form-input" id="custCompany" placeholder="Bauunternehmen GmbH"></div>
+            <div class="form-group"><label class="form-label">Ansprechpartner <span class="req">*</span></label><input class="form-input" id="custName" placeholder="Max Mustermann"></div>
+            <div class="form-group"><label class="form-label">Straße <span class="req">*</span></label><input class="form-input" id="custAddress" placeholder="Musterstraße 1"></div>
+            <div class="form-group"><label class="form-label">PLZ <span class="req">*</span></label><input class="form-input" id="custZip" placeholder="87719"></div>
+            <div class="form-group"><label class="form-label">Ort <span class="req">*</span></label><input class="form-input" id="custCity" placeholder="Mindelheim"></div>
+            <div class="form-group"><label class="form-label">Telefon</label><input class="form-input" id="custPhone" placeholder="0151 123456"></div>
+            <div class="form-group"><label class="form-label">E-Mail</label><input class="form-input" id="custEmail" placeholder="kunde@email.de"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Geschossbezeichnungen</div></div>
+        <div class="card-body"><div class="form-grid" id="floorNamesGrid"></div></div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="createProject()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Projekt anlegen & weiter
+        </button>
+      </div>
+    </div>
+
+    <!-- BAUPLÄNE -->
+    <div class="view" id="view-floors">
+      <div class="page-header">
+        <div><div class="page-title">Baupläne hochladen</div><div class="page-subtitle">PDF-Grundrisse hochladen und KI-Analyse starten</div></div>
+      </div>
+      <div id="floors-container"></div>
+    </div>
+
+    <!-- RÄUME & MODULE -->
+    <div class="view" id="view-rooms">
+      <div class="page-header">
+        <div><div class="page-title">Räume & Module</div><div class="page-subtitle">Räume prüfen und Module automatisch planen</div></div>
+        <button class="btn btn-primary" onclick="planAllModules()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
+          Module automatisch planen
+        </button>
+      </div>
+      <div class="floor-nav" id="floorTabNav"></div>
+      <div id="floorRoomsContent"></div>
+    </div>
+
+    <!-- ANGEBOT -->
+    <div class="view" id="view-offer">
+      <div class="page-header">
+        <div><div class="page-title">Angebot erstellen</div><div class="page-subtitle">Word-Dokument und Bauplan-PDF generieren</div></div>
+      </div>
+      <div id="offerSummary"></div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Dokumente herunterladen</div></div>
+        <div class="card-body">
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="generateOffer()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+              Word-Angebot (.docx)
+            </button>
+            <button class="btn btn-secondary" onclick="generatePlanPdf()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+              Bauplan-PDF mit Modulen
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE EDITOR -->
+    <div class="view" id="view-modules-editor">
+      <div class="page-header">
+        <div><div class="page-title">Modul-Stammdaten</div><div class="page-subtitle">Infrarot-Module bearbeiten</div></div>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="addModuleRow()">+ Modul hinzufügen</button>
+          <button class="btn btn-primary" onclick="saveModules()">Speichern</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Modell</th><th>Breite (cm)</th><th>Höhe (cm)</th><th>Leistung (W)</th><th>Kosten (€)</th><th></th></tr></thead>
+            <tbody id="modulesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REGELN EDITOR -->
+    <div class="view" id="view-rules-editor">
+      <div class="page-header">
+        <div><div class="page-title">Planungsregeln</div><div class="page-subtitle">Heizlast, Abstände und Kosten</div></div>
+        <button class="btn btn-primary" onclick="saveRules()">Speichern</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Heizlast</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Standard (W/m²)</label><input class="form-input" id="rule-heat-standard" type="number"></div>
+            <div class="form-group"><label class="form-label">Bad/WC (W/m²)</label><input class="form-input" id="rule-heat-bathroom" type="number"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Mindestabstände</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Wand (cm)</label><input class="form-input" id="rule-dist-wall" type="number"></div>
+            <div class="form-group"><label class="form-label">Unterzüge (cm)</label><input class="form-input" id="rule-dist-beam" type="number"></div>
+            <div class="form-group"><label class="form-label">Leuchten (cm)</label><input class="form-input" id="rule-dist-light" type="number"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Montagekosten</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Je Modul (€)</label><input class="form-input" id="rule-cost-module" type="number"></div>
+            <div class="form-group"><label class="form-label">Elektro je Raum (€)</label><input class="form-input" id="rule-cost-elec" type="number"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Eckfenster-Regel</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Min. Fensterfläche (m²)</label><input class="form-input" id="rule-corner-area" type="number" step="0.5"></div>
+            <div class="form-group"><label class="form-label">Zusatzmodul aktiviert</label>
+              <select class="form-select" id="rule-corner-add"><option value="true">Ja</option><option value="false">Nein</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EINSTELLUNGEN -->
+    <div class="view" id="view-settings">
+      <div class="page-header">
+        <div><div class="page-title">Firmeneinstellungen</div><div class="page-subtitle">Briefkopf und Angebotsdaten</div></div>
+        <button class="btn btn-primary" onclick="saveSettings()">Speichern</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Firmendaten</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1"><label class="form-label">Firmenname</label><input class="form-input" id="set-company"></div>
+            <div class="form-group"><label class="form-label">Straße</label><input class="form-input" id="set-address"></div>
+            <div class="form-group"><label class="form-label">PLZ</label><input class="form-input" id="set-zip"></div>
+            <div class="form-group"><label class="form-label">Ort</label><input class="form-input" id="set-city"></div>
+            <div class="form-group"><label class="form-label">Telefon</label><input class="form-input" id="set-phone"></div>
+            <div class="form-group"><label class="form-label">E-Mail</label><input class="form-input" id="set-email"></div>
+            <div class="form-group"><label class="form-label">Webseite</label><input class="form-input" id="set-website"></div>
+            <div class="form-group"><label class="form-label">Steuernummer</label><input class="form-input" id="set-taxnr"></div>
+            <div class="form-group"><label class="form-label">USt-ID</label><input class="form-input" id="set-ustid"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Bankdaten</div></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Bank</label><input class="form-input" id="set-bank"></div>
+            <div class="form-group"><label class="form-label">IBAN</label><input class="form-input" id="set-iban"></div>
+            <div class="form-group"><label class="form-label">BIC</label><input class="form-input" id="set-bic"></div>
+            <div class="form-group"><label class="form-label">Angebot gültig (Tage)</label><input class="form-input" id="set-validity" type="number"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">API-Schlüssel</div></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Anthropic API-Key</label>
+            <input class="form-input" id="set-apikey" type="password" placeholder="sk-ant-...">
+          </div>
+          <div class="alert alert-info" style="margin-top:12px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Der API-Key wird sicher auf dem Server gespeichert.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

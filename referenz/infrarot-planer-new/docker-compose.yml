@@ -1,0 +1,44 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: infrarot-backend
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - app-data:/app/data
+      - app-uploads:/app/uploads
+      - app-outputs:/app/outputs
+    expose:
+      - "8000"
+    networks:
+      - infrarot-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: infrarot-frontend
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - backend
+    networks:
+      - infrarot-net
+
+volumes:
+  app-data:
+  app-uploads:
+  app-outputs:
+
+networks:
+  infrarot-net:
+    driver: bridge

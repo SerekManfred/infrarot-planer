@@ -1,0 +1,35 @@
+# Geheimnisse
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# Laufzeitdaten
+uploads/
+outputs/
+data/
+*.log
+
+# Editor / System
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
