@@ -1,0 +1,51 @@
+/* Vorläufige Gestaltung bis zur Festlegung des CI. Groß genug für die Bedienung am Tablet. */
+:root {
+  --blau: #1f3a6e;
+  --orange: #e8662a;
+  --grau: #f3f5f8;
+  --rand: #d5dbe5;
+  --text: #1b1f27;
+  --fehler: #b42318;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  font-size: 17px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--grau); }
+.seite { min-height: 100vh; display: flex; flex-direction: column; }
+.kopf {
+  background: var(--blau); color: #fff; padding: 0.75rem 1rem;
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.marke { font-weight: 700; font-size: 1.15rem; }
+.kopf-rechts { display: flex; align-items: center; gap: 0.75rem; }
+.inhalt { flex: 1; width: 100%; max-width: 1000px; margin: 0 auto; padding: 1.25rem 1rem; }
+.fuss { text-align: center; font-size: 0.8rem; color: #667085; padding: 0.75rem; }
+h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+.karte { background: #fff; border: 1px solid var(--rand); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+.anmeldung { max-width: 380px; margin: 3rem auto; }
+label { display: block; margin-bottom: 0.9rem; font-weight: 500; }
+input {
+  display: block; width: 100%; margin-top: 0.3rem; padding: 0.65rem 0.75rem; font-size: 1rem;
+  border: 1px solid var(--rand); border-radius: 8px;
+}
+input:focus { outline: 2px solid var(--blau); outline-offset: 1px; }
+.knopf {
+  background: var(--blau); color: #fff; border: 0; border-radius: 8px;
+  padding: 0.7rem 1.2rem; font-size: 1rem; cursor: pointer; min-height: 44px;
+}
+.knopf:disabled { opacity: 0.6; }
+.knopf-leise {
+  background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 8px;
+  padding: 0.4rem 0.8rem; cursor: pointer; min-height: 36px;
+}
+.zeile { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.zeile h1 { margin: 0; }
+.formular { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 1rem; align-items: end; }
+.formular .knopf { margin-bottom: 0.9rem; }
+.formular .fehler { grid-column: 1 / -1; }
+.tabelle { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--rand); }
+.tabelle th { background: var(--blau); color: #fff; text-align: left; font-weight: 600; }
+.tabelle th, .tabelle td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--rand); }
+.fehler { color: var(--fehler); }
+.hinweis { color: #667085; }

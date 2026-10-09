@@ -15,19 +15,21 @@ Später: Paneelauslegung, Variantenvergleich Infrarot/Wärmepumpe, Word-Bericht 
 
 ## Stack
 
-- **Backend:** Python, FastAPI
-- **Datenbank:** PostgreSQL, eigene Datenbank in eigenem Container
-- **Frontend:** PWA, offline-fähige Speicherung in IndexedDB, Abgleich mit dem Backend
-- **Rechenkern:** eigenes Python-Modul ohne Web-/DB-Abhängigkeiten, mit Tests (pytest)
-- **Betrieb:** Docker Compose; HTTPS später über den bereits laufenden Caddy-Container
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2, Alembic
+- **Datenbank:** PostgreSQL 16, eigene Datenbank in eigenem Container (`infrarot-db`)
+- **Frontend:** React + Vite als PWA, offline-fähige Speicherung in IndexedDB (folgt), Abgleich mit dem Backend
+- **Rechenkern:** TypeScript-Modul ohne Web-/DB-Abhängigkeiten, läuft im Browser und auf dem Server (Node-CLI), Tests mit Vitest
+- **Normgrundlagen:** Normaußentemperatur nach DIN/TS 12831-1; Pauschal-U-Werte nach der amtlichen Bekanntmachung für den Wohngebäudebestand. Beides nur per CSV-Import mit Quellenangabe – **nie Werte erfinden**. Testwerte sind als „TESTWERT“ gekennzeichnete Fantasiewerte.
+- **Betrieb:** Docker Compose (Projektname `infrarot`); Ports nur an 127.0.0.1; HTTPS später über den bereits laufenden Caddy-Container
+- **Node/npm** sind auf dem Server nicht installiert: Builds und Tests laufen in Containern (Befehle in den READMEs)
 
 ## Ordnerstruktur
 
 ```
 backend/     FastAPI-Anwendung (API, Datenbankzugriff, KI-Anbindung, Exporte)
 frontend/    PWA (Oberfläche, Service Worker, IndexedDB)
-rechenkern/  Heizlast- und Auslegungsberechnung als eigenständiges, getestetes Modul
-docs/        Projektdokumentation, Analysen, Entscheidungen
+rechenkern/  Heizlast- und Auslegungsberechnung (TypeScript), eigenständig und getestet
+docs/        Projektdokumentation: STATUS.md (Stand), CSV-FORMATE.md, Analysen
 referenz/    Altprojekt als Nachschlagewerk – nur lesen, nicht weiterentwickeln
 ```
 
@@ -39,6 +41,10 @@ referenz/    Altprojekt als Nachschlagewerk – nur lesen, nicht weiterentwickel
 - **Deutsch:** Kommentare, Oberfläche, Meldungen und Dokumentation auf Deutsch. Bezeichner im Code dürfen englisch sein, aber einheitlich.
 - `referenz/` wird nicht verändert; Brauchbares wird neu und sauber übernommen, nicht kopiert.
 - Nichts starten und keine Ports öffnen, ohne dass es für die jeweilige Phase ausdrücklich vorgesehen ist.
+
+## Stand
+
+Aktueller Stand, Startbefehle und offene Punkte: `docs/STATUS.md`.
 
 ## Feste Regel: Server-Nachbarn nicht anfassen
 

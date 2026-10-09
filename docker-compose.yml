@@ -1,0 +1,66 @@
+# Infrarot-Planer – alle Container, Volumes und Netzwerke tragen das Präfix „infrarot“.
+# Ports nur an 127.0.0.1; öffentlich erreichbar wird die App erst später über den Caddy-Container.
+name: infrarot
+
+services:
+  infrarot-db:
+    image: postgres:16.8-alpine
+    container_name: infrarot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - infrarot-db-daten:/var/lib/postgresql/data
+    networks: [infrarot-netz]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  infrarot-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: laufzeit
+    image: infrarot-backend
+    container_name: infrarot-backend
+    restart: unless-stopped
+    environment:
+      INFRAROT_DATENBANK_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@infrarot-db:5432/${POSTGRES_DB}
+      INFRAROT_JWT_GEHEIMNIS: ${INFRAROT_JWT_GEHEIMNIS}
+      INFRAROT_COOKIE_SECURE: ${INFRAROT_COOKIE_SECURE:-true}
+      INFRAROT_SITZUNG_STUNDEN: ${INFRAROT_SITZUNG_STUNDEN:-12}
+    depends_on:
+      infrarot-db:
+        condition: service_healthy
+    networks: [infrarot-netz]
+    ports:
+      - "127.0.0.1:${INFRAROT_BACKEND_PORT:-8091}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/gesundheit')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  infrarot-frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: infrarot-frontend
+    container_name: infrarot-frontend
+    restart: unless-stopped
+    depends_on: [infrarot-backend]
+    networks: [infrarot-netz]
+    ports:
+      - "127.0.0.1:${INFRAROT_FRONTEND_PORT:-8090}:80"
+
+volumes:
+  infrarot-db-daten:
+    name: infrarot-db-daten
+
+networks:
+  infrarot-netz:
+    name: infrarot-netz
