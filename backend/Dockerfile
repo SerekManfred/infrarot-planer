@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/alembic.ini backend/start.sh ./
 COPY backend/alembic ./alembic
 COPY backend/app ./app
-RUN useradd --system --uid 10001 infrarot
+RUN useradd --system --uid 10001 infrarot && mkdir -p /app/uploads && chown infrarot /app/uploads
 USER infrarot
 EXPOSE 8000
 CMD ["./start.sh"]
