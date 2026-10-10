@@ -1,0 +1,238 @@
+// Zentrale Fachvorgaben: lesen alle; pflegen Fachprüfer und Admins.
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { api, type Benutzer, type Fachvorgaben, type FachvorgabenWerte, type Gebaeudestandard, type Raumtyp } from '../api';
+import { GEBAEUDESTANDARDS, zahl, zeitpunkt } from '../texte';
+import { Meldung, Textfeld, Zahlfeld } from './Felder';
+import { Protokoll } from './Protokoll';
+
+export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
+  const [vorgaben, setVorgaben] = useState<Fachvorgaben | null>(null);
+  const [fehler, setFehler] = useState('');
+  const [stand, setStand] = useState(0);
+  const darf = benutzer.rolle === 'fachpruefer' || benutzer.rolle === 'admin';
+
+  const laden = useCallback(() => {
+    api.get<Fachvorgaben>('/fachvorgaben').then(setVorgaben).catch((e) => setFehler(e.message));
+  }, []);
+  useEffect(laden, [laden]);
+
+  async function aendern(aktion: () => Promise<unknown>) {
+    setFehler('');
+    try {
+      await aktion();
+    } catch (e) {
+      setFehler((e as Error).message);
+    }
+    laden();
+    setStand((s) => s + 1);
+  }
+
+  if (!vorgaben) return fehler ? <Meldung>{fehler}</Meldung> : <p>Wird geladen …</p>;
+  const w = vorgaben.werte;
+  const werteSetzen = (feld: keyof FachvorgabenWerte) => (wert: unknown) =>
+    aendern(() => {
+      const { geaendert_am: _, ...rest } = w;
+      return api.put('/fachvorgaben/werte', { ...rest, [feld]: wert });
+    });
+  const standards = Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[];
+
+  return (
+    <section>
+      <h1>Fachvorgaben</h1>
+      <Meldung art="hinweis">
+        Leere Felder bedeuten „Vorgabe fehlt“ – das Programm rechnet dann nicht mit geschätzten Werten. {darf ? 'Jede Änderung wird protokolliert.' : 'Pflege durch Fachprüfer und Admins.'}
+      </Meldung>
+      {fehler && <Meldung>{fehler}</Meldung>}
+
+      <div className="karte">
+        <h2>Zentrale Werte</h2>
+        <div className="raster">
+          {standards.map((gs) => (
+            <label key={gs}>
+              Rückfallwert {GEBAEUDESTANDARDS[gs]}
+              <Zahlfeld
+                wert={w[`rueckfall_${gs}_w_m2` as const]}
+                einheit="W/m²"
+                platzhalter="Vorgabe fehlt"
+                gesperrt={!darf}
+                onSpeichern={werteSetzen(`rueckfall_${gs}_w_m2` as const)}
+              />
+            </label>
+          ))}
+          <label>
+            Höhenzuschlag ab Raumhöhe
+            <Zahlfeld wert={w.hoehenzuschlag_grenzhoehe_m} einheit="m" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('hoehenzuschlag_grenzhoehe_m')} />
+          </label>
+          <label>
+            Höhenzuschlag je Meter Mehrhöhe
+            <Zahlfeld wert={w.hoehenzuschlag_prozent_je_m} einheit="%/m" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('hoehenzuschlag_prozent_je_m')} />
+          </label>
+          <label>
+            ΔU_WB (Quelle C)
+            <Zahlfeld wert={w.delta_u_wb} einheit="W/(m²K)" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('delta_u_wb')} />
+          </label>
+          <label className="ganze-breite">
+            Quelle / Festlegung
+            <Textfeld wert={w.quelle} gesperrt={!darf} onSpeichern={werteSetzen('quelle')} />
+          </label>
+        </div>
+        <small className="leise">Zuletzt geändert: {zeitpunkt(w.geaendert_am ?? null)}</small>
+      </div>
+
+      <div className="karte">
+        <h2>Raumtypen und Pauschalen (W/m²)</h2>
+        <p className="leise">
+          Leere Pauschale → Rückfallwert des Gebäudestandards. θint, Luftwechsel und Reduktionsfaktor f werden nur für die Gegenprobe C gebraucht.
+        </p>
+        <div className="tabelle-rahmen">
+          <table className="tabelle vorgaben">
+            <thead>
+              <tr>
+                <th>Raumtyp</th>
+                {standards.map((gs) => (
+                  <th key={gs}>{GEBAEUDESTANDARDS[gs]}</th>
+                ))}
+                <th>θint °C</th>
+                <th>n 1/h</th>
+                <th>f</th>
+                <th>Quelle</th>
+                {darf && <th />}
+              </tr>
+            </thead>
+            <tbody>
+              {vorgaben.raumtypen.map((t) => (
+                <RaumtypZeile key={t.id} typ={t} vorgaben={vorgaben} darf={darf} aendern={aendern} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {darf && <NeuerRaumtyp aendern={aendern} />}
+      </div>
+
+      {darf && <CsvImport />}
+
+      <div className="karte">
+        <h2>Änderungsprotokoll der Vorgaben</h2>
+        <Protokoll pfad="/fachvorgaben/protokoll" stand={stand} />
+      </div>
+    </section>
+  );
+}
+
+function RaumtypZeile({
+  typ,
+  vorgaben,
+  darf,
+  aendern,
+}: {
+  typ: Raumtyp;
+  vorgaben: Fachvorgaben;
+  darf: boolean;
+  aendern: (a: () => Promise<unknown>) => Promise<void>;
+}) {
+  const setzen = (feld: keyof Raumtyp) => (wert: unknown) => aendern(() => api.patch(`/fachvorgaben/raumtypen/${typ.id}`, { [feld]: wert }));
+  return (
+    <tr>
+      <td>
+        <Textfeld wert={typ.bezeichnung} pflicht gesperrt={!darf} onSpeichern={setzen('bezeichnung')} />
+      </td>
+      {(Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[]).map((gs) => {
+        const wert = vorgaben.pauschalen.find((p) => p.raumtyp_id === typ.id && p.gebaeudestandard === gs)?.w_m2 ?? null;
+        const rueckfall = vorgaben.werte[`rueckfall_${gs}_w_m2` as const];
+        return (
+          <td key={gs}>
+            <Zahlfeld
+              wert={wert}
+              platzhalter={rueckfall === null ? 'fehlt' : `(${zahl(rueckfall, 0)})`}
+              gesperrt={!darf}
+              onSpeichern={(w) =>
+                aendern(() => api.put('/fachvorgaben/pauschalen', { raumtyp_id: typ.id, gebaeudestandard: gs, w_m2: w, quelle: vorgaben.werte.quelle }))
+              }
+            />
+          </td>
+        );
+      })}
+      <td>
+        <Zahlfeld wert={typ.theta_int} platzhalter="fehlt" gesperrt={!darf} onSpeichern={setzen('theta_int')} />
+      </td>
+      <td>
+        <Zahlfeld wert={typ.luftwechsel} platzhalter="fehlt" gesperrt={!darf} onSpeichern={setzen('luftwechsel')} />
+      </td>
+      <td>
+        <Zahlfeld wert={typ.reduktionsfaktor} platzhalter="fehlt" min={-1} gesperrt={!darf} onSpeichern={setzen('reduktionsfaktor')} />
+      </td>
+      <td>
+        <Textfeld wert={typ.quelle} gesperrt={!darf} onSpeichern={setzen('quelle')} />
+      </td>
+      {darf && (
+        <td>
+          <button
+            className="knopf-leise klein"
+            onClick={() => window.confirm(`Raumtyp „${typ.bezeichnung}“ löschen?`) && aendern(() => api.loeschen(`/fachvorgaben/raumtypen/${typ.id}`))}
+          >
+            Löschen
+          </button>
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function NeuerRaumtyp({ aendern }: { aendern: (a: () => Promise<unknown>) => Promise<void> }) {
+  const [name, setName] = useState('');
+  function absenden(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    void aendern(() => api.post('/fachvorgaben/raumtypen', { bezeichnung: name.trim() })).then(() => setName(''));
+  }
+  return (
+    <form className="knopfreihe" onSubmit={absenden}>
+      <input aria-label="Neuer Raumtyp" placeholder="Neuer Raumtyp, z. B. Wohnzimmer" value={name} onChange={(e) => setName(e.target.value)} />
+      <button className="knopf-zweit" type="submit">
+        + Raumtyp
+      </button>
+    </form>
+  );
+}
+
+function CsvImport() {
+  const [art, setArt] = useState('bauteile');
+  const [datei, setDatei] = useState<File | null>(null);
+  const [bericht, setBericht] = useState('');
+  const [fehler, setFehler] = useState('');
+
+  async function hochladen(e: FormEvent) {
+    e.preventDefault();
+    if (!datei) return;
+    setBericht('');
+    setFehler('');
+    const form = new FormData();
+    form.append('datei', datei);
+    try {
+      const r = await api.post<{ neu: number; aktualisiert: number }>(`/bibliotheken/${art}/import`, form);
+      setBericht(`Importiert: ${r.neu} neu, ${r.aktualisiert} aktualisiert.`);
+    } catch (err) {
+      setFehler((err as Error).message);
+    }
+  }
+
+  return (
+    <div className="karte">
+      <h2>Bibliotheken per CSV importieren</h2>
+      <p className="leise">Format siehe docs/CSV-FORMATE.md. Jede Zeile braucht eine Quelle; bei einem Fehler wird nichts importiert.</p>
+      <form className="knopfreihe" onSubmit={hochladen}>
+        <select value={art} onChange={(e) => setArt(e.target.value)} aria-label="Bibliothek">
+          <option value="bauteile">Bauteile (U-Werte)</option>
+          <option value="klimadaten">Klimadaten (Norm-Außentemperatur)</option>
+          <option value="raumtypen">Raumtypen</option>
+        </select>
+        <input type="file" accept=".csv,text/csv" onChange={(e) => setDatei(e.target.files?.[0] ?? null)} />
+        <button className="knopf-zweit" type="submit" disabled={!datei}>
+          Importieren
+        </button>
+      </form>
+      {bericht && <Meldung art="hinweis">{bericht}</Meldung>}
+      {fehler && <Meldung>{fehler}</Meldung>}
+    </div>
+  );
+}

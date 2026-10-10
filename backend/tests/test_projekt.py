@@ -112,7 +112,7 @@ def test_hoehenzuschlag(client, projekt, aussendienst, fachpruefer):
     r = _auswertung(client, projekt)["raeume"][0]
     # Raum über der Grenzhöhe, aber Zuschlag in % je m nicht gepflegt
     assert r["phi_a_w"] == pytest.approx(45 * 20)
-    assert any("Höhenzuschlag" in h for h in r["hinweise"])
+    assert any("Höhenzuschlag" in h and "2,90 m" in h for h in r["hinweise"])
 
     anmelden(client, fachpruefer.email)
     werte = client.get("/api/fachvorgaben").json()["werte"]
@@ -264,6 +264,8 @@ def test_protokoll(client, projekt, aussendienst, fachpruefer):
     neueste = eintraege[0]
     assert (neueste["objektart"], neueste["aktion"], neueste["benutzer_name"]) == ("Projekt", "geaendert", "fachpruefer")
     assert neueste["aenderungen"]["status"] == ["entwurf", "geprueft"]
+    # Statuswechsel samt Prüfer und Zeitpunkt in einem Eintrag
+    assert neueste["aenderungen"]["geprueft_von_id"] == [None, fachpruefer.id]
 
     aenderung = next(e for e in eintraege if e["objektart"] == "Raum" and e["aktion"] == "geaendert")
     assert aenderung["benutzer_name"] == "aussendienst"

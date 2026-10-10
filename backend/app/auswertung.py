@@ -154,8 +154,9 @@ def objekt_auswerten(db: Session, objekt: Objekt) -> tuple[dict, dict]:
                 if ueber_grenze and prozent is not None:
                     pauschal["hoehenzuschlag"] = {"grenzhoehe_m": grenzhoehe, "prozent_je_m": prozent}
                 elif ueber_grenze:
+                    grenze_text = f"{grenzhoehe:.2f}".replace(".", ",")
                     hinweise.append(
-                        f"Vorgabe fehlt: Höhenzuschlag (% je m) – Raum höher als {grenzhoehe:.2f} m, ohne Zuschlag gerechnet"
+                        f"Vorgabe fehlt: Höhenzuschlag (% je m) – Raum höher als {grenze_text} m, ohne Zuschlag gerechnet"
                     )
                 elif raum.hoehe_m is None and prozent is not None:
                     hinweise.append("Eingabe fehlt: Raumhöhe – Höhenzuschlag nicht geprüft")

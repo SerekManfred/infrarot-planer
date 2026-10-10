@@ -12,7 +12,7 @@ export function Anmeldung({ onAngemeldet }: { onAngemeldet: (b: Benutzer) => voi
     setFehler('');
     setLaeuft(true);
     try {
-      onAngemeldet(await api.anmelden(email, passwort));
+      onAngemeldet(await api.post<Benutzer>('/auth/anmelden', { email, passwort }));
     } catch (err) {
       setFehler((err as Error).message);
     } finally {
@@ -37,7 +37,7 @@ export function Anmeldung({ onAngemeldet }: { onAngemeldet: (b: Benutzer) => voi
           required
         />
       </label>
-      {fehler && <p className="fehler">{fehler}</p>}
+      {fehler && <p className="meldung fehler">{fehler}</p>}
       <button className="knopf" type="submit" disabled={laeuft}>
         {laeuft ? 'Anmelden …' : 'Anmelden'}
       </button>

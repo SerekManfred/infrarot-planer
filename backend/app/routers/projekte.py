@@ -76,24 +76,26 @@ def status_aendern(
     if (projekt.status, daten.status) not in UEBERGAENGE:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Statuswechsel {projekt.status} → {daten.status} nicht erlaubt")
     jetzt = datetime.now(UTC)
-    if daten.status == "geprueft":
-        projekt.geprueft_von_id, projekt.geprueft_am = pruefer.id, jetzt
-    elif daten.status == "freigegeben":
-        projekt.freigegeben_von_id, projekt.freigegeben_am = pruefer.id, jetzt
-        # Auswertung einfrieren, damit spätere Vorgabenänderungen das freigegebene Ergebnis nicht verändern
-        for objekt in projekt.objekte:
-            eingabe, auswertung = objekt_auswerten(db, objekt)
-            version = (db.scalar(
-                select(func.max(Berechnung.version)).where(Berechnung.objekt_id == objekt.id)) or 0) + 1
-            db.add(Berechnung(
-                objekt_id=objekt.id, version=version, art="auswertung",
-                rechenkern_version=auswertung["rechenkern_version"], eingaben=eingabe, ergebnis=auswertung,
-                bemerkung=f"Freigabe {daten.bemerkung}".strip(), erstellt_von_id=pruefer.id,
-            ))
-    else:
-        projekt.geprueft_von_id = projekt.geprueft_am = None
-        projekt.freigegeben_von_id = projekt.freigegeben_am = None
-    projekt.status = daten.status
+    # Ohne Zwischenspeichern, damit der Statuswechsel als ein Protokolleintrag erscheint
+    with db.no_autoflush:
+        if daten.status == "geprueft":
+            projekt.geprueft_von_id, projekt.geprueft_am = pruefer.id, jetzt
+        elif daten.status == "freigegeben":
+            projekt.freigegeben_von_id, projekt.freigegeben_am = pruefer.id, jetzt
+            # Auswertung einfrieren, damit spätere Vorgabenänderungen das freigegebene Ergebnis nicht verändern
+            for objekt in projekt.objekte:
+                eingabe, auswertung = objekt_auswerten(db, objekt)
+                version = (db.scalar(
+                    select(func.max(Berechnung.version)).where(Berechnung.objekt_id == objekt.id)) or 0) + 1
+                db.add(Berechnung(
+                    objekt_id=objekt.id, version=version, art="auswertung",
+                    rechenkern_version=auswertung["rechenkern_version"], eingaben=eingabe, ergebnis=auswertung,
+                    bemerkung=f"Freigabe {daten.bemerkung}".strip(), erstellt_von_id=pruefer.id,
+                ))
+        else:
+            projekt.geprueft_von_id = projekt.geprueft_am = None
+            projekt.freigegeben_von_id = projekt.freigegeben_am = None
+        projekt.status = daten.status
     db.commit()
     db.refresh(projekt)
     return projekt
