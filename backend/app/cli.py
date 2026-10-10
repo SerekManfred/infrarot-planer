@@ -3,6 +3,7 @@
   python -m app.cli admin-anlegen --email E --name N
   python -m app.cli benutzer-anlegen --email E --name N [--rolle berater|admin]
   python -m app.cli benutzer-deaktivieren --email E
+  python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
 
 Das Passwort wird verdeckt abgefragt oder mit --passwort-stdin von der Standardeingabe gelesen.
@@ -12,6 +13,7 @@ import getpass
 import sys
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
@@ -52,6 +54,20 @@ def benutzer_deaktivieren(email: str) -> None:
     print(f"Benutzer {email} deaktiviert.")
 
 
+def email_aendern(db: Session, alt: str, neu: str) -> None:
+    """Ändert die Anmelde-E-Mail; Passwort, Rolle und Projekte bleiben unverändert."""
+    alt, neu = alt.strip().lower(), neu.strip().lower()
+    if "@" not in neu or len(neu) > 254:
+        raise ValueError(f"Ungültige E-Mail-Adresse: {neu}")
+    benutzer = db.scalars(select(Benutzer).where(func.lower(Benutzer.email) == alt)).first()
+    if benutzer is None:
+        raise ValueError(f"Benutzer {alt} nicht gefunden.")
+    if db.scalars(select(Benutzer).where(func.lower(Benutzer.email) == neu, Benutzer.id != benutzer.id)).first():
+        raise ValueError(f"E-Mail {neu} ist bereits vergeben.")
+    benutzer.email = neu
+    db.commit()
+
+
 def bibliothek_importieren(art: str, datei: str) -> None:
     with open(datei, encoding="utf-8-sig") as f:
         text = f.read()
@@ -78,6 +94,10 @@ def main(argv: list[str] | None = None) -> None:
     p = befehle.add_parser("benutzer-deaktivieren")
     p.add_argument("--email", required=True)
 
+    p = befehle.add_parser("email-aendern")
+    p.add_argument("--alt", required=True)
+    p.add_argument("--neu", required=True)
+
     p = befehle.add_parser("bibliothek-importieren")
     p.add_argument("art", choices=sorted(FORMATE))
     p.add_argument("datei")
@@ -89,6 +109,13 @@ def main(argv: list[str] | None = None) -> None:
         benutzer_anlegen(args.email, args.name, args.rolle, args.passwort_stdin)
     elif args.befehl == "benutzer-deaktivieren":
         benutzer_deaktivieren(args.email)
+    elif args.befehl == "email-aendern":
+        with sitzungsfabrik()() as db:
+            try:
+                email_aendern(db, args.alt, args.neu)
+            except ValueError as fehler:
+                sys.exit(str(fehler))
+        print(f"E-Mail geändert: {args.alt.strip().lower()} → {args.neu.strip().lower()}")
     else:
         bibliothek_importieren(args.art, args.datei)
 

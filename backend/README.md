@@ -29,6 +29,7 @@ docker exec -it infrarot-backend python -m app.cli admin-anlegen --email NAME@FI
 # Weitere Benutzer
 docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rolle berater
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
+docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
 # Tests
 docker build -f backend/Dockerfile --target test -t infrarot-backend-test . && \

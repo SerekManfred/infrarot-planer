@@ -1,0 +1,30 @@
+import pytest
+
+from app.cli import email_aendern
+from app.models import Benutzer
+from app.sicherheit import passwort_pruefen
+from tests.conftest import TEST_PASSWORT
+
+
+def test_email_aendern_behaelt_passwort_und_rolle(db, admin):
+    email_aendern(db, " Admin@Test.invalid ", "Neu@Test.invalid")
+    benutzer = db.get(Benutzer, admin.id)
+    assert benutzer.email == "neu@test.invalid"
+    assert benutzer.rolle == "admin"
+    assert passwort_pruefen(benutzer.passwort_hash, TEST_PASSWORT)
+
+
+def test_email_aendern_unbekannt_vergeben_ungueltig(db, admin, berater):
+    with pytest.raises(ValueError, match="nicht gefunden"):
+        email_aendern(db, "gibts@nicht.invalid", "x@test.invalid")
+    with pytest.raises(ValueError, match="bereits vergeben"):
+        email_aendern(db, admin.email, berater.email)
+    with pytest.raises(ValueError, match="Ungültige"):
+        email_aendern(db, admin.email, "ohne-at-zeichen")
+    assert db.get(Benutzer, admin.id).email == "admin@test.invalid"
+
+
+def test_anmeldung_mit_neuer_email(client, db, admin):
+    email_aendern(db, admin.email, "neu@test.invalid")
+    assert client.post("/api/auth/anmelden", json={"email": "neu@test.invalid", "passwort": TEST_PASSWORT}).status_code == 200
+    assert client.post("/api/auth/anmelden", json={"email": "admin@test.invalid", "passwort": TEST_PASSWORT}).status_code == 401
