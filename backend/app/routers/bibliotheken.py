@@ -1,15 +1,15 @@
-"""Bibliotheken lesen (alle) und per CSV importieren (nur Admin)."""
+"""Bibliotheken lesen (alle) und per CSV importieren (Fachprüfer und Admins). Raumtypen: siehe Fachvorgaben."""
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.abhaengigkeiten import aktueller_benutzer, nur_admin
+from app.abhaengigkeiten import aktueller_benutzer, vorgaben_pflege
 from app.csv_import import importiere
 from app.db import get_db
-from app.models import BibBauteil, BibKlimadaten, BibRaumtyp
-from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, RaumtypLesen
+from app.models import BibBauteil, BibKlimadaten
+from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
 
@@ -21,11 +21,6 @@ def bauteile(db: Session = Depends(get_db)):
     return db.scalars(select(BibBauteil).order_by(BibBauteil.kategorie, BibBauteil.bezeichnung)).all()
 
 
-@router.get("/raumtypen", response_model=list[RaumtypLesen])
-def raumtypen(db: Session = Depends(get_db)):
-    return db.scalars(select(BibRaumtyp).order_by(BibRaumtyp.bezeichnung)).all()
-
-
 @router.get("/klimadaten", response_model=list[KlimadatenLesen])
 def klimadaten(plz: str | None = None, db: Session = Depends(get_db)):
     abfrage = select(BibKlimadaten).order_by(BibKlimadaten.plz, BibKlimadaten.ort)
@@ -34,7 +29,7 @@ def klimadaten(plz: str | None = None, db: Session = Depends(get_db)):
     return db.scalars(abfrage.limit(500)).all()
 
 
-@router.post("/{art}/import", response_model=ImportBericht, dependencies=[Depends(nur_admin)])
+@router.post("/{art}/import", response_model=ImportBericht, dependencies=[Depends(vorgaben_pflege)])
 async def csv_importieren(
     art: Literal["bauteile", "raumtypen", "klimadaten"], datei: UploadFile, db: Session = Depends(get_db)
 ):

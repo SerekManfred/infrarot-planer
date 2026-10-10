@@ -17,8 +17,8 @@ def test_bauteile_lesen_mit_komma_und_punkt():
 
 
 def test_fehlende_spalte_und_quelle():
-    e = lese_csv("raumtypen", "bezeichnung;theta_int;quelle\nTESTWERT;20;TESTWERT\n")
-    assert any("luftwechsel" in f for f in e.fehler)
+    e = lese_csv("klimadaten", "plz;ort;quelle\n00000;TESTORT;TESTWERT\n")
+    assert any("theta_e" in f for f in e.fehler)
     e = lese_csv("raumtypen", "bezeichnung;theta_int;luftwechsel;quelle\nTESTWERT;20;0,5;\n")
     assert e.fehler == ["Zeile 2: „quelle“ fehlt"]
 
@@ -28,6 +28,13 @@ def test_unplausible_und_falsche_zahlen():
     assert len(e.fehler) == 2
     assert "außerhalb" in e.fehler[0]
     assert "keine Zahl" in e.fehler[1]
+
+
+def test_raumtyp_kennwerte_duerfen_fehlen():
+    e = lese_csv("raumtypen", "bezeichnung;reduktionsfaktor;quelle\nTESTKELLER;0,5;TESTWERT\nTESTFLUR;;TESTWERT\n")
+    assert e.fehler == []
+    assert e.zeilen[0]["reduktionsfaktor"] == 0.5
+    assert e.zeilen[1]["theta_int"] is None
 
 
 def test_doppelte_zeilen_werden_erkannt():

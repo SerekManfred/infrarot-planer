@@ -54,8 +54,9 @@ FORMATE: dict[str, Format] = {
         BibRaumtyp,
         (
             Spalte("bezeichnung"),
-            Spalte("theta_int", float, min=0, max=40),
-            Spalte("luftwechsel", float, min=0, max=10),
+            Spalte("theta_int", float, pflicht=False, min=0, max=40),
+            Spalte("luftwechsel", float, pflicht=False, min=0, max=10),
+            Spalte("reduktionsfaktor", float, pflicht=False, min=-1, max=1.5),
             Spalte("quelle"),
             Spalte("bemerkung", pflicht=False),
         ),

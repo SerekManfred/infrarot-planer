@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Benutzer
+from app.models import Benutzer, Fachvorgaben
 from app.sicherheit import passwort_hashen
 
 TEST_PASSWORT = "test-passwort-123"
@@ -26,6 +26,12 @@ def db():
     Base.metadata.create_all(engine)
     fabrik = sessionmaker(bind=engine, expire_on_commit=False)
     with fabrik() as sitzung:
+        # Wie nach der Migration: genau ein Vorgaben-Datensatz, hier mit TESTWERTEN
+        sitzung.add(Fachvorgaben(
+            id=1, rueckfall_neubau_w_m2=45, rueckfall_effizienzhaus_sanierung_w_m2=75,
+            hoehenzuschlag_grenzhoehe_m=2.9, delta_u_wb=0.05, quelle="TESTWERT",
+        ))
+        sitzung.commit()
         yield sitzung
     engine.dispose()
 
@@ -59,10 +65,16 @@ def admin(db):
 
 
 @pytest.fixture
-def berater(db):
-    return _benutzer(db, "berater@test.invalid", "berater")
+def aussendienst(db):
+    return _benutzer(db, "aussendienst@test.invalid", "aussendienst")
 
 
-def anmelden(client: TestClient, email: str) -> None:
-    antwort = client.post("/api/auth/anmelden", json={"email": email, "passwort": TEST_PASSWORT})
+@pytest.fixture
+def fachpruefer(db):
+    return _benutzer(db, "fachpruefer@test.invalid", "fachpruefer")
+
+
+def anmelden(client: TestClient, email: str, passwort: str = TEST_PASSWORT) -> None:
+    client.cookies.clear()
+    antwort = client.post("/api/auth/anmelden", json={"email": email, "passwort": passwort})
     assert antwort.status_code == 200, antwort.text

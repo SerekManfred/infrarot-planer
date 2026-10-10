@@ -30,15 +30,19 @@ def passwort_pruefen(passwort_hash: str, passwort: str) -> bool:
 BLINDER_HASH = _hasher.hash("blindwert-ohne-bedeutung")
 
 
-def token_erzeugen(benutzer_id: int) -> str:
+def token_erzeugen(benutzer_id: int, sitzungs_version: int) -> str:
     jetzt = datetime.now(UTC)
-    nutzlast = {"sub": str(benutzer_id), "iat": jetzt, "exp": jetzt + timedelta(hours=einstellungen().sitzung_stunden)}
+    nutzlast = {
+        "sub": str(benutzer_id), "sv": sitzungs_version, "iat": jetzt,
+        "exp": jetzt + timedelta(hours=einstellungen().sitzung_stunden),
+    }
     return jwt.encode(nutzlast, einstellungen().jwt_geheimnis, algorithm="HS256")
 
 
-def token_lesen(token: str) -> int | None:
+def token_lesen(token: str) -> tuple[int, int] | None:
+    """(benutzer_id, sitzungs_version) oder None bei ungültigem/abgelaufenem Token."""
     try:
         nutzlast = jwt.decode(token, einstellungen().jwt_geheimnis, algorithms=["HS256"])
-        return int(nutzlast["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        return int(nutzlast["sub"]), int(nutzlast["sv"])
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         return None

@@ -12,8 +12,8 @@ class RechenkernFehler(Exception):
         self.meldung = meldung
 
 
-def berechne_heizlast(eingabe: dict) -> dict:
-    """Gibt das Ergebnis zurück oder wirft RechenkernFehler (fachlich) bzw. RuntimeError (technisch)."""
+def rechenkern_aufrufen(eingabe: dict) -> dict:
+    """Eingabe mit "art" ("heizlast" oder "auswertung"). Gibt das Ergebnis zurück oder wirft RechenkernFehler (fachlich) bzw. RuntimeError (technisch)."""
     e = einstellungen()
     try:
         lauf = subprocess.run(

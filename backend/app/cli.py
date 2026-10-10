@@ -1,7 +1,7 @@
 """Verwaltungsbefehle.
 
   python -m app.cli admin-anlegen --email E --name N
-  python -m app.cli benutzer-anlegen --email E --name N [--rolle berater|admin]
+  python -m app.cli benutzer-anlegen --email E --name N [--rolle aussendienst|fachpruefer|admin]
   python -m app.cli benutzer-deaktivieren --email E
   python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
@@ -15,6 +15,7 @@ import sys
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import protokoll  # noqa: F401  (Änderungen über die Kommandozeile werden ebenfalls protokolliert)
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
 from app.models import Benutzer
@@ -50,6 +51,7 @@ def benutzer_deaktivieren(email: str) -> None:
         if benutzer is None:
             sys.exit(f"Benutzer {email} nicht gefunden.")
         benutzer.aktiv = False
+        benutzer.sitzungs_version += 1
         db.commit()
     print(f"Benutzer {email} deaktiviert.")
 
@@ -89,7 +91,7 @@ def main(argv: list[str] | None = None) -> None:
         p.add_argument("--name", required=True)
         p.add_argument("--passwort-stdin", action="store_true", help="Passwort aus der ersten Zeile von stdin lesen")
         if befehl == "benutzer-anlegen":
-            p.add_argument("--rolle", choices=["berater", "admin"], default="berater")
+            p.add_argument("--rolle", choices=["aussendienst", "fachpruefer", "admin"], default="aussendienst")
 
     p = befehle.add_parser("benutzer-deaktivieren")
     p.add_argument("--email", required=True)

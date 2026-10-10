@@ -16,6 +16,10 @@ class Einstellungen(BaseSettings):
     node_pfad: str = "node"
     rechenkern_cli: str = "/opt/rechenkern/cli.cjs"
     rechenkern_timeout_s: float = 30.0
+    # Bremse gegen Anmeldeversuche
+    anmeldung_sperrminuten: int = 15
+    anmeldung_max_fehlversuche_konto: int = 5
+    anmeldung_max_fehlversuche_ip: int = 20
 
 
 @lru_cache

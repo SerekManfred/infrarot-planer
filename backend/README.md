@@ -7,11 +7,13 @@ FastAPI-Anwendung mit SQLAlchemy 2 und Alembic auf PostgreSQL 16. Die Heizlast r
 ```
 app/main.py               App, Fehlerbehandlung, Router
 app/models.py             Datenmodell (Benutzer, Projekt → Objekt → Geschoss → Raum → Bauteilfläche → Öffnung,
-                          Bibliotheken, versionierte Berechnungen)
+                          Fachvorgaben, Bibliotheken, Protokoll, Anmeldeversuche, versionierte Berechnungen)
 app/schemas.py            API-Schemas
 app/sicherheit.py         Argon2id-Passwörter, JWT im HttpOnly-Cookie
 app/csv_import.py         CSV-Import der Bibliotheken (Format: docs/CSV-FORMATE.md)
-app/berechnung.py         stellt die Rechenkern-Eingabe aus der Datenbank zusammen, meldet fehlende Kennwerte
+app/auswertung.py         löst Fachvorgaben je Raum auf (mit Herkunft), ruft den Rechenkern, meldet „Vorgabe fehlt“
+app/protokoll.py          Änderungsprotokoll (SQLAlchemy-Ereignis, erfasst jede Änderung mit Benutzer und Zeit)
+app/projektzugriff.py     Projektzuordnung, Sperre freigegebener Projekte, Rückfall geprüft → Entwurf
 app/rechenkern_bruecke.py Aufruf des Rechenkerns über Node
 app/cli.py                Verwaltungsbefehle
 alembic/                  Migrationen (laufen beim Containerstart automatisch)
@@ -27,7 +29,7 @@ API-Dokumentation bei laufendem Container: http://127.0.0.1:8091/api/docs
 docker exec -it infrarot-backend python -m app.cli admin-anlegen --email NAME@FIRMA.de --name "Vorname Nachname"
 
 # Weitere Benutzer
-docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rolle berater
+docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rolle aussendienst|fachpruefer|admin
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
 docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
@@ -43,5 +45,17 @@ docker compose run --rm --no-deps --name infrarot-backend-migration --user "$(id
 
 ## Rechte
 
-- Alle angemeldeten Benutzer sehen und bearbeiten alle Projekte.
-- Nur Admins: Projekte löschen, Benutzer verwalten, Bibliotheken importieren.
+| | Außendienst | Fachprüfer | Admin |
+|---|---|---|---|
+| Projekte sehen, anlegen, bearbeiten | ja | ja | ja |
+| Projektstatus ändern (prüfen, freigeben, zurücksetzen) | – | ja | – |
+| Fachvorgaben pflegen, Bibliotheken importieren | – | ja | ja |
+| Benutzer verwalten | – | – | ja |
+| Projekte löschen | – | – | ja |
+
+Freigegebene Projekte sind für alle gesperrt. Details: `docs/FACHKONZEPT.md`.
+
+## Anmeldung
+
+- Bremse: nach 5 Fehlversuchen je Konto oder 20 je IP-Adresse innerhalb von 15 Minuten wird 15 Minuten lang abgewiesen (HTTP 429). Werte über `INFRAROT_ANMELDUNG_*` einstellbar.
+- Passwortwechsel, Passwort-Neusetzen durch den Admin und Deaktivierung beenden alle anderen Sitzungen des Benutzers.

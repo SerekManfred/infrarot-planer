@@ -5,7 +5,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Angrenzung = Literal["aussen", "beheizt", "unbeheizt", "erdreich"]
-Rolle = Literal["admin", "berater"]
+Rolle = Literal["admin", "fachpruefer", "aussendienst"]
+Projektstatus = Literal["entwurf", "geprueft", "freigegeben"]
+Gebaeudestandard = Literal["neubau", "effizienzhaus_sanierung", "sonstiger_bestand"]
+Heizlastquelle = Literal["A", "B", "C"]
+
+GEBAEUDESTANDARD_TEXT = {
+    "neubau": "Neubau",
+    "effizienzhaus_sanierung": "Effizienzhaus-Sanierung",
+    "sonstiger_bestand": "sonstiger Bestand",
+}
 
 
 class Lesbar(BaseModel):
@@ -20,6 +29,15 @@ class Anmeldung(BaseModel):
     passwort: str
 
 
+class PasswortAendern(BaseModel):
+    altes_passwort: str
+    neues_passwort: str = Field(min_length=12)
+
+
+class PasswortSetzen(BaseModel):
+    neues_passwort: str = Field(min_length=12)
+
+
 class BenutzerLesen(Lesbar):
     id: int
     email: str
@@ -32,7 +50,13 @@ class BenutzerNeu(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     name: str = Field(min_length=1, max_length=200)
     passwort: str = Field(min_length=12)
-    rolle: Rolle = "berater"
+    rolle: Rolle = "aussendienst"
+
+
+class BenutzerAenderung(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    rolle: Rolle | None = None
+    aktiv: bool | None = None
 
 
 # ── Projekt ─────────────────────────────────────────────────────────────────
@@ -43,6 +67,11 @@ class ProjektNeu(BaseModel):
     bezeichnung: str = Field(min_length=1, max_length=300)
     kunde_name: str = ""
     notizen: str = ""
+    # Für das automatisch angelegte Gebäude (Objekt)
+    gebaeudestandard: Gebaeudestandard
+    strasse: str = ""
+    plz: str = ""
+    ort: str = ""
 
 
 class ProjektAenderung(BaseModel):
@@ -58,44 +87,82 @@ class ProjektLesen(Lesbar):
     bezeichnung: str
     kunde_name: str
     notizen: str
+    status: Projektstatus
     ersteller_id: int | None
+    geprueft_von_id: int | None
+    geprueft_am: datetime | None
+    freigegeben_von_id: int | None
+    freigegeben_am: datetime | None
     erstellt_am: datetime
     geaendert_am: datetime
 
 
-# ── Objekt ──────────────────────────────────────────────────────────────────
+class StatusAenderung(BaseModel):
+    status: Projektstatus
+    bemerkung: str = ""
+
+
+class ProtokollLesen(Lesbar):
+    id: int
+    zeitpunkt: datetime
+    benutzer_id: int | None
+    benutzer_name: str
+    projekt_id: int | None
+    objektart: str
+    objekt_id: int | None
+    aktion: str
+    aenderungen: dict
+
+
+# ── Objekt (Gebäude) ────────────────────────────────────────────────────────
 
 
 class ObjektNeu(BaseModel):
     bezeichnung: str = Field(min_length=1, max_length=300)
+    gebaeudestandard: Gebaeudestandard
     strasse: str = ""
     plz: str = ""
     ort: str = ""
     baujahr: int | None = Field(default=None, ge=1000, le=2100)
     klimadaten_id: int | None = None
     delta_u_wb: float | None = Field(default=None, ge=0)
+    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0)
+    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0)
+    pauschale_abweichungen: dict[str, float] = Field(default_factory=dict)
 
 
 class ObjektAenderung(BaseModel):
     bezeichnung: str | None = Field(default=None, min_length=1, max_length=300)
+    gebaeudestandard: Gebaeudestandard | None = None
     strasse: str | None = None
     plz: str | None = None
     ort: str | None = None
     baujahr: int | None = Field(default=None, ge=1000, le=2100)
     klimadaten_id: int | None = None
     delta_u_wb: float | None = Field(default=None, ge=0)
+    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0)
+    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0)
+    pauschale_abweichungen: dict[str, float] | None = None
 
 
 class ObjektLesen(Lesbar):
     id: int
     projekt_id: int
     bezeichnung: str
+    gebaeudestandard: Gebaeudestandard
     strasse: str
     plz: str
     ort: str
     baujahr: int | None
     klimadaten_id: int | None
     delta_u_wb: float | None
+    hoehenzuschlag_grenzhoehe_m: float | None
+    hoehenzuschlag_prozent_je_m: float | None
+    pauschale_abweichungen: dict[str, float]
+
+
+class ProjektDetail(ProjektLesen):
+    objekte: list[ObjektLesen]
 
 
 # ── Geschoss ────────────────────────────────────────────────────────────────
@@ -124,15 +191,21 @@ class GeschossLesen(Lesbar):
 class RaumNeu(BaseModel):
     bezeichnung: str = Field(min_length=1, max_length=200)
     raumtyp_id: int | None = None
+    laenge_m: float | None = Field(default=None, ge=0, le=100)
+    breite_m: float | None = Field(default=None, ge=0, le=100)
     flaeche_m2: float | None = Field(default=None, ge=0)
-    hoehe_m: float | None = Field(default=None, ge=0)
+    hoehe_m: float | None = Field(default=None, ge=0, le=20)
     volumen_m3: float | None = Field(default=None, ge=0)
+    heizlastquelle: Heizlastquelle = "A"
+    hottgenroth_w: float | None = Field(default=None, ge=0)
+    pauschale_w_m2: float | None = Field(default=None, ge=0)
     theta_int: float | None = None
     luftwechsel: float | None = Field(default=None, ge=0)
 
 
 class RaumAenderung(RaumNeu):
     bezeichnung: str | None = Field(default=None, min_length=1, max_length=200)
+    heizlastquelle: Heizlastquelle | None = None
 
 
 class RaumLesen(Lesbar):
@@ -140,9 +213,14 @@ class RaumLesen(Lesbar):
     geschoss_id: int
     bezeichnung: str
     raumtyp_id: int | None
+    laenge_m: float | None
+    breite_m: float | None
     flaeche_m2: float | None
     hoehe_m: float | None
     volumen_m3: float | None
+    heizlastquelle: Heizlastquelle
+    hottgenroth_w: float | None
+    pauschale_w_m2: float | None
     theta_int: float | None
     luftwechsel: float | None
 
@@ -157,6 +235,7 @@ class FlaecheNeu(BaseModel):
     flaeche_brutto_m2: float = Field(ge=0)
     orientierung: str = Field(default="", max_length=5)
     angrenzung: Angrenzung = "aussen"
+    angrenzender_raumtyp_id: int | None = None
     theta_angrenzend: float | None = None
     f_korrektur: float | None = None
     delta_u_wb: float | None = Field(default=None, ge=0)
@@ -176,6 +255,7 @@ class FlaecheLesen(Lesbar):
     flaeche_brutto_m2: float
     orientierung: str
     angrenzung: Angrenzung
+    angrenzender_raumtyp_id: int | None
     theta_angrenzend: float | None
     f_korrektur: float | None
     delta_u_wb: float | None
@@ -207,7 +287,7 @@ class OeffnungLesen(Lesbar):
     anzahl: int
 
 
-# ── Bibliotheken ────────────────────────────────────────────────────────────
+# ── Bibliotheken und Fachvorgaben ───────────────────────────────────────────
 
 
 class BauteilLesen(Lesbar):
@@ -220,13 +300,30 @@ class BauteilLesen(Lesbar):
     bemerkung: str
 
 
+class RaumtypNeu(BaseModel):
+    bezeichnung: str = Field(min_length=1, max_length=200)
+    theta_int: float | None = Field(default=None, ge=0, le=40)
+    luftwechsel: float | None = Field(default=None, ge=0, le=10)
+    reduktionsfaktor: float | None = Field(default=None, ge=-1, le=1.5)
+    quelle: str = ""
+    bemerkung: str = ""
+    reihenfolge: int = 0
+
+
+class RaumtypAenderung(RaumtypNeu):
+    bezeichnung: str | None = Field(default=None, min_length=1, max_length=200)
+    reihenfolge: int | None = None
+
+
 class RaumtypLesen(Lesbar):
     id: int
     bezeichnung: str
-    theta_int: float
-    luftwechsel: float
+    theta_int: float | None
+    luftwechsel: float | None
+    reduktionsfaktor: float | None
     quelle: str
     bemerkung: str
+    reihenfolge: int
 
 
 class KlimadatenLesen(Lesbar):
@@ -242,6 +339,42 @@ class ImportBericht(BaseModel):
     neu: int
     aktualisiert: int
     fehler: list[str]
+
+
+class PauschaleSetzen(BaseModel):
+    raumtyp_id: int
+    gebaeudestandard: Gebaeudestandard
+    # None entfernt den Tabellenwert (dann gilt der Rückfallwert)
+    w_m2: float | None = Field(default=None, ge=0, le=500)
+    quelle: str = ""
+
+
+class PauschaleLesen(Lesbar):
+    raumtyp_id: int
+    gebaeudestandard: Gebaeudestandard
+    w_m2: float
+    quelle: str
+
+
+class FachvorgabenWerte(BaseModel):
+    rueckfall_neubau_w_m2: float | None = Field(default=None, ge=0, le=500)
+    rueckfall_effizienzhaus_sanierung_w_m2: float | None = Field(default=None, ge=0, le=500)
+    rueckfall_sonstiger_bestand_w_m2: float | None = Field(default=None, ge=0, le=500)
+    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0, le=20)
+    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0, le=100)
+    delta_u_wb: float | None = Field(default=None, ge=0, le=1)
+    quelle: str = ""
+
+
+class FachvorgabenLesen(FachvorgabenWerte, Lesbar):
+    geaendert_am: datetime
+
+
+class FachvorgabenGesamt(BaseModel):
+    werte: FachvorgabenLesen
+    raumtypen: list[RaumtypLesen]
+    pauschalen: list[PauschaleLesen]
+    gebaeudestandards: dict[str, str]
 
 
 # ── Berechnung ──────────────────────────────────────────────────────────────

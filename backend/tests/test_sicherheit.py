@@ -20,5 +20,5 @@ def test_kaputter_hash_ist_kein_treffer():
 
 
 def test_token_hin_und_zurueck():
-    assert token_lesen(token_erzeugen(42)) == 42
+    assert token_lesen(token_erzeugen(42, 3)) == (42, 3)
     assert token_lesen("manipuliert") is None

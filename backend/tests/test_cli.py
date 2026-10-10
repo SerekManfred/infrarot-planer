@@ -14,11 +14,11 @@ def test_email_aendern_behaelt_passwort_und_rolle(db, admin):
     assert passwort_pruefen(benutzer.passwort_hash, TEST_PASSWORT)
 
 
-def test_email_aendern_unbekannt_vergeben_ungueltig(db, admin, berater):
+def test_email_aendern_unbekannt_vergeben_ungueltig(db, admin, aussendienst):
     with pytest.raises(ValueError, match="nicht gefunden"):
         email_aendern(db, "gibts@nicht.invalid", "x@test.invalid")
     with pytest.raises(ValueError, match="bereits vergeben"):
-        email_aendern(db, admin.email, berater.email)
+        email_aendern(db, admin.email, aussendienst.email)
     with pytest.raises(ValueError, match="Ungültige"):
         email_aendern(db, admin.email, "ohne-at-zeichen")
     assert db.get(Benutzer, admin.id).email == "admin@test.invalid"
