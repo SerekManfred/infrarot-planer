@@ -1,9 +1,10 @@
 // JSON-Schnittstelle für das Backend: Eingabe als JSON-Text, Antwort als JSON-Text.
-// Eingabe: {"art": "heizlast" | "auswertung", ...}; ohne "art" gilt "heizlast".
+// Eingabe: {"art": "heizlast" | "auswertung" | "objekt", ...}; ohne "art" gilt "heizlast".
 // Antwort: {"ok": true, "ergebnis": {...}} oder {"ok": false, "fehler": {"pfad": ..., "meldung": ...}}
 
 import { berechneAuswertung, type AuswertungEingabe } from './auswertung';
 import { berechneHeizlast, RechenkernFehler } from './heizlast';
+import { berechneObjekt, type ObjektPlanung } from './objekt';
 import type { HeizlastEingabe } from './typen';
 
 function fehlerAntwort(pfad: string, meldung: string): string {
@@ -27,6 +28,9 @@ export function verarbeiteJson(text: string): string {
     }
     if (art === 'auswertung') {
       return JSON.stringify({ ok: true, ergebnis: berechneAuswertung(eingabe as AuswertungEingabe) });
+    }
+    if (art === 'objekt') {
+      return JSON.stringify({ ok: true, ergebnis: berechneObjekt(eingabe as ObjektPlanung) });
     }
     return fehlerAntwort('art', `unbekannte Art „${String(art)}“`);
   } catch (fehler) {

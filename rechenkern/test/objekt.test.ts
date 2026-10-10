@@ -1,0 +1,172 @@
+// Alle Zahlenwerte in diesen Tests sind TESTWERTE (Fantasiewerte), keine Fachvorgaben.
+
+import { describe, expect, it } from 'vitest';
+import { berechneObjekt, HINWEIS_SONSTIGER_BESTAND, verarbeiteJson, type ObjektPlanung, type PlanungRaum } from '../src';
+
+function raum(teil: Partial<PlanungRaum> = {}): PlanungRaum {
+  return {
+    id: 1,
+    bezeichnung: 'Wohnen',
+    raumtyp_id: 10,
+    laenge_m: 4,
+    breite_m: 5,
+    flaeche_m2: 20,
+    hoehe_m: 2.5,
+    volumen_m3: null,
+    heizlastquelle: 'A',
+    hottgenroth_w: null,
+    pauschale_w_m2: null,
+    theta_int: null,
+    luftwechsel: null,
+    flaechen: [],
+    ...teil,
+  };
+}
+
+function planung(raeume: PlanungRaum[], teil: Partial<ObjektPlanung['objekt']> = {}): ObjektPlanung {
+  return {
+    objekt: {
+      id: 7,
+      bezeichnung: 'Gebäude',
+      gebaeudestandard: 'neubau',
+      gebaeudestandard_text: 'Neubau',
+      delta_u_wb: null,
+      hoehenzuschlag_grenzhoehe_m: null,
+      hoehenzuschlag_prozent_je_m: null,
+      pauschale_abweichungen: {},
+      theta_e: null,
+      ...teil,
+    },
+    vorgaben: {
+      rueckfall_neubau_w_m2: 45,
+      rueckfall_effizienzhaus_sanierung_w_m2: 75,
+      rueckfall_sonstiger_bestand_w_m2: null,
+      hoehenzuschlag_grenzhoehe_m: 2.9,
+      hoehenzuschlag_prozent_je_m: null,
+      delta_u_wb: 0.05,
+    },
+    pauschalen: [{ raumtyp_id: 10, gebaeudestandard: 'neubau', w_m2: 33 }],
+    raumtypen: [
+      { id: 10, bezeichnung: 'TESTWOHNEN', theta_int: 20, luftwechsel: 0.5, reduktionsfaktor: null },
+      { id: 11, bezeichnung: 'TESTKELLER', theta_int: null, luftwechsel: null, reduktionsfaktor: 0.5 },
+    ],
+    bauteile: [{ id: 100, u_wert: 0.3 }],
+    geschosse: [{ id: 3, bezeichnung: 'EG', raeume }],
+  };
+}
+
+describe('berechneObjekt – Quelle A und Herkunft', () => {
+  it('Pauschale aus der Matrix: 20 m² · 33 W/m² = 660 W', () => {
+    const { auswertung } = berechneObjekt(planung([raum()]));
+    const r = auswertung.raeume[0];
+    expect(r.werte.pauschale_w_m2).toEqual({ wert: 33, herkunft: 'vorgabe' });
+    expect(r.phi_massgeblich_w).toBe(660);
+    expect(r.hinweise).toEqual([]);
+    expect(r).toMatchObject({ raum_id: 1, geschoss_id: 3, geschoss: 'EG', raumtyp: 'TESTWOHNEN', quelle: 'A' });
+    expect(auswertung.summe).toEqual({ phi_massgeblich_w: 660, raeume_mit_ergebnis: 1, raeume_ohne_ergebnis: 0 });
+  });
+
+  it('Reihenfolge: Raum vor Projekt vor Vorgabe vor Rückfallwert', () => {
+    const projekt = { pauschale_abweichungen: { '10': 36 } };
+    expect(berechneObjekt(planung([raum()], projekt)).auswertung.raeume[0].werte.pauschale_w_m2).toEqual({ wert: 36, herkunft: 'projekt' });
+    expect(berechneObjekt(planung([raum({ pauschale_w_m2: 40 })], projekt)).auswertung.raeume[0].werte.pauschale_w_m2).toEqual({
+      wert: 40,
+      herkunft: 'raum',
+    });
+    // ohne Raumtyp: Rückfallwert 45 W/m² → 900 W
+    const ohneTyp = berechneObjekt(planung([raum({ raumtyp_id: null })])).auswertung.raeume[0];
+    expect(ohneTyp.werte.pauschale_w_m2).toEqual({ wert: 45, herkunft: 'rueckfall' });
+    expect(ohneTyp.phi_a_w).toBe(900);
+  });
+
+  it('fehlende Pauschale → „Vorgabe fehlt“ mit Raumtyp und Gebäudestandard', () => {
+    const p = planung([raum()], { gebaeudestandard: 'sonstiger_bestand', gebaeudestandard_text: 'sonstiger Bestand' });
+    const { auswertung } = berechneObjekt(p);
+    expect(auswertung.hinweise).toEqual([HINWEIS_SONSTIGER_BESTAND]);
+    expect(auswertung.raeume[0].hinweise).toEqual(['Vorgabe fehlt: Pauschale W/m² für „TESTWOHNEN“ / sonstiger Bestand']);
+    expect(auswertung.raeume[0].phi_massgeblich_w).toBeNull();
+    expect(auswertung.summe.raeume_ohne_ergebnis).toBe(1);
+  });
+
+  it('Höhe über der Grenzhöhe ohne Zuschlagswert → Hinweis, kein Zuschlag', () => {
+    const r = berechneObjekt(planung([raum({ hoehe_m: 3.2 })])).auswertung.raeume[0];
+    expect(r.phi_a_w).toBe(660);
+    expect(r.hinweise).toEqual(['Vorgabe fehlt: Höhenzuschlag (% je m) – Raum höher als 2,90 m, ohne Zuschlag gerechnet']);
+  });
+
+  it('Höhenzuschlag aus dem Projekt: 3,4 m bei 2,9 m und 10 %/m → +5 %', () => {
+    const r = berechneObjekt(planung([raum({ hoehe_m: 3.4 })], { hoehenzuschlag_prozent_je_m: 10 })).auswertung.raeume[0];
+    expect(r.phi_a_w).toBeCloseTo(693, 9);
+    expect(r.pauschal?.hoehenzuschlag_faktor).toBeCloseTo(0.05, 12);
+  });
+
+  it('fehlende Fläche und fehlender Hottgenroth-Wert', () => {
+    const r = berechneObjekt(planung([raum({ flaeche_m2: null, heizlastquelle: 'B' })])).auswertung.raeume[0];
+    expect(r.hinweise).toEqual(['Eingabe fehlt: Fläche (Länge × Breite)', 'Eingabe fehlt: Raumheizlast aus Hottgenroth']);
+  });
+});
+
+describe('berechneObjekt – Gegenprobe C', () => {
+  it('ohne Klimadaten: Mangel statt Ergebnis', () => {
+    const r = berechneObjekt(planung([raum({ heizlastquelle: 'C' })])).auswertung.raeume[0];
+    expect(r.hinweise).toContain('Gegenprobe C: Vorgabe fehlt: Norm-Außentemperatur (Klimadaten des Gebäudes zuordnen)');
+    expect(r.phi_c_w).toBeNull();
+  });
+
+  it('Wand aus der Bibliothek, Fenster mit eigenem U-Wert', () => {
+    // Wand 10 m² brutto, Fenster 2 m² → Wand netto 8 m²
+    // H_T = 8·(0,3+0,05) + 2·(1,0+0,05) = 2,8 + 2,1 = 4,9 W/K
+    // H_V = 0,34·0,5·(20·2,5) = 8,5 W/K;  Δθ = 20 − (−10) = 30 K
+    // Φ_C = (4,9 + 8,5) · 30 = 402 W;  Abweichung zu A (660 W) = (402 − 660)/660
+    const wand = {
+      id: 5,
+      bezeichnung: 'Außenwand',
+      bauteil_id: 100,
+      u_wert: null,
+      flaeche_brutto_m2: 10,
+      angrenzung: 'aussen' as const,
+      angrenzender_raumtyp_id: null,
+      theta_angrenzend: null,
+      f_korrektur: null,
+      delta_u_wb: null,
+      oeffnungen: [{ id: 6, bezeichnung: 'Fenster', bauteil_id: null, u_wert: 1.0, flaeche_m2: 2, anzahl: 1 }],
+    };
+    const { auswertung, eingabe } = berechneObjekt(planung([raum({ flaechen: [wand] })], { theta_e: -10 }));
+    const r = auswertung.raeume[0];
+    expect(r.hinweise).toEqual([]);
+    expect(r.phi_c_w).toBeCloseTo(402, 9);
+    expect(r.abweichung_c).toBeCloseTo((402 - 660) / 660, 12);
+    expect(eingabe.raeume[0].berechnung?.flaechen[0].u_wert_w_m2k).toBe(0.3);
+  });
+
+  it('Reduktionsfaktor fehlt beim angrenzenden Raumtyp', () => {
+    const p = planung([raum()], { theta_e: -10 });
+    p.raumtypen[1].reduktionsfaktor = null;
+    p.geschosse[0].raeume[0].flaechen = [
+      {
+        id: 5,
+        bezeichnung: 'Decke',
+        bauteil_id: 100,
+        u_wert: null,
+        flaeche_brutto_m2: 20,
+        angrenzung: 'unbeheizt',
+        angrenzender_raumtyp_id: 11,
+        theta_angrenzend: null,
+        f_korrektur: null,
+        delta_u_wb: null,
+        oeffnungen: [],
+      },
+    ];
+    const r = berechneObjekt(p).auswertung.raeume[0];
+    expect(r.hinweise).toEqual(['Gegenprobe C: Fläche „Decke“: Vorgabe fehlt: Reduktionsfaktor für Raumtyp „TESTKELLER“']);
+  });
+});
+
+describe('verarbeiteJson – art "objekt"', () => {
+  it('liefert Eingabe und Auswertung', () => {
+    const antwort = JSON.parse(verarbeiteJson(JSON.stringify({ art: 'objekt', ...planung([raum()]) })));
+    expect(antwort.ok).toBe(true);
+    expect(antwort.ergebnis.eingabe.art).toBe('auswertung');
+    expect(antwort.ergebnis.auswertung.summe.phi_massgeblich_w).toBe(660);
+  });
+});
