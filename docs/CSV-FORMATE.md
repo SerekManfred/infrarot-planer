@@ -1,6 +1,6 @@
 # CSV-Formate der Bibliotheken
 
-Die Bibliotheken (Bauteile, Raumtypen, Klimadaten) werden **leer** angelegt und nur per CSV-Import gefüllt. Das Programm erfindet keine Werte: Jede Zeile braucht eine Quellenangabe.
+Die Bibliotheken (Bauteile, Raumtypen, Klimadaten) werden **leer** angelegt und per CSV-Import gefüllt; Raumtypen und Pauschalen lassen sich außerdem in der Oberfläche unter „Fachvorgaben“ pflegen. Das Programm erfindet keine Werte: Jede Zeile braucht eine Quellenangabe.
 
 ## Allgemeine Regeln
 
@@ -16,7 +16,8 @@ Die Bibliotheken (Bauteile, Raumtypen, Klimadaten) werden **leer** angelegt und 
 
 ## Import
 
-- **Oberfläche/API** (nur Admin): `POST /api/bibliotheken/{bauteile|raumtypen|klimadaten}/import`, Feld `datei`
+- **Oberfläche** (Fachprüfer und Admins): Fachvorgaben → „Bibliotheken per CSV importieren“
+- **API:** `POST /api/bibliotheken/{bauteile|raumtypen|klimadaten}/import`, Feld `datei`
 - **Kommandozeile:**
   ```bash
   docker cp bauteile.csv infrarot-backend:/tmp/bauteile.csv
@@ -47,17 +48,18 @@ Außenwand;TESTWERT Mauerwerk;bis 1918;9,99;TESTWERT – kein echter Wert;Beispi
 
 | Spalte | Pflicht | Inhalt |
 |---|---|---|
-| `bezeichnung` | ja | z. B. Wohnzimmer, Bad |
-| `theta_int` | ja | Norm-Innentemperatur in °C, 0 … 40 |
-| `luftwechsel` | ja | Luftwechselrate n in 1/h, 0 … 10 |
+| `bezeichnung` | ja | z. B. Wohnzimmer, Bad, Keller unbeheizt |
+| `theta_int` | nein | Norm-Innentemperatur in °C, 0 … 40 (für Quelle C) |
+| `luftwechsel` | nein | Luftwechselrate n in 1/h, 0 … 10 (für Quelle C) |
+| `reduktionsfaktor` | nein | Temperatur-Korrekturfaktor f, −1 … 1,5, wenn ein Bauteil an einen Raum dieses Typs grenzt (für Quelle C) |
 | `quelle` | ja | Fundstelle |
 | `bemerkung` | nein | Freitext |
 
-Schlüssel: `bezeichnung`.
+Schlüssel: `bezeichnung`. Leere Kennwerte erscheinen in der Auswertung als „Vorgabe fehlt“. Die Heizlast-Pauschalen (W/m² je Gebäudestandard) werden nicht per CSV, sondern in der Oberfläche gepflegt.
 
 ```csv
-bezeichnung;theta_int;luftwechsel;quelle;bemerkung
-TESTWERT Raum;19;0,9;TESTWERT – kein echter Wert;
+bezeichnung;theta_int;luftwechsel;reduktionsfaktor;quelle;bemerkung
+TESTWERT Raum;19;0,9;;TESTWERT – kein echter Wert;
 ```
 
 ## klimadaten
