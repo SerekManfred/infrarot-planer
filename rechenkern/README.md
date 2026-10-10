@@ -2,7 +2,7 @@
 
 Eigenständiges TypeScript-Modul für die Fachberechnungen. Läuft unverändert im Browser (offline, PWA) und auf dem Server (Node-CLI, wird vom Backend aufgerufen). Keine Abhängigkeiten zu Web-Framework oder Datenbank.
 
-Stand: Phase 1B (Version 0.2.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe. Später: Modulauslegung.
+Stand: Phase 1C (Version 0.3.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe; Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`), die Server und Browser (offline) gemeinsam nutzen. Später: Modulauslegung.
 
 ## Befehle
 
@@ -96,3 +96,14 @@ Der Rechenkern enthält **keine** Normaußentemperaturen, U-Werte, Innentemperat
 - Server: `node dist/cli.cjs < eingabe.json` mit `"art": "heizlast"` (Standard) oder `"art": "auswertung"` → `{"ok": true, "ergebnis": …}` oder `{"ok": false, "fehler": {"pfad": …, "meldung": …}}`
 
 Typen siehe `src/typen.ts`.
+
+## Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`)
+
+`berechneObjekt(planung)` bekommt den vollständigen Planungsstand eines Gebäudes:
+- Objekt mit Abweichungen und θe der Klimadaten
+- zentrale Fachvorgaben, Pauschalen-Matrix, Raumtypen, U-Werte der Bauteilbibliothek
+- Geschosse → Räume → Flächen → Öffnungen
+
+Die Funktion löst je Raum die Werte mit Herkunft auf. Die Reihenfolge ist Raum › Projekt › Vorgabe › Rückfallwert, sonst „Vorgabe fehlt“. Sie meldet fehlende Eingaben und rechnet über `berechneAuswertung`. JSON-Schnittstelle: `{"art": "objekt", ...}` liefert `{eingabe, auswertung}`.
+
+Das Backend ruft diese Funktion über die CLI auf, das Frontend offline direkt im Browser. Beide kommen so zum selben Ergebnis, mit denselben Hinweistexten.

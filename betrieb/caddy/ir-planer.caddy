@@ -1,0 +1,24 @@
+
+# ── Infrarot-Planer (Projekt infrarot, /home/dev/infrarot-planer) ──
+# Ergänzt am DATUM; Beschreibung und Rückweg: docs/BETRIEB.md im Projekt.
+# Caddy erreicht die Container über das Netzwerk infrarot-proxy (nicht über infrarot-netz mit der Datenbank).
+ir-planer.mybase-test.de {
+    encode gzip
+    request_body {
+        max_size 25MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        X-Frame-Options "DENY"
+        -Server
+        defer
+    }
+    handle /api/* {
+        reverse_proxy infrarot-backend:8000
+    }
+    handle {
+        reverse_proxy infrarot-frontend:80
+    }
+}

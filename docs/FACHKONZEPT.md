@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil B (10.10.2026)
+Stand: Phase 1 Teil C (10.10.2026)
 
 ## Zweck und Beteiligte
 
@@ -77,6 +77,28 @@ Pflegbar durch Fachprüfer und Admins; jede Änderung wird protokolliert.
 - **Keine Fachwerte erfinden:** Was nicht gepflegt ist, wird nicht geschätzt, sondern als „Vorgabe fehlt“ gekennzeichnet. Für diesen Raum gibt es dann kein Ergebnis aus der betroffenen Quelle.
 - Vom Auftraggeber festgelegt (Quelle „Festlegung Auftraggeber 10.10.2026“): Rückfallwerte 40/70 W/m², Grenzhöhe 2,80 m, ΔU_WB 0,05 W/(m²·K).
 
+## Offline-Betrieb
+
+Vor Ort gibt es oft kein Netz. Deshalb arbeitet die App auf dem Tablet auch offline.
+
+- **Auschecken:** Ein Gerät holt ein Projekt zur Offline-Bearbeitung auf sich („Für Offline-Bearbeitung auschecken“).
+  - Das Projekt ist dann für alle anderen Benutzer und Geräte **gesperrt**, auch für den Fachprüfer.
+  - Alle sehen, wer es auf welchem Gerät seit wann hat.
+  - Freigegebene Projekte lassen sich nicht auschecken.
+- **Bearbeiten:** Ein ausgechecktes Projekt wird auf dem Gerät bearbeitet, mit oder ohne Netz.
+  - Die Heizlast rechnet der Rechenkern im Browser, mit demselben Code wie der Server. Grundlage ist der Schnappschuss der Fachvorgaben und Bibliotheken vom letzten Kontakt zum Server.
+  - Jede Änderung kommt in eine Warteschlange. Sobald der Server erreichbar ist, wird sie automatisch übertragen.
+- **Statusanzeige** im Kopf: „Online“, „Offline“, „x Änderungen ausstehend“ oder „Übertragung angehalten“.
+  - Lehnt der Server eine Änderung ab, hält die Übertragung an diesem Eintrag an und zeigt den Grund. Typische Gründe: ungültiger Wert, Sperre aufgehoben, Projektnummer vergeben.
+  - Danach: erneut versuchen oder nur diese eine Änderung verwerfen.
+- **Neue Projekte ohne Netz** werden auf dem Gerät angelegt. Beim nächsten Kontakt werden sie auf dem Server angelegt und für das Gerät ausgecheckt. Die Projektnummer lässt sich bis dahin noch korrigieren.
+- **Einchecken** (braucht Netz): Zuerst wird alles übertragen. Dann wird die Sperre aufgehoben und das Projekt vom Gerät entfernt. Statuswechsel (prüfen, freigeben) gehen erst danach.
+- **Sperre lösen:** Ein Admin kann die Sperre aufheben, etwa wenn ein Tablet verloren ging. Noch nicht übertragene Änderungen dieses Geräts nimmt der Server danach nicht mehr an (Sperr-Token ungültig). Das Gerät zeigt das an und verwirft nichts selbst.
+- **Abmelden:** Bei Verbindung wird zuerst alles übertragen und eingecheckt. Danach werden die lokalen Daten gelöscht.
+  - Bleiben Änderungen oder Sperren übrig (z. B. ohne Netz), fragt die App vorher nach.
+  - Meldet sich auf dem Gerät ein anderer Benutzer an, während noch Offline-Daten vorhanden sind, fragt die App, ob diese gelöscht werden sollen.
+- Ohne Netz zeigt die Projektliste den zuletzt geladenen Stand. Bearbeiten lassen sich dann nur ausgecheckte Projekte.
+
 ## Noch nicht Bestandteil
 
-Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan, Grundriss-Import per KI, Hottgenroth-Import, Offline-Speicher.
+Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan, Grundriss-Import per KI, Hottgenroth-Import.

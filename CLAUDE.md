@@ -11,7 +11,8 @@ Ablauf:
 2. Schnellerfassung vor Ort am Tablet: Geschoss → Räume als Rechteck (Länge, Breite, Höhe, Raumtyp)
 3. Raumheizlast aus der gewählten Heizlastquelle (A Pauschal / B Hottgenroth / C vereinfachte Berechnung als Gegenprobe)
 4. Fachliche Prüfung und Freigabe durch Serek
-5. Später: Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan, Grundriss-Import per KI, Offline-Speicher
+5. Offline-Betrieb: Projekt auf das Tablet auschecken (für andere gesperrt), offline bearbeiten, automatisch synchronisieren
+6. Später: Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan, Grundriss-Import per KI
 
 Fachregeln im Detail: `docs/FACHKONZEPT.md`.
 
@@ -27,19 +28,19 @@ Fachregeln im Detail: `docs/FACHKONZEPT.md`.
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2, Alembic
 - **Datenbank:** PostgreSQL 16, eigene Datenbank in eigenem Container (`infrarot-db`)
-- **Frontend:** React + Vite als PWA, tabletfreundlich; Offline-Speicher in IndexedDB folgt
+- **Frontend:** React + Vite als PWA, tabletfreundlich; Offline-Speicher in IndexedDB mit Warteschlange (`frontend/src/offline/`)
 - **Rechenkern:** TypeScript-Modul ohne Web-/DB-Abhängigkeiten, läuft im Browser und auf dem Server (Node-CLI), Tests mit Vitest
 - **Fachwerte:** Werden zentral gepflegt (Fachvorgaben) bzw. per CSV mit Quellenangabe importiert. **Nie Fachwerte erfinden** – fehlende Werte werden als „Vorgabe fehlt“ gekennzeichnet. Testwerte sind als „TESTWERT“ gekennzeichnete Fantasiewerte.
-- **Betrieb:** Docker Compose (Projektname `infrarot`); Ports nur an 127.0.0.1; HTTPS später über den bereits laufenden Caddy-Container; tägliche Datensicherung (`docs/BACKUP.md`)
+- **Betrieb:** Docker Compose (Projektname `infrarot`); Ports nur an 127.0.0.1; HTTPS über den Caddy-Container der Schulungsplattform (`https://ir-planer.mybase-test.de`, `docs/BETRIEB.md`); tägliche Datensicherung (`docs/BACKUP.md`)
 - **Node/npm** sind auf dem Server nicht installiert: Builds und Tests laufen in Containern (Befehle in den READMEs)
 
 ## Ordnerstruktur
 
 ```
 backend/     FastAPI-Anwendung (API, Datenbank, Fachvorgaben, Protokoll, später KI-Import und Exporte)
-frontend/    PWA (Oberfläche, Service Worker, später IndexedDB)
-rechenkern/  Heizlast (Pauschal, vereinfachte Berechnung, Gegenprobe), später Modulauslegung – TypeScript, getestet
-betrieb/     Betriebsskripte (Datensicherung)
+frontend/    PWA (Oberfläche, Service Worker, Offline-Speicher in IndexedDB mit Synchronisierung)
+rechenkern/  Heizlast (Pauschal, vereinfachte Berechnung, Gegenprobe, Vorgaben-Auflösung), später Modulauslegung – TypeScript, getestet
+betrieb/     Betriebsskripte (Datensicherung, Caddy-Einrichtung)
 docs/        STATUS.md (Stand), FACHKONZEPT.md, CSV-FORMATE.md, BACKUP.md, Analysen
 referenz/    Altprojekt als Nachschlagewerk – nur lesen, nicht weiterentwickeln
 ```
@@ -61,5 +62,7 @@ Aktueller Stand, Startbefehle und offene Punkte: `docs/STATUS.md`.
 ## Feste Regel: Server-Nachbarn nicht anfassen
 
 **Container, Volumes, Netzwerke und Dateien der Schulungsplattform (alles mit „schulung“ im Namen) sowie den Caddy-Container niemals verändern, stoppen oder löschen.**
+
+**Einzige, vom Auftraggeber freigegebene Ausnahme:** der Site-Block `ir-planer.mybase-test.de` im Caddyfile und die Verbindung von `schulung-caddy-1` zum Netzwerk `infrarot-proxy`. Änderungen daran nur über `betrieb/caddy_einrichten.sh` (mit Sicherung und Rückweg, `docs/BETRIEB.md`), nie Neustart oder Neuerstellen von Caddy.
 
 **Docker-Befehle nur für Container mit dem Präfix „infrarot“.** Das gilt auch für Volumes und Netzwerke dieses Projekts (Präfix `infrarot`). Keine globalen Befehle wie `docker system prune`, `docker volume prune`, `docker network prune` oder `docker compose down` ohne Projektbezug.

@@ -11,9 +11,9 @@ app/models.py             Datenmodell (Benutzer, Projekt → Objekt → Geschoss
 app/schemas.py            API-Schemas
 app/sicherheit.py         Argon2id-Passwörter, JWT im HttpOnly-Cookie
 app/csv_import.py         CSV-Import der Bibliotheken (Format: docs/CSV-FORMATE.md)
-app/auswertung.py         löst Fachvorgaben je Raum auf (mit Herkunft), ruft den Rechenkern, meldet „Vorgabe fehlt“
+app/auswertung.py         stellt den Planungsstand zusammen; Vorgaben-Auflösung und Rechnung im Rechenkern (art "objekt")
 app/protokoll.py          Änderungsprotokoll (SQLAlchemy-Ereignis, erfasst jede Änderung mit Benutzer und Zeit)
-app/projektzugriff.py     Projektzuordnung, Sperre freigegebener Projekte, Rückfall geprüft → Entwurf
+app/projektzugriff.py     Projektzuordnung, Sperre freigegebener Projekte, Offline-Sperre (X-Sperre), Rückfall geprüft → Entwurf
 app/rechenkern_bruecke.py Aufruf des Rechenkerns über Node
 app/cli.py                Verwaltungsbefehle
 alembic/                  Migrationen (laufen beim Containerstart automatisch)
@@ -53,7 +53,18 @@ docker compose run --rm --no-deps --name infrarot-backend-migration --user "$(id
 | Benutzer verwalten | – | – | ja |
 | Projekte löschen | – | – | ja |
 
-Freigegebene Projekte sind für alle gesperrt. Details: `docs/FACHKONZEPT.md`.
+Freigegebene Projekte sind für alle gesperrt. Ausgecheckte Projekte (Offline-Bearbeitung) darf nur das auscheckende Gerät ändern; einchecken kann das Gerät, die Sperre lösen ein Admin. Details: `docs/FACHKONZEPT.md`.
+
+## Offline-Betrieb
+
+| Endpunkt | Zweck |
+|---|---|
+| `POST /api/projekte/{id}/auschecken` `{"geraet": "…"}` | sperrt das Projekt für dieses Gerät, liefert das Sperr-Token (nur der SHA-256 wird gespeichert) |
+| `POST /api/projekte/{id}/einchecken` | hebt die Sperre auf: das Gerät (mit Token) oder ein Admin |
+| `GET /api/offline/vorgaben` | Schnappschuss: Fachvorgaben, Bauteile, Klimadaten |
+| `GET /api/offline/projekte/{id}` | vollständiger Projektstand (Gebäude → Geschosse → Räume → Flächen → Öffnungen) |
+
+Änderungen an einem ausgecheckten Projekt brauchen den Kopf `X-Sperre: <Token>` vom selben Benutzer, sonst **423 Locked**. Sendet ein Gerät ein Token, obwohl die Sperre aufgehoben wurde, antwortet der Server mit **409**.
 
 ## Anmeldung
 
