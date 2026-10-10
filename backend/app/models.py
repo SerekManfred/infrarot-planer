@@ -191,9 +191,22 @@ class Projekt(Zeitstempel, Base):
     geprueft_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     freigegeben_von_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     freigegeben_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Offline-Sperre: Ein Gerät hat das Projekt zur Offline-Bearbeitung ausgecheckt (app/projektzugriff.py).
+    # Gespeichert wird nur der SHA-256 des Sperr-Tokens; das Token selbst kennt nur das Gerät.
+    ausgecheckt_von_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
+    ausgecheckt_geraet: Mapped[str | None] = mapped_column(String(100))
+    ausgecheckt_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sperre_hash: Mapped[str | None] = mapped_column(String(64))
 
     ersteller: Mapped[Benutzer | None] = relationship(foreign_keys=[ersteller_id])
+    ausgecheckt_von: Mapped[Benutzer | None] = relationship(foreign_keys=[ausgecheckt_von_id])
     objekte: Mapped[list["Objekt"]] = relationship(back_populates="projekt", passive_deletes=True)
+
+    @property
+    def ausgecheckt_von_name(self) -> str | None:
+        if self.ausgecheckt_am is None:
+            return None
+        return self.ausgecheckt_von.name if self.ausgecheckt_von else "gelöschter Benutzer"
 
 
 class Objekt(Zeitstempel, Base):

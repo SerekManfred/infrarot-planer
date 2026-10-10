@@ -2,7 +2,10 @@
 
 Alle angemeldeten Benutzer sehen und bearbeiten alle Projekte. Den Status ändern nur Fachprüfer;
 löschen dürfen nur Admins. Freigegebene Projekte sind gesperrt (app/projektzugriff.py).
+Zur Offline-Bearbeitung checkt ein Gerät ein Projekt aus; solange ist es für alle anderen gesperrt.
+Einchecken kann das Gerät selbst; ein Admin kann die Sperre lösen.
 """
+import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,9 +16,10 @@ from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_admin, nu
 from app.auswertung import objekt_auswerten
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
-from app.projektzugriff import bearbeitung_pruefen
+from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sperre_hash, sperre_pruefen
 from app.schemas import (
-    ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProtokollLesen, StatusAenderung,
+    Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProtokollLesen,
+    StatusAenderung,
 )
 
 router = APIRouter(prefix="/projekte", tags=["Projekte"], dependencies=[Depends(aktueller_benutzer)])
@@ -73,6 +77,7 @@ def status_aendern(
     pruefer: Benutzer = Depends(nur_fachpruefer),
 ):
     projekt = hole_oder_404(db, Projekt, projekt_id)
+    sperre_pruefen(db, projekt)
     if (projekt.status, daten.status) not in UEBERGAENGE:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Statuswechsel {projekt.status} → {daten.status} nicht erlaubt")
     jetzt = datetime.now(UTC)
@@ -96,6 +101,49 @@ def status_aendern(
             projekt.geprueft_von_id = projekt.geprueft_am = None
             projekt.freigegeben_von_id = projekt.freigegeben_am = None
         projekt.status = daten.status
+    db.commit()
+    db.refresh(projekt)
+    return projekt
+
+
+@router.post("/{projekt_id}/auschecken", response_model=AuscheckenAntwort)
+def auschecken(
+    projekt_id: int, daten: Auschecken, db: Session = Depends(get_db),
+    benutzer: Benutzer = Depends(aktueller_benutzer),
+):
+    """Sperrt das Projekt für die Offline-Bearbeitung auf diesem Gerät. Erneutes Auschecken durch dasselbe Gerät
+    (mit seinem Sperr-Token) behält die Sperre."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    if projekt.status == "freigegeben":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Freigegebene Projekte können nicht ausgecheckt werden.")
+    if haelt_sperre(db, projekt):
+        return AuscheckenAntwort(projekt=ProjektLesen.model_validate(projekt), sperre=db.info["sperre"])
+    if projekt.ausgecheckt_am is not None:
+        db.info["sperre"] = None
+        sperre_pruefen(db, projekt)  # wirft 423 mit Angabe, wer das Projekt hat
+    token = secrets.token_urlsafe(32)
+    projekt.ausgecheckt_von_id = benutzer.id
+    projekt.ausgecheckt_geraet = daten.geraet
+    projekt.ausgecheckt_am = datetime.now(UTC)
+    projekt.sperre_hash = sperre_hash(token)
+    db.commit()
+    db.refresh(projekt)
+    return AuscheckenAntwort(projekt=ProjektLesen.model_validate(projekt), sperre=token)
+
+
+@router.post("/{projekt_id}/einchecken", response_model=ProjektLesen)
+def einchecken(projekt_id: int, db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)):
+    """Hebt die Offline-Sperre auf: durch das auscheckende Gerät oder durch einen Admin („Sperre lösen“)."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    if projekt.ausgecheckt_am is None:
+        return projekt
+    if not haelt_sperre(db, projekt) and benutzer.rolle != "admin":
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            f"Nur das Gerät „{projekt.ausgecheckt_geraet}“ von {projekt.ausgecheckt_von_name} "
+            "oder ein Admin kann die Sperre aufheben.",
+        )
+    projekt.ausgecheckt_von_id = projekt.ausgecheckt_geraet = projekt.ausgecheckt_am = projekt.sperre_hash = None
     db.commit()
     db.refresh(projekt)
     return projekt

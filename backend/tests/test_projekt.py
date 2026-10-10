@@ -306,7 +306,7 @@ def test_berechnung_versioniert(client, projekt):
     eins = _post(client, f"/api/objekte/{oid}/berechnungen", {"bemerkung": "erster Stand"})
     zwei = _post(client, f"/api/objekte/{oid}/berechnungen", {})
     assert (eins["version"], zwei["version"]) == (1, 2)
-    assert eins["eingaben"]["art"] == "auswertung"
+    assert eins["eingaben"]["art"] == "objekt"
 
 
 def test_loeschen_nur_admin_und_kaskadiert(client, db, projekt, admin):

@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from app import protokoll  # noqa: F401  (registriert das Änderungsprotokoll)
-from app.routers import auth, benutzer, berechnungen, bibliotheken, fachvorgaben, hierarchie, projekte
+from app.routers import auth, benutzer, berechnungen, bibliotheken, fachvorgaben, hierarchie, offline, projekte
 
 app = FastAPI(
     title="Infrarot-Planer API",
@@ -29,5 +29,5 @@ def gesundheit() -> dict:
     return {"status": "ok"}
 
 
-for modul in (auth, benutzer, projekte, hierarchie, fachvorgaben, bibliotheken, berechnungen):
+for modul in (auth, benutzer, projekte, hierarchie, fachvorgaben, bibliotheken, berechnungen, offline):
     app.include_router(modul.router, prefix="/api")

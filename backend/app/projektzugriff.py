@@ -1,4 +1,11 @@
-"""Zuordnung beliebiger Projektdaten zu ihrem Projekt und Prüfung, ob das Projekt bearbeitet werden darf."""
+"""Zuordnung beliebiger Projektdaten zu ihrem Projekt und Prüfung, ob das Projekt bearbeitet werden darf.
+
+Offline-Sperre: Hat ein Gerät ein Projekt ausgecheckt, darf nur dieses Gerät (gleicher Benutzer und
+passendes Sperr-Token im Kopf X-Sperre) es ändern. Alle anderen erhalten 423 mit Angabe, wer es hat.
+"""
+import hashlib
+import hmac
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -29,12 +36,45 @@ def projekt_id_von(db: Session, obj: object) -> int | None:
     return obj.id
 
 
+def sperre_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def haelt_sperre(db: Session, projekt: Projekt) -> bool:
+    """Ob die laufende Anfrage vom Gerät kommt, das das Projekt ausgecheckt hat."""
+    token = db.info.get("sperre")
+    return bool(
+        projekt.ausgecheckt_am is not None and token and projekt.sperre_hash
+        and hmac.compare_digest(sperre_hash(token), projekt.sperre_hash)
+        and db.info.get("benutzer_id") == projekt.ausgecheckt_von_id
+    )
+
+
+def sperre_pruefen(db: Session, projekt: Projekt) -> None:
+    """Wirft 423, wenn ein anderes Gerät das Projekt ausgecheckt hat, und 409, wenn die Sperre des Geräts aufgehoben wurde."""
+    if projekt.ausgecheckt_am is None:
+        if db.info.get("sperre"):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Die Offline-Sperre dieses Geräts für das Projekt wurde aufgehoben. Änderungen werden nicht übertragen.",
+            )
+        return
+    if not haelt_sperre(db, projekt):
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            f"Projekt ist zur Offline-Bearbeitung ausgecheckt von {projekt.ausgecheckt_von_name} "
+            f"(Gerät „{projekt.ausgecheckt_geraet}“). Änderungen erst nach dem Einchecken "
+            "oder wenn ein Admin die Sperre löst.",
+        )
+
+
 def bearbeitung_pruefen(db: Session, obj: object) -> None:
     """Freigegebene Projekte sind gesperrt; geprüfte fallen bei Änderung auf „Vor-Ort-Entwurf“ zurück."""
     projekt_id = projekt_id_von(db, obj)
     projekt = db.get(Projekt, projekt_id) if projekt_id is not None else None
     if projekt is None:
         return
+    sperre_pruefen(db, projekt)
     if projekt.status == "freigegeben":
         raise HTTPException(
             status.HTTP_409_CONFLICT,

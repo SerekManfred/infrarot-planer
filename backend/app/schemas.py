@@ -93,8 +93,23 @@ class ProjektLesen(Lesbar):
     geprueft_am: datetime | None
     freigegeben_von_id: int | None
     freigegeben_am: datetime | None
+    ausgecheckt_von_id: int | None
+    ausgecheckt_von_name: str | None
+    ausgecheckt_geraet: str | None
+    ausgecheckt_am: datetime | None
     erstellt_am: datetime
     geaendert_am: datetime
+
+
+class Auschecken(BaseModel):
+    # Anzeigename des Geräts, z. B. „Tablet Außendienst 2“
+    geraet: str = Field(min_length=1, max_length=100)
+
+
+class AuscheckenAntwort(BaseModel):
+    projekt: ProjektLesen
+    # Sperr-Token: nur das auscheckende Gerät kennt es und sendet es als Kopf X-Sperre mit
+    sperre: str
 
 
 class StatusAenderung(BaseModel):
@@ -398,3 +413,37 @@ class BerechnungKurz(Lesbar):
 class BerechnungLesen(BerechnungKurz):
     eingaben: dict
     ergebnis: dict
+
+
+# ── Offline-Betrieb ─────────────────────────────────────────────────────────
+
+
+class FlaechePaket(FlaecheLesen):
+    oeffnungen: list[OeffnungLesen]
+
+
+class RaumPaket(RaumLesen):
+    flaechen: list[FlaechePaket]
+
+
+class GeschossPaket(GeschossLesen):
+    raeume: list[RaumPaket]
+
+
+class ObjektPaket(ObjektLesen):
+    geschosse: list[GeschossPaket]
+
+
+class ProjektPaket(ProjektLesen):
+    """Vollständiger Projektstand für den Offline-Speicher des Geräts."""
+
+    objekte: list[ObjektPaket]
+
+
+class OfflineVorgaben(BaseModel):
+    """Schnappschuss aller Fachvorgaben und Bibliotheken für das Rechnen ohne Netz."""
+
+    stand: datetime
+    fachvorgaben: FachvorgabenGesamt
+    bauteile: list[BauteilLesen]
+    klimadaten: list[KlimadatenLesen]

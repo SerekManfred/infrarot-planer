@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from typing import TypeVar
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db import Base, get_db
@@ -17,6 +17,7 @@ ROLLEN_TEXT = {"admin": "Admin", "fachpruefer": "Fachprüfer", "aussendienst": "
 def aktueller_benutzer(
     db: Session = Depends(get_db),
     sitzung: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    sperre: str | None = Header(default=None, alias="X-Sperre", max_length=100),
 ) -> Benutzer:
     inhalt = token_lesen(sitzung) if sitzung else None
     benutzer = db.get(Benutzer, inhalt[0]) if inhalt else None
@@ -24,6 +25,8 @@ def aktueller_benutzer(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Nicht angemeldet")
     # Für das Änderungsprotokoll (app/protokoll.py)
     db.info["benutzer_id"] = benutzer.id
+    # Sperr-Token eines Geräts, das ein Projekt offline bearbeitet (app/projektzugriff.py)
+    db.info["sperre"] = sperre or None
     return benutzer
 
 

@@ -19,7 +19,7 @@ PROTOKOLLIERT = (
     Benutzer, Projekt, Objekt, Geschoss, Raum, Bauteilflaeche, Oeffnung, Berechnung,
     BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten,
 )
-NICHT_PROTOKOLLIERT = {"id", "erstellt_am", "geaendert_am", "sitzungs_version", "eingaben", "ergebnis"}
+NICHT_PROTOKOLLIERT = {"id", "erstellt_am", "geaendert_am", "sitzungs_version", "eingaben", "ergebnis", "sperre_hash"}
 BESCHRIFTUNG = ("bezeichnung", "nummer", "email", "gebaeudestandard")
 
 
