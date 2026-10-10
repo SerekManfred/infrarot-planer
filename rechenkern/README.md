@@ -2,7 +2,7 @@
 
 Eigenständiges TypeScript-Modul für die Fachberechnungen. Läuft unverändert im Browser (offline, PWA) und auf dem Server (Node-CLI, wird vom Backend aufgerufen). Keine Abhängigkeiten zu Web-Framework oder Datenbank.
 
-Stand: Phase 1A – raumweise Heizlast. Später: Paneelauslegung, Variantenvergleich Infrarot/Wärmepumpe.
+Stand: Phase 1B (Version 0.2.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe. Später: Modulauslegung.
 
 ## Befehle
 
@@ -17,7 +17,37 @@ docker run --rm --name infrarot-npm-rechenkern --user "$(id -u):$(id -g)" -e npm
 - `npm run typecheck` – Typprüfung
 - `npm run build:cli` – Bündel `dist/cli.cjs` für das Backend (JSON über stdin/stdout)
 
-## Verfahren: raumweise Heizlast
+## Quelle A: Pauschalverfahren (`src/pauschal.ts`)
+
+```
+Φ_A = q · A · (1 + z_H)
+z_H = p/100 · (h − h_G)   für h > h_G, sonst 0
+A   = Länge · Breite      (Rechteckraum)
+```
+
+| Größe | Bedeutung | Einheit | Feld |
+|---|---|---|---|
+| Φ_A | pauschale Raumheizlast | W | `phi_w` |
+| q | Heizlast-Pauschale | W/m² | `pauschale_w_m2` |
+| A | Raumfläche | m² | `flaeche_m2` |
+| z_H | Höhenzuschlag (0,05 = 5 %) | – | `hoehenzuschlag_faktor` |
+| h | Raumhöhe | m | `hoehe_m` |
+| h_G | Grenzhöhe | m | `grenzhoehe_m` |
+| p | Zuschlag je Meter Mehrhöhe | %/m | `prozent_je_m` |
+
+Ohne `hoehenzuschlag` wird kein Zuschlag gerechnet. Die Werte q, h_G und p kommen aus den Fachvorgaben des Backends.
+
+## Auswertung über alle Quellen (`src/auswertung.ts`)
+
+Je Raum wird gerechnet, was vorliegt: A (`pauschal`), B (`hottgenroth_w`, übernommen), C (`berechnung`, siehe unten). Maßgeblich ist die für den Raum gewählte `quelle`.
+
+```
+Abweichung der Gegenprobe = (Φ_C − Φ_maßgeblich) / Φ_maßgeblich
+```
+
+Keine Abweichung, wenn C selbst maßgeblich ist, C fehlt oder Φ_maßgeblich = 0. Fehler in einem Raum brechen die Auswertung nicht ab, sondern stehen in `fehler` des Raums; Räume ohne maßgebliches Ergebnis werden in der Summe gezählt (`raeume_ohne_ergebnis`).
+
+## Quelle C: vereinfachte Berechnung (`src/heizlast.ts`)
 
 Vereinfachtes Verfahren nach dem Prinzip der DIN EN 12831-1:
 
@@ -63,6 +93,6 @@ Der Rechenkern enthält **keine** Normaußentemperaturen, U-Werte, Innentemperat
 ## Schnittstelle
 
 - Browser: `import { berechneHeizlast } from '@infrarot/rechenkern'`
-- Server: `node dist/cli.cjs < eingabe.json` → `{"ok": true, "ergebnis": …}` oder `{"ok": false, "fehler": {"pfad": …, "meldung": …}}`
+- Server: `node dist/cli.cjs < eingabe.json` mit `"art": "heizlast"` (Standard) oder `"art": "auswertung"` → `{"ok": true, "ergebnis": …}` oder `{"ok": false, "fehler": {"pfad": …, "meldung": …}}`
 
 Typen siehe `src/typen.ts`.
