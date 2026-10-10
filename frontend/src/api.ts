@@ -1,4 +1,8 @@
 // Zugriff auf die Backend-API. Die Sitzung liegt im HttpOnly-Cookie; das Frontend sieht kein Token.
+// Typen der API-Daten; Schlüssel wie im Backend (snake_case).
+import { anfrage } from './offline/daten';
+
+export { ApiFehler } from './netz';
 
 export type Rolle = 'admin' | 'fachpruefer' | 'aussendienst';
 export type Projektstatus = 'entwurf' | 'geprueft' | 'freigegeben';
@@ -27,6 +31,11 @@ export interface Projekt {
   geprueft_am: string | null;
   freigegeben_von_id: number | null;
   freigegeben_am: string | null;
+  /** Offline-Sperre: welches Gerät das Projekt ausgecheckt hat */
+  ausgecheckt_von_id: number | null;
+  ausgecheckt_von_name: string | null;
+  ausgecheckt_geraet: string | null;
+  ausgecheckt_am: string | null;
   erstellt_am: string;
   geaendert_am: string;
 }
@@ -190,6 +199,31 @@ export interface Auswertung {
   summe: { phi_massgeblich_w: number; raeume_mit_ergebnis: number; raeume_ohne_ergebnis: number };
 }
 
+// Vollständiger Projektstand für den Offline-Speicher (GET /offline/projekte/{id})
+export interface FlaechePaket extends Flaeche {
+  oeffnungen: Oeffnung[];
+}
+export interface RaumPaket extends Raum {
+  flaechen: FlaechePaket[];
+}
+export interface GeschossPaket extends Geschoss {
+  raeume: RaumPaket[];
+}
+export interface ObjektPaket extends Objekt {
+  geschosse: GeschossPaket[];
+}
+export interface ProjektPaket extends Projekt {
+  objekte: ObjektPaket[];
+}
+
+/** Schnappschuss für das Rechnen ohne Netz (GET /offline/vorgaben) */
+export interface OfflineVorgaben {
+  stand: string;
+  fachvorgaben: Fachvorgaben;
+  bauteile: Bauteil[];
+  klimadaten: Klimadaten[];
+}
+
 export interface ProtokollEintrag {
   id: number;
   zeitpunkt: string;
@@ -200,45 +234,7 @@ export interface ProtokollEintrag {
   aenderungen: Record<string, unknown>;
 }
 
-export class ApiFehler extends Error {
-  constructor(
-    public readonly status: number,
-    meldung: string,
-  ) {
-    super(meldung);
-  }
-}
-
-function meldungAus(status: number, detail: unknown): string {
-  if (typeof detail === 'string') return detail;
-  if (detail && typeof detail === 'object' && 'meldung' in detail) {
-    const d = detail as { meldung: unknown; fehler?: unknown };
-    return Array.isArray(d.fehler) ? `${d.meldung}: ${d.fehler.join('; ')}` : String(d.meldung);
-  }
-  if (Array.isArray(detail)) return 'Eingaben ungültig – bitte Werte prüfen';
-  if (status === 429) return 'Zu viele Versuche – bitte später erneut versuchen';
-  return `Fehler ${status}`;
-}
-
-async function anfrage<T>(methode: string, pfad: string, daten?: unknown): Promise<T> {
-  let antwort: Response;
-  const istDatei = daten instanceof FormData;
-  try {
-    antwort = await fetch(`/api${pfad}`, {
-      method: methode,
-      credentials: 'same-origin',
-      headers: daten === undefined || istDatei ? undefined : { 'Content-Type': 'application/json' },
-      body: daten === undefined ? undefined : istDatei ? daten : JSON.stringify(daten),
-    });
-  } catch {
-    throw new ApiFehler(0, 'Server nicht erreichbar');
-  }
-  if (antwort.status === 204) return undefined as T;
-  const inhalt = await antwort.json().catch(() => null);
-  if (!antwort.ok) throw new ApiFehler(antwort.status, meldungAus(antwort.status, inhalt?.detail));
-  return inhalt as T;
-}
-
+// Netzzugriff in netz.ts; Projekte, die dieses Gerät ausgecheckt hat, bedient der Offline-Speicher (offline/).
 export const api = {
   get: <T>(pfad: string) => anfrage<T>('GET', pfad),
   post: <T>(pfad: string, daten: unknown = {}) => anfrage<T>('POST', pfad, daten),

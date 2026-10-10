@@ -117,7 +117,7 @@ tr.inaktiv { color: var(--leise); }
 .projektkopf { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.5rem; }
 .projektkopf h1 { margin: 0.25rem 0; }
 .zurueck { text-decoration: none; font-size: 0.95rem; }
-.kopfdaten { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 1rem; align-items: end; }
+.kopfdaten { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.3fr) 2fr; gap: 1rem; align-items: end; }
 .kopfdaten label { margin: 0; }
 .reiter { display: flex; gap: 0.25rem; border-bottom: 2px solid var(--rand); margin: 1rem 0; }
 .reiter button {
@@ -165,6 +165,32 @@ tr.inaktiv { color: var(--leise); }
 .summe { display: flex; flex-direction: column; gap: 0.25rem; }
 .summe span { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
 .summe strong { font-size: 1.4rem; color: var(--blau); }
+
+/* ── Offline-Betrieb ── */
+.verbindung-rahmen { position: relative; }
+.verbindung {
+  display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; padding: 0.4rem 0.9rem;
+  border-radius: 999px; border: 0; font-weight: 600; font-size: 0.95rem; cursor: pointer;
+}
+.verbindung .punkt { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: currentColor; }
+.verbindung-online { background: var(--gruen-hell); color: var(--gruen); }
+.verbindung-offline { background: #e4e7ec; color: #39424e; }
+.verbindung-ausstehend { background: var(--warnung-hell); color: var(--warnung); }
+.verbindung-problem { background: var(--fehler-hell); color: var(--fehler); }
+.verbindung-details {
+  position: absolute; right: 0; top: calc(100% + 0.4rem); z-index: 10; width: min(360px, 90vw);
+  background: #fff; color: var(--text); border: 1px solid var(--rand); border-radius: 10px; padding: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); font-size: 0.95rem;
+}
+.verbindung-details p { margin: 0 0 0.6rem; }
+.offline-karte { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.offline-karte > div, .offline-karte > span { flex: 1 1 320px; }
+.offline-karte .meldung { flex-basis: 100%; }
+.offline-karte.lokal { border: 2px solid var(--gruen); background: var(--gruen-hell); }
+.offline-karte.fremd { border: 2px solid var(--fehler); background: var(--fehler-hell); }
+.offline-karte .knopf-gefahr { margin-top: 0; }
+.sperre { display: inline-block; margin-left: 0.4rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.8rem; background: var(--fehler-hell); color: var(--fehler); }
+.sperre.eigen { background: var(--gruen-hell); color: var(--gruen); }
 
 @media (max-width: 640px) {
   .raum-kopf, .kopfdaten { grid-template-columns: 1fr; }

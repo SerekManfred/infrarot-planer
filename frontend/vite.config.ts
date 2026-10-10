@@ -17,8 +17,10 @@ export default defineConfig({
       manifest: {
         name: 'Infrarot-Planer',
         short_name: 'IR-Planer',
-        description: 'Planung von Infrarotheizungen für Energieberater',
+        description: 'Vor-Ort-Planung von Infrarot-Deckenmodulen – funktioniert auch ohne Netz',
         lang: 'de',
+        id: '/',
+        scope: '/',
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
@@ -30,7 +32,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // API-Aufrufe nie aus dem Cache beantworten (Offline-Speicher kommt später über IndexedDB)
+        // Die App selbst kommt ohne Netz aus dem Cache (index.html für jede Seite).
+        // API-Aufrufe nie aus dem Cache beantworten – Offline-Daten liegen in IndexedDB (src/offline/).
+        navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
       },
     }),

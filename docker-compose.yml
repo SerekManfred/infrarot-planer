@@ -1,5 +1,6 @@
 # Infrarot-Planer – alle Container, Volumes und Netzwerke tragen das Präfix „infrarot“.
-# Ports nur an 127.0.0.1; öffentlich erreichbar wird die App erst später über den Caddy-Container.
+# Ports nur an 127.0.0.1. Öffentlich erreichbar ist die App über den bestehenden Caddy-Container, der dafür
+# nur am Netzwerk infrarot-proxy hängt (nicht an infrarot-netz mit der Datenbank) – siehe docs/BETRIEB.md.
 name: infrarot
 
 services:
@@ -38,7 +39,7 @@ services:
     depends_on:
       infrarot-db:
         condition: service_healthy
-    networks: [infrarot-netz]
+    networks: [infrarot-netz, infrarot-proxy]
     ports:
       - "127.0.0.1:${INFRAROT_BACKEND_PORT:-8091}:8000"
     healthcheck:
@@ -55,7 +56,7 @@ services:
     container_name: infrarot-frontend
     restart: unless-stopped
     depends_on: [infrarot-backend]
-    networks: [infrarot-netz]
+    networks: [infrarot-netz, infrarot-proxy]
     ports:
       - "127.0.0.1:${INFRAROT_FRONTEND_PORT:-8090}:80"
 
@@ -68,3 +69,8 @@ volumes:
 networks:
   infrarot-netz:
     name: infrarot-netz
+  # Von außen angelegt (docker network create infrarot-proxy), damit „docker compose down“ es nicht entfernt,
+  # solange Caddy daran hängt
+  infrarot-proxy:
+    name: infrarot-proxy
+    external: true

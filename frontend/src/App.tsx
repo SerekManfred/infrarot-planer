@@ -7,7 +7,9 @@ import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
 import { Konto } from './komponenten/Konto';
 import { ProjektSeite } from './komponenten/Projekt';
 import { Projektliste } from './komponenten/Projektliste';
+import { Verbindung } from './komponenten/Verbindung';
 import { gehe, useAdresse } from './navigation';
+import { offline, useOffline } from './offline/daten';
 import { ROLLEN } from './texte';
 
 export function App() {
@@ -16,20 +18,63 @@ export function App() {
   const [fehler, setFehler] = useState('');
   const adresse = useAdresse();
 
+  const { anmeldungNoetig } = useOffline();
+  const [abmeldung, setAbmeldung] = useState(false);
+
   useEffect(() => {
     api
       .get<Benutzer>('/auth/ich')
-      .then(setBenutzer)
+      .then((b) => {
+        setBenutzer(b);
+        // Fachvorgaben-Schnappschuss für das Rechnen ohne Netz auffrischen (ohne Netz bleibt der alte)
+        offline.vorgabenAktualisieren().catch(() => undefined);
+        offline.synchronisierenBald(0);
+      })
       .catch((e) => {
         setBenutzer(null);
         if (!(e instanceof ApiFehler && e.status === 401)) setFehler(e.message);
       });
   }, []);
 
+  async function angemeldet(b: Benutzer) {
+    // Offline-Daten eines anderen Benutzers nicht unter neuem Namen übertragen
+    const vorher = await offline.lokalerBenutzer();
+    if (vorher && vorher.id !== b.id && offline.hatLokaleDaten()) {
+      const loeschen = window.confirm(
+        `Auf diesem Gerät liegen noch Offline-Daten von ${vorher.name} (${offline.zustand.ausstehend} Änderungen nicht übertragen). ` +
+          'Diese Daten löschen und fortfahren?\n\nAbbrechen meldet wieder ab; dann kann sich ' + vorher.name + ' anmelden und übertragen.',
+      );
+      if (!loeschen) {
+        await api.post('/auth/abmelden').catch(() => undefined);
+        return;
+      }
+      await offline.allesLoeschen();
+    }
+    setBenutzer(b);
+    await offline.angemeldet(b);
+    offline.vorgabenAktualisieren().catch(() => undefined);
+  }
+
   async function abmelden() {
-    await api.post('/auth/abmelden').catch(() => undefined);
-    setBenutzer(null);
-    gehe('/');
+    setAbmeldung(true);
+    try {
+      // Online: alles übertragen und die Projekte einchecken; was übrig bleibt, ginge verloren
+      const rest = await offline.abmeldenVorbereiten();
+      if (rest.ausstehend > 0 || rest.projekte.length > 0) {
+        const teile = [
+          rest.ausstehend > 0 && `${rest.ausstehend} Änderung(en) sind noch nicht übertragen und gehen verloren.`,
+          rest.projekte.length > 0 &&
+            `Diese Projekte bleiben auf dem Server gesperrt, bis ein Admin die Sperre löst: ${rest.projekte.join(', ')}.`,
+        ].filter(Boolean);
+        if (!window.confirm(`${teile.join('\n\n')}\n\nTrotzdem abmelden und die Offline-Daten auf diesem Gerät löschen?`)) return;
+      }
+      await api.post('/auth/abmelden').catch(() => undefined);
+      await offline.allesLoeschen();
+      setBenutzer(null);
+      gehe('/');
+    } finally {
+      setAbmeldung(false);
+    }
   }
 
   const [seite, id] = adresse;
@@ -61,11 +106,12 @@ export function App() {
         )}
         {benutzer && (
           <span className="kopf-rechts">
+            <Verbindung />
             <span>
               {benutzer.name} <small>({ROLLEN[benutzer.rolle]})</small>
             </span>
-            <button className="knopf-leise" onClick={abmelden}>
-              Abmelden
+            <button className="knopf-leise" onClick={abmelden} disabled={abmeldung}>
+              {abmeldung ? 'Abmelden …' : 'Abmelden'}
             </button>
           </span>
         )}
@@ -73,7 +119,13 @@ export function App() {
       <main className="inhalt">
         {fehler && <p className="meldung fehler">{fehler}</p>}
         {benutzer === undefined && <p>Wird geladen …</p>}
-        {benutzer === null && <Anmeldung onAngemeldet={setBenutzer} />}
+        {benutzer === null && <Anmeldung onAngemeldet={angemeldet} />}
+        {benutzer && anmeldungNoetig && (
+          <>
+            <p className="meldung warnung">Die Anmeldung ist abgelaufen. Bitte neu anmelden, damit die Änderungen übertragen werden.</p>
+            <Anmeldung onAngemeldet={angemeldet} />
+          </>
+        )}
         {benutzer && seite === 'projekt' && id && <ProjektSeite key={id} projektId={Number(id)} benutzer={benutzer} />}
         {benutzer && seite === 'fachvorgaben' && <FachvorgabenSeite benutzer={benutzer} />}
         {benutzer && seite === 'benutzer' && benutzer.rolle === 'admin' && <BenutzerVerwaltung benutzer={benutzer} />}

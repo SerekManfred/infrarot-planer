@@ -1,0 +1,127 @@
+// Lokale Bearbeitung eines ausgecheckten Projekts. Zahlen sind TESTWERTE.
+import { describe, expect, it } from 'vitest';
+import { ausfuehren, LokalFehler, neuesProjekt, pfadAufloesen, projektFuerPfad, type LokalesProjekt } from '../src/offline/lokal';
+import { paket, vorgaben } from './hilfen';
+
+function lp(): LokalesProjekt {
+  return { id: 5, paket: paket(), sperre: 'token', geraet: 'Tablet 1' };
+}
+
+function zaehler(start = -1) {
+  let n = start;
+  return () => n--;
+}
+
+describe('projektFuerPfad', () => {
+  const projekte = [lp()];
+  it('findet das Projekt über jede Ebene', () => {
+    expect(projektFuerPfad('/projekte/5', projekte)?.id).toBe(5);
+    expect(projektFuerPfad('/objekte/50/auswertung', projekte)?.id).toBe(5);
+    expect(projektFuerPfad('/geschosse/500/raeume', projekte)?.id).toBe(5);
+    expect(projektFuerPfad('/raeume/5000', projekte)?.id).toBe(5);
+  });
+  it('fremde Daten und andere Pfade gehen ans Netz', () => {
+    expect(projektFuerPfad('/raeume/7777', projekte)).toBeNull();
+    expect(projektFuerPfad('/projekte', projekte)).toBeNull();
+    expect(projektFuerPfad('/fachvorgaben', projekte)).toBeNull();
+    expect(projektFuerPfad('/bibliotheken/klimadaten?plz=1', projekte)).toBeNull();
+  });
+});
+
+describe('ausfuehren', () => {
+  it('liest Geschosse und Räume ohne Kinderlisten', () => {
+    const p = lp();
+    const geschosse = ausfuehren(p, null, 'GET', '/objekte/50/geschosse', undefined, zaehler())!.antwort as object[];
+    expect(geschosse).toHaveLength(1);
+    expect(geschosse[0]).not.toHaveProperty('raeume');
+    const projekt = ausfuehren(p, null, 'GET', '/projekte/5', undefined, zaehler())!.antwort as { objekte: object[] };
+    expect(projekt.objekte[0]).not.toHaveProperty('geschosse');
+  });
+
+  it('legt einen Raum mit vorläufiger ID und Standardwerten an und rechnet die Fläche', () => {
+    const p = lp();
+    const e = ausfuehren(p, null, 'POST', '/geschosse/500/raeume', { bezeichnung: 'Bad', laenge_m: 2, breite_m: 3 }, zaehler())!;
+    expect(e.antwort).toMatchObject({ id: -1, geschoss_id: 500, heizlastquelle: 'A', flaeche_m2: 6, hoehe_m: null });
+    expect(e.eintrag).toMatchObject({ methode: 'POST', pfad: '/geschosse/500/raeume', temp_id: -1, projekt_id: 5 });
+    expect(e.eintrag!.beschreibung).toBe('Raum „Bad“ angelegt');
+    expect(p.paket.objekte[0].geschosse[0].raeume.map((r) => r.id)).toEqual([5000, -1]);
+    // Der neue Raum ist sofort weiter bearbeitbar
+    ausfuehren(p, null, 'PATCH', '/raeume/-1', { breite_m: 4 }, zaehler());
+    expect(p.paket.objekte[0].geschosse[0].raeume[1].flaeche_m2).toBe(8);
+  });
+
+  it('Änderung eines geprüften Projekts setzt es lokal auf Entwurf zurück', () => {
+    const p = lp();
+    p.paket.status = 'geprueft';
+    ausfuehren(p, null, 'PATCH', '/raeume/5000', { hoehe_m: 2.6 }, zaehler());
+    expect(p.paket.status).toBe('entwurf');
+  });
+
+  it('löscht mit allen Kindern', () => {
+    const p = lp();
+    const e = ausfuehren(p, null, 'DELETE', '/geschosse/500', undefined, zaehler())!;
+    expect(e.eintrag).toMatchObject({ methode: 'DELETE', pfad: '/geschosse/500' });
+    expect(projektFuerPfad('/raeume/5000', [p])).toBeNull();
+  });
+
+  it('Geschosse nach Reihenfolge, neue bei Gleichstand hinten', () => {
+    const p = lp();
+    ausfuehren(p, null, 'POST', '/objekte/50/geschosse', { bezeichnung: 'KG', reihenfolge: 0 }, zaehler(-1));
+    ausfuehren(p, null, 'POST', '/objekte/50/geschosse', { bezeichnung: 'OG', reihenfolge: 1 }, zaehler(-2));
+    const namen = (ausfuehren(p, null, 'GET', '/objekte/50/geschosse', undefined, zaehler())!.antwort as { bezeichnung: string }[]).map(
+      (g) => g.bezeichnung,
+    );
+    expect(namen).toEqual(['KG', 'EG', 'OG']);
+  });
+
+  it('rechnet die Auswertung offline mit dem Rechenkern: 20 m² · 33 W/m² = 660 W', () => {
+    const a = ausfuehren(lp(), vorgaben(), 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort as {
+      summe: { phi_massgeblich_w: number };
+      raeume: { werte: { pauschale_w_m2: { herkunft: string } } }[];
+    };
+    expect(a.summe.phi_massgeblich_w).toBe(660);
+    expect(a.raeume[0].werte.pauschale_w_m2.herkunft).toBe('vorgabe');
+  });
+
+  it('Klimadaten aus dem Schnappschuss für die Gegenprobe', () => {
+    const p = lp();
+    ausfuehren(p, null, 'PATCH', '/objekte/50', { klimadaten_id: 1 }, zaehler());
+    const a = ausfuehren(p, vorgaben(), 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort as {
+      vorgaben: { theta_e: { wert: number; herkunft: string } };
+    };
+    expect(a.vorgaben.theta_e).toEqual({ wert: -10, herkunft: 'klimadaten' });
+  });
+
+  it('ohne Schnappschuss keine Auswertung, Statuswechsel nicht lokal, Protokoll ans Netz', () => {
+    expect(() => ausfuehren(lp(), null, 'GET', '/objekte/50/auswertung', undefined, zaehler())).toThrow(LokalFehler);
+    expect(() => ausfuehren(lp(), null, 'POST', '/projekte/5/status', { status: 'geprueft' }, zaehler())).toThrow(/eingecheckt/);
+    expect(ausfuehren(lp(), null, 'GET', '/projekte/5/protokoll', undefined, zaehler())).toBeNull();
+  });
+
+  it('unbekannte ID → 404', () => {
+    expect(() => ausfuehren(lp(), null, 'PATCH', '/projekte/6', {}, zaehler())).toThrow(LokalFehler);
+  });
+});
+
+describe('neuesProjekt und pfadAufloesen', () => {
+  it('offline angelegt: Projekt und Gebäude mit vorläufigen IDs, Anlegen und Auschecken in der Warteschlange', () => {
+    const { lp: neu, eintraege } = neuesProjekt(
+      { nummer: 'N-1', bezeichnung: 'Neu', gebaeudestandard: 'neubau' },
+      zaehler(),
+      { id: 1, name: 'Test' },
+      'Tablet 1',
+      '2026-10-10T08:00:00Z',
+    );
+    expect(neu.id).toBe(-1);
+    expect(neu.paket.objekte[0]).toMatchObject({ id: -2, projekt_id: -1, gebaeudestandard: 'neubau', geschosse: [] });
+    expect(eintraege.map((e) => e.pfad)).toEqual(['/projekte', '/projekte/-1/auschecken']);
+    expect(eintraege[0]).toMatchObject({ temp_id: -1, temp_objekt_id: -2 });
+  });
+
+  it('ersetzt vorläufige IDs; fehlt eine Zuordnung → null', () => {
+    expect(pfadAufloesen('/geschosse/-3/raeume', { '-3': 77 })).toBe('/geschosse/77/raeume');
+    expect(pfadAufloesen('/raeume/-12', { '-1': 5, '-12': 9 })).toBe('/raeume/9');
+    expect(pfadAufloesen('/raeume/12', {})).toBe('/raeume/12');
+    expect(pfadAufloesen('/raeume/-4', {})).toBeNull();
+  });
+});
