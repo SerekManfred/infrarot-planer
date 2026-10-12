@@ -1,6 +1,6 @@
 # Betrieb
 
-Stand: 10.10.2026 (Phase 1C)
+Stand: 12.10.2026 (Phase 1C)
 
 ## Übersicht
 
@@ -27,7 +27,7 @@ Für HTTPS wurde der Caddy-Container der Schulungsplattform **eng begrenzt** ver
 | `/opt/schulung/Caddyfile` | **nur ein neuer Site-Block** angehängt (Inhalt: `betrieb/caddy/ir-planer.caddy`); der Block `schulung.mybase-test.de` ist unverändert |
 | Netzwerk | `docker network connect infrarot-proxy schulung-caddy-1` |
 | Übernahme | `caddy validate`, danach `caddy reload`. Kein Neustart, kein Neuerstellen des Containers |
-| Sicherung | `/opt/schulung/Caddyfile.bak-JJJJ-MM-TT` (gleiche Rechte wie das Original) |
+| Sicherung | `/opt/schulung/Caddyfile.bak-JJJJ-MM-TT` (gleiche Rechte wie das Original). **Eingerichtet am 12.10.2026, Sicherung: `/opt/schulung/Caddyfile.bak-2026-10-12`** |
 
 Alles erledigt ein Skript (root nötig, weil das Caddyfile root gehört):
 
