@@ -21,6 +21,8 @@ Fachregeln im Detail: `docs/FACHKONZEPT.md`.
 - **Außendienst MEH** (`aussendienst`): erfasst Projekte vor Ort.
 - **Fachprüfer Serek** (`fachpruefer`): pflegt Fachvorgaben, prüft und gibt frei.
 - **Admin** (`admin`): Benutzerverwaltung, Fachvorgaben, Betrieb. Prüft und gibt **nicht** frei.
+- Rollen sind **kombinierbar**; Prüfen und Freigeben nur mit Rolle Fachprüfer.
+- Projekte rechnen mit ihrer beim Anlegen **eingefrorenen Kopie der Fachvorgaben**; neue zentrale Werte nur per Klick übernehmen.
 - Projektstatus: **Vor-Ort-Entwurf → fachlich geprüft → freigegeben**. Nur Fachprüfer ändern den Status.
 - Alle sehen alle Projekte. Jede Änderung wird mit Benutzer und Zeit protokolliert.
 

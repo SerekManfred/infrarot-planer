@@ -28,8 +28,9 @@ API-Dokumentation bei laufendem Container: http://127.0.0.1:8091/api/docs
 # Ersten Admin anlegen (Passwort wird verdeckt abgefragt)
 docker exec -it infrarot-backend python -m app.cli admin-anlegen --email NAME@FIRMA.de --name "Vorname Nachname"
 
-# Weitere Benutzer
-docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rolle aussendienst|fachpruefer|admin
+# Weitere Benutzer (Rollen kombinierbar, kommagetrennt)
+docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rollen aussendienst
+docker exec infrarot-backend python -m app.cli rollen-setzen --email … --rollen admin,fachpruefer
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
 docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
@@ -53,7 +54,18 @@ docker compose run --rm --no-deps --name infrarot-backend-migration --user "$(id
 | Benutzer verwalten | – | – | ja |
 | Projekte löschen | – | – | ja |
 
+Rollen sind kombinierbar; es gilt die Vereinigung der Rechte (z. B. Admin + Fachprüfer darf Benutzer verwalten **und** prüfen/freigeben). Prüfen und Freigeben setzt immer die Rolle Fachprüfer voraus.
+
 Freigegebene Projekte sind für alle gesperrt. Ausgecheckte Projekte (Offline-Bearbeitung) darf nur das auscheckende Gerät ändern; einchecken kann das Gerät, die Sperre lösen ein Admin. Details: `docs/FACHKONZEPT.md`.
+
+## Eingefrorene Fachvorgaben (`app/vorgabenstand.py`)
+
+Jedes Projekt speichert beim Anlegen eine Kopie der Fachvorgaben (`projekt.vorgaben_stand`) und rechnet damit.
+
+| Endpunkt | Zweck |
+|---|---|
+| `GET /api/projekte/{id}/vorgaben` | Stand des Projekts, Unterschiede zu den zentralen Vorgaben (alt/neu), Auswirkung auf die Heizlast; bei Freigabe keine Unterschiede |
+| `POST /api/projekte/{id}/vorgaben/uebernehmen` | übernimmt die zentralen Vorgaben; Protokolleintrag `vorgaben_uebernommen` mit Unterschieden und Heizlast vorher/nachher; 409 bei Freigabe, 423 bei Sperre |
 
 ## Offline-Betrieb
 
