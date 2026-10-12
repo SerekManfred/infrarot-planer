@@ -19,7 +19,7 @@ def test_anmeldung_falsches_passwort_und_unbekannt(client, aussendienst):
 def test_anmelden_ich_abmelden(client, aussendienst):
     anmelden(client, "AUSSENDIENST@test.invalid")  # Groß-/Kleinschreibung egal
     assert client.cookies.get("infrarot_sitzung")
-    assert client.get("/api/auth/ich").json()["rolle"] == "aussendienst"
+    assert client.get("/api/auth/ich").json()["rollen"] == ["aussendienst"]
     client.post("/api/auth/abmelden")
     assert client.get("/api/auth/ich").status_code == 401
 
@@ -125,12 +125,15 @@ def test_rechte_fachpruefer(client, fachpruefer):
 
 def test_admin_verwaltet_benutzer(client, admin):
     anmelden(client, admin.email)
-    neu = {"email": "neu@test.invalid", "name": "Neu", "passwort": "noch-ein-passwort", "rolle": "aussendienst"}
+    neu = {"email": "neu@test.invalid", "name": "Neu", "passwort": "noch-ein-passwort", "rollen": ["aussendienst"]}
     angelegt = client.post("/api/benutzer", json=neu).json()
     assert client.post("/api/benutzer", json=neu).status_code == 409
 
-    geaendert = client.patch(f"/api/benutzer/{angelegt['id']}", json={"rolle": "fachpruefer", "name": "Neu Name"})
-    assert geaendert.json()["rolle"] == "fachpruefer"
+    # Rollen kombinierbar; Reihenfolge und Doppelte werden bereinigt
+    geaendert = client.patch(f"/api/benutzer/{angelegt['id']}", json={"rollen": ["fachpruefer", "admin", "admin"], "name": "Neu Name"})
+    assert geaendert.json()["rollen"] == ["admin", "fachpruefer"]
+    assert client.patch(f"/api/benutzer/{angelegt['id']}", json={"rollen": []}).status_code == 422
+    assert client.patch(f"/api/benutzer/{angelegt['id']}", json={"rollen": ["chef"]}).status_code == 422
 
     from fastapi.testclient import TestClient
 
@@ -149,17 +152,19 @@ def test_admin_verwaltet_benutzer(client, admin):
 def test_admin_kann_sich_nicht_aussperren(client, admin):
     anmelden(client, admin.email)
     assert client.patch(f"/api/benutzer/{admin.id}", json={"aktiv": False}).status_code == 409
-    assert client.patch(f"/api/benutzer/{admin.id}", json={"rolle": "fachpruefer"}).status_code == 409
-    assert client.get("/api/auth/ich").json()["rolle"] == "admin"
+    assert client.patch(f"/api/benutzer/{admin.id}", json={"rollen": ["fachpruefer"]}).status_code == 409
+    # Fachprüfer dazunehmen geht
+    assert client.patch(f"/api/benutzer/{admin.id}", json={"rollen": ["admin", "fachpruefer"]}).status_code == 200
+    assert client.get("/api/auth/ich").json()["rollen"] == ["admin", "fachpruefer"]
 
 
 def test_letzter_admin_bleibt(client, db, admin):
     from app.models import Benutzer
     from app.sicherheit import passwort_hashen
 
-    zweiter = Benutzer(email="admin2@test.invalid", name="Admin 2", rolle="admin", passwort_hash=passwort_hashen(TEST_PASSWORT))
+    zweiter = Benutzer(email="admin2@test.invalid", name="Admin 2", rollen=["admin"], passwort_hash=passwort_hashen(TEST_PASSWORT))
     db.add(zweiter)
     db.commit()
     anmelden(client, admin.email)
     # Zwei aktive Admins: den anderen herabstufen geht
-    assert client.patch(f"/api/benutzer/{zweiter.id}", json={"rolle": "aussendienst"}).status_code == 200
+    assert client.patch(f"/api/benutzer/{zweiter.id}", json={"rollen": ["aussendienst"]}).status_code == 200

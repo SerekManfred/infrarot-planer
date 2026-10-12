@@ -47,16 +47,19 @@ class Zeitstempel:
 
 class Benutzer(Zeitstempel, Base):
     __tablename__ = "benutzer"
-    __table_args__ = (CheckConstraint(_erlaubt("rolle", ROLLEN), name="ck_benutzer_rolle"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     name: Mapped[str] = mapped_column(String(200))
     passwort_hash: Mapped[str] = mapped_column(String(255))
-    rolle: Mapped[str] = mapped_column(String(20), default="aussendienst")
+    # Rollen sind kombinierbar, z. B. ["admin", "fachpruefer"]; gültige Werte siehe ROLLEN (geprüft in app/schemas.py)
+    rollen: Mapped[list[str]] = mapped_column(JsonDaten, default=lambda: ["aussendienst"])
     aktiv: Mapped[bool] = mapped_column(default=True)
     # Wird bei Passwortänderung und Deaktivierung erhöht; ältere Sitzungs-Token werden damit ungültig
     sitzungs_version: Mapped[int] = mapped_column(default=0, server_default="0")
+
+    def hat_rolle(self, *rollen: str) -> bool:
+        return any(r in (self.rollen or []) for r in rollen)
 
 
 class Anmeldeversuch(Base):
@@ -144,7 +147,11 @@ class HeizlastPauschale(Zeitstempel, Base):
 
 
 class Fachvorgaben(Zeitstempel, Base):
-    """Zentrale Einzelwerte; genau eine Zeile (id = 1). Leere Werte = „Vorgabe fehlt“."""
+    """Zentrale Einzelwerte; genau eine Zeile (id = 1). Leere Werte = „Vorgabe fehlt“.
+
+    Für „sonstiger Bestand“ gibt es bewusst keinen Rückfallwert (Pauschale je Raum Pflicht, Festlegung 12.10.2026).
+    Projekte rechnen mit einer Kopie dieser Vorgaben (Projekt.vorgaben_stand, app/vorgabenstand.py).
+    """
 
     __tablename__ = "fachvorgaben"
     __table_args__ = (CheckConstraint("id = 1", name="ck_fachvorgaben_eine_zeile"),)
@@ -152,9 +159,8 @@ class Fachvorgaben(Zeitstempel, Base):
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     rueckfall_neubau_w_m2: Mapped[float | None] = mapped_column(Float)
     rueckfall_effizienzhaus_sanierung_w_m2: Mapped[float | None] = mapped_column(Float)
-    rueckfall_sonstiger_bestand_w_m2: Mapped[float | None] = mapped_column(Float)
-    hoehenzuschlag_grenzhoehe_m: Mapped[float | None] = mapped_column(Float)
-    hoehenzuschlag_prozent_je_m: Mapped[float | None] = mapped_column(Float)
+    # Kein Höhenzuschlag (Festlegung 12.10.2026): über dieser Raumhöhe nur ein Hinweis, die Pauschale zu prüfen
+    hoehe_hinweis_m: Mapped[float | None] = mapped_column(Float, comment="Raumhöhe in m, ab der ein Hinweis erscheint")
     delta_u_wb: Mapped[float | None] = mapped_column(Float, comment="W/(m²·K), für Quelle C")
     quelle: Mapped[str] = mapped_column(Text, default="")
 
@@ -197,6 +203,9 @@ class Projekt(Zeitstempel, Base):
     ausgecheckt_geraet: Mapped[str | None] = mapped_column(String(100))
     ausgecheckt_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sperre_hash: Mapped[str | None] = mapped_column(String(64))
+    # Eingefrorene Fachvorgaben: Kopie beim Anlegen, neue zentrale Werte nur per bewusster Übernahme
+    vorgaben_stand: Mapped[dict | None] = mapped_column(JsonDaten)
+    vorgaben_stand_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     ersteller: Mapped[Benutzer | None] = relationship(foreign_keys=[ersteller_id])
     ausgecheckt_von: Mapped[Benutzer | None] = relationship(foreign_keys=[ausgecheckt_von_id])
@@ -228,8 +237,6 @@ class Objekt(Zeitstempel, Base):
     klimadaten_id: Mapped[int | None] = mapped_column(ForeignKey("bib_klimadaten.id", ondelete="RESTRICT"))
     # Abweichungen von den zentralen Fachvorgaben (leer = zentrale Vorgabe gilt)
     delta_u_wb: Mapped[float | None] = mapped_column(Float, comment="Wärmebrückenzuschlag in W/(m²·K)")
-    hoehenzuschlag_grenzhoehe_m: Mapped[float | None] = mapped_column(Float)
-    hoehenzuschlag_prozent_je_m: Mapped[float | None] = mapped_column(Float)
     pauschale_abweichungen: Mapped[dict] = mapped_column(
         JsonDaten, default=dict, comment="{raumtyp_id: W/m²}, gilt für alle Räume dieses Typs im Objekt"
     )

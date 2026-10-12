@@ -1,20 +1,17 @@
 """Auswertung eines Objekts (Gebäudes) über alle Heizlastquellen.
 
-Das Backend stellt den vollständigen Planungsstand zusammen (Objekt, Räume, Bauteile, Fachvorgaben);
+Das Backend stellt den vollständigen Planungsstand zusammen (Objekt, Räume, Bauteile und die im Projekt
+eingefrorenen Fachvorgaben, app/vorgabenstand.py);
 die Auflösung der Vorgaben mit Herkunft und die Rechnung übernimmt der Rechenkern (art "objekt").
 Derselbe Code rechnet offline im Browser – Server und Tablet kommen so zum selben Ergebnis.
 """
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BibBauteil, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Objekt
+from app.models import BibBauteil, Fachvorgaben, Objekt
 from app.rechenkern_bruecke import rechenkern_aufrufen
 from app.schemas import GEBAEUDESTANDARD_TEXT
-
-VORGABEN_FELDER = (
-    "rueckfall_neubau_w_m2", "rueckfall_effizienzhaus_sanierung_w_m2", "rueckfall_sonstiger_bestand_w_m2",
-    "hoehenzuschlag_grenzhoehe_m", "hoehenzuschlag_prozent_je_m", "delta_u_wb",
-)
+from app.vorgabenstand import schnappschuss
 RAUM_FELDER = (
     "id", "bezeichnung", "raumtyp_id", "laenge_m", "breite_m", "flaeche_m2", "hoehe_m", "volumen_m3",
     "heizlastquelle", "hottgenroth_w", "pauschale_w_m2", "theta_int", "luftwechsel",
@@ -34,28 +31,37 @@ def _felder(obj: object, namen: tuple[str, ...]) -> dict:
     return {n: getattr(obj, n) for n in namen}
 
 
-def objekt_planung(db: Session, objekt: Objekt) -> dict:
-    """Vollständiger Planungsstand eines Objekts als Rechenkern-Eingabe (art "objekt")."""
-    v = fachvorgaben_laden(db)
+def objekt_planung(db: Session, objekt: Objekt, stand: dict | None = None) -> dict:
+    """Vollständiger Planungsstand eines Objekts als Rechenkern-Eingabe (art "objekt").
+
+    stand: Fachvorgaben, mit denen gerechnet wird – ohne Angabe die des Projekts (eingefroren).
+    """
+    stand = stand or objekt.projekt.vorgaben_stand or schnappschuss(db)
+    w = stand["werte"]
     return {
         "art": "objekt",
         "objekt": {
             "id": objekt.id, "bezeichnung": objekt.bezeichnung, "gebaeudestandard": objekt.gebaeudestandard,
             "gebaeudestandard_text": GEBAEUDESTANDARD_TEXT[objekt.gebaeudestandard],
             "delta_u_wb": objekt.delta_u_wb,
-            "hoehenzuschlag_grenzhoehe_m": objekt.hoehenzuschlag_grenzhoehe_m,
-            "hoehenzuschlag_prozent_je_m": objekt.hoehenzuschlag_prozent_je_m,
             "pauschale_abweichungen": objekt.pauschale_abweichungen or {},
             "theta_e": objekt.klimadaten.theta_e if objekt.klimadaten else None,
         },
-        "vorgaben": _felder(v, VORGABEN_FELDER),
+        "vorgaben": {
+            "rueckfall_neubau_w_m2": w.get("rueckfall_neubau_w_m2"),
+            "rueckfall_effizienzhaus_sanierung_w_m2": w.get("rueckfall_effizienzhaus_sanierung_w_m2"),
+            # bewusst kein Rückfallwert für „sonstiger Bestand“ (Pauschale je Raum Pflicht)
+            "rueckfall_sonstiger_bestand_w_m2": None,
+            "hoehe_hinweis_m": w.get("hoehe_hinweis_m"),
+            "delta_u_wb": w.get("delta_u_wb"),
+        },
         "pauschalen": [
-            {"raumtyp_id": p.raumtyp_id, "gebaeudestandard": p.gebaeudestandard, "w_m2": p.w_m2}
-            for p in db.scalars(select(HeizlastPauschale).order_by(HeizlastPauschale.id))
+            {"raumtyp_id": p["raumtyp_id"], "gebaeudestandard": p["gebaeudestandard"], "w_m2": p["w_m2"]}
+            for p in stand["pauschalen"]
         ],
         "raumtypen": [
-            _felder(t, ("id", "bezeichnung", "theta_int", "luftwechsel", "reduktionsfaktor"))
-            for t in db.scalars(select(BibRaumtyp).order_by(BibRaumtyp.id))
+            {k: t[k] for k in ("id", "bezeichnung", "theta_int", "luftwechsel", "reduktionsfaktor")}
+            for t in stand["raumtypen"]
         ],
         "bauteile": [{"id": b.id, "u_wert": b.u_wert} for b in db.scalars(select(BibBauteil).order_by(BibBauteil.id))],
         "geschosse": [
@@ -77,7 +83,7 @@ def objekt_planung(db: Session, objekt: Objekt) -> dict:
     }
 
 
-def objekt_auswerten(db: Session, objekt: Objekt) -> tuple[dict, dict]:
+def objekt_auswerten(db: Session, objekt: Objekt, stand: dict | None = None) -> tuple[dict, dict]:
     """Gibt (Planungsstand als Rechenkern-Eingabe, Auswertung) zurück."""
-    planung = objekt_planung(db, objekt)
+    planung = objekt_planung(db, objekt, stand)
     return planung, rechenkern_aufrufen(planung)["auswertung"]

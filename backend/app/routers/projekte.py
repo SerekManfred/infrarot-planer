@@ -4,6 +4,8 @@ Alle angemeldeten Benutzer sehen und bearbeiten alle Projekte. Den Status änder
 löschen dürfen nur Admins. Freigegebene Projekte sind gesperrt (app/projektzugriff.py).
 Zur Offline-Bearbeitung checkt ein Gerät ein Projekt aus; solange ist es für alle anderen gesperrt.
 Einchecken kann das Gerät selbst; ein Admin kann die Sperre lösen.
+Jedes Projekt rechnet mit seiner Kopie der Fachvorgaben (app/vorgabenstand.py); neue zentrale Werte werden
+nur auf Klick übernommen.
 """
 import secrets
 from datetime import UTC, datetime
@@ -14,12 +16,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_admin, nur_fachpruefer
 from app.auswertung import objekt_auswerten
+from app.vorgabenstand import mit_texten, schnappschuss, unterschiede
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
 from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sperre_hash, sperre_pruefen
 from app.schemas import (
-    Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProtokollLesen,
-    StatusAenderung,
+    Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProjektVorgaben,
+    ProtokollLesen, StatusAenderung,
 )
 
 router = APIRouter(prefix="/projekte", tags=["Projekte"], dependencies=[Depends(aktueller_benutzer)])
@@ -42,7 +45,10 @@ def auflisten(db: Session = Depends(get_db)):
 def anlegen(daten: ProjektNeu, db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)):
     werte = daten.model_dump()
     gebaeude = {k: werte.pop(k) for k in ("gebaeudestandard", "strasse", "plz", "ort")}
-    projekt = Projekt(**werte, ersteller_id=benutzer.id)
+    # Fachvorgaben einfrieren: das Projekt rechnet ab jetzt mit dieser Kopie
+    projekt = Projekt(
+        **werte, ersteller_id=benutzer.id, vorgaben_stand=schnappschuss(db), vorgaben_stand_am=datetime.now(UTC)
+    )
     projekt.objekte.append(Objekt(bezeichnung="Gebäude", **gebaeude))
     db.add(projekt)
     db.commit()
@@ -137,7 +143,7 @@ def einchecken(projekt_id: int, db: Session = Depends(get_db), benutzer: Benutze
     projekt = hole_oder_404(db, Projekt, projekt_id)
     if projekt.ausgecheckt_am is None:
         return projekt
-    if not haelt_sperre(db, projekt) and benutzer.rolle != "admin":
+    if not haelt_sperre(db, projekt) and not benutzer.hat_rolle("admin"):
         raise HTTPException(
             status.HTTP_423_LOCKED,
             f"Nur das Gerät „{projekt.ausgecheckt_geraet}“ von {projekt.ausgecheckt_von_name} "
@@ -147,6 +153,77 @@ def einchecken(projekt_id: int, db: Session = Depends(get_db), benutzer: Benutze
     db.commit()
     db.refresh(projekt)
     return projekt
+
+
+def _auswirkung(db: Session, projekt: Projekt, neu: dict) -> dict:
+    """Heizlast mit dem Projektstand (alt) und mit den aktuellen zentralen Vorgaben (neu)."""
+    summe_alt = summe_neu = 0.0
+    raeume = []
+    for objekt in projekt.objekte:
+        alt_a = objekt_auswerten(db, objekt)[1]
+        neu_a = objekt_auswerten(db, objekt, neu)[1]
+        summe_alt += alt_a["summe"]["phi_massgeblich_w"]
+        summe_neu += neu_a["summe"]["phi_massgeblich_w"]
+        for ra, rn in zip(alt_a["raeume"], neu_a["raeume"], strict=True):
+            if ra["phi_massgeblich_w"] != rn["phi_massgeblich_w"]:
+                raeume.append({
+                    "raum_id": ra["raum_id"], "bezeichnung": f"{ra['geschoss']} · {ra['bezeichnung']}",
+                    "alt_w": ra["phi_massgeblich_w"], "neu_w": rn["phi_massgeblich_w"],
+                })
+    return {"summe_alt_w": summe_alt, "summe_neu_w": summe_neu, "raeume": raeume}
+
+
+def _stand(db: Session, projekt: Projekt) -> dict:
+    return projekt.vorgaben_stand or schnappschuss(db)
+
+
+@router.get("/{projekt_id}/vorgaben", response_model=ProjektVorgaben)
+def vorgaben(projekt_id: int, db: Session = Depends(get_db)):
+    """Fachvorgaben, mit denen das Projekt rechnet, und Unterschiede zu den aktuellen zentralen Vorgaben.
+    Bei freigegebenen Projekten werden keine Unterschiede angeboten – sie bleiben unverändert."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    stand = _stand(db, projekt)
+    liste: list[dict] = []
+    auswirkung = None
+    if projekt.status != "freigegeben":
+        neu = schnappschuss(db)
+        liste = unterschiede(stand, neu)
+        if liste:
+            auswirkung = _auswirkung(db, projekt, neu)
+    return ProjektVorgaben(
+        stand_am=projekt.vorgaben_stand_am, vorgaben=mit_texten(stand), unterschiede=liste, auswirkung=auswirkung
+    )
+
+
+@router.post("/{projekt_id}/vorgaben/uebernehmen", response_model=ProjektVorgaben)
+def vorgaben_uebernehmen(
+    projekt_id: int, db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)
+):
+    """Übernimmt die aktuellen zentralen Fachvorgaben in das Projekt – nur auf ausdrücklichen Klick, protokolliert."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    bearbeitung_pruefen(db, projekt)  # Sperre, Freigabe (409), geprüft → Entwurf
+    alt = _stand(db, projekt)
+    neu = schnappschuss(db)
+    liste = unterschiede(alt, neu)
+    if not liste:
+        return vorgaben(projekt_id, db)
+    auswirkung = _auswirkung(db, projekt, neu)
+    jetzt = datetime.now(UTC)
+    db.add(Protokoll(
+        zeitpunkt=jetzt, benutzer_id=benutzer.id, projekt_id=projekt.id, objektart="Projekt", objekt_id=projekt.id,
+        aktion="vorgaben_uebernommen",
+        aenderungen={
+            "vorgaben_stand_am": [projekt.vorgaben_stand_am.isoformat() if projekt.vorgaben_stand_am else None,
+                                  jetzt.isoformat()],
+            "unterschiede": liste,
+            "heizlast_summe_w": [auswirkung["summe_alt_w"], auswirkung["summe_neu_w"]],
+        },
+    ))
+    projekt.vorgaben_stand = neu
+    projekt.vorgaben_stand_am = jetzt
+    projekt.geaendert_am = jetzt
+    db.commit()
+    return vorgaben(projekt_id, db)
 
 
 @router.delete("/{projekt_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(nur_admin)])

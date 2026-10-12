@@ -29,7 +29,7 @@ def db():
         # Wie nach der Migration: genau ein Vorgaben-Datensatz, hier mit TESTWERTEN
         sitzung.add(Fachvorgaben(
             id=1, rueckfall_neubau_w_m2=45, rueckfall_effizienzhaus_sanierung_w_m2=75,
-            hoehenzuschlag_grenzhoehe_m=2.9, delta_u_wb=0.05, quelle="TESTWERT",
+            hoehe_hinweis_m=2.9, delta_u_wb=0.05, quelle="TESTWERT",
         ))
         sitzung.commit()
         yield sitzung
@@ -45,6 +45,9 @@ def client(db):
         except Exception:
             db.rollback()
             raise
+        finally:
+            # Wie im Betrieb (neue Sitzung je Anfrage): nichts Geladenes in die nächste Anfrage mitnehmen
+            db.expire_all()
 
     app.dependency_overrides[get_db] = db_je_anfrage
     with TestClient(app) as c:
@@ -53,7 +56,7 @@ def client(db):
 
 
 def _benutzer(db, email: str, rolle: str) -> Benutzer:
-    b = Benutzer(email=email, name=email.split("@")[0], rolle=rolle, passwort_hash=passwort_hashen(TEST_PASSWORT))
+    b = Benutzer(email=email, name=email.split("@")[0], rollen=[rolle], passwort_hash=passwort_hashen(TEST_PASSWORT))
     db.add(b)
     db.commit()
     return b

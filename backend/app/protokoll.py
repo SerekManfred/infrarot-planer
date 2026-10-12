@@ -19,7 +19,11 @@ PROTOKOLLIERT = (
     Benutzer, Projekt, Objekt, Geschoss, Raum, Bauteilflaeche, Oeffnung, Berechnung,
     BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten,
 )
-NICHT_PROTOKOLLIERT = {"id", "erstellt_am", "geaendert_am", "sitzungs_version", "eingaben", "ergebnis", "sperre_hash"}
+# vorgaben_stand(_am): eigener, lesbarer Eintrag „vorgaben_uebernommen“ (app/routers/projekte.py)
+NICHT_PROTOKOLLIERT = {
+    "id", "erstellt_am", "geaendert_am", "sitzungs_version", "eingaben", "ergebnis", "sperre_hash",
+    "vorgaben_stand", "vorgaben_stand_am",
+}
 BESCHRIFTUNG = ("bezeichnung", "nummer", "email", "gebaeudestandard")
 
 

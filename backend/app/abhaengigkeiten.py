@@ -32,7 +32,7 @@ def aktueller_benutzer(
 
 def rolle(*erlaubt: str) -> Callable[..., Benutzer]:
     def pruefen(benutzer: Benutzer = Depends(aktueller_benutzer)) -> Benutzer:
-        if benutzer.rolle not in erlaubt:
+        if not benutzer.hat_rolle(*erlaubt):
             namen = " oder ".join(ROLLEN_TEXT[r] for r in erlaubt)
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"Nur für {namen}")
         return benutzer

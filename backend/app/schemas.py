@@ -1,8 +1,8 @@
 """API-Schemas (Pydantic). Je Objektart: Neu (anlegen), Aenderung (teilweise ändern), Lesen (Antwort)."""
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 Angrenzung = Literal["aussen", "beheizt", "unbeheizt", "erdreich"]
 Rolle = Literal["admin", "fachpruefer", "aussendienst"]
@@ -15,6 +15,18 @@ GEBAEUDESTANDARD_TEXT = {
     "effizienzhaus_sanierung": "Effizienzhaus-Sanierung",
     "sonstiger_bestand": "sonstiger Bestand",
 }
+
+
+ROLLEN_REIHENFOLGE = ("admin", "fachpruefer", "aussendienst")
+
+
+def _rollen_ordnen(rollen: list[str]) -> list[str]:
+    """Doppelte entfernen, feste Reihenfolge – damit das Protokoll nur echte Änderungen zeigt."""
+    return [r for r in ROLLEN_REIHENFOLGE if r in rollen]
+
+
+# Rollen sind kombinierbar; mindestens eine
+Rollen = Annotated[list[Rolle], Field(min_length=1, max_length=3), AfterValidator(_rollen_ordnen)]
 
 
 class Lesbar(BaseModel):
@@ -42,7 +54,7 @@ class BenutzerLesen(Lesbar):
     id: int
     email: str
     name: str
-    rolle: Rolle
+    rollen: list[Rolle]
     aktiv: bool
 
 
@@ -50,12 +62,12 @@ class BenutzerNeu(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     name: str = Field(min_length=1, max_length=200)
     passwort: str = Field(min_length=12)
-    rolle: Rolle = "aussendienst"
+    rollen: Rollen = ["aussendienst"]
 
 
 class BenutzerAenderung(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    rolle: Rolle | None = None
+    rollen: Rollen | None = None
     aktiv: bool | None = None
 
 
@@ -97,6 +109,8 @@ class ProjektLesen(Lesbar):
     ausgecheckt_von_name: str | None
     ausgecheckt_geraet: str | None
     ausgecheckt_am: datetime | None
+    # Stand der eingefrorenen Fachvorgaben (beim Anlegen bzw. bei der letzten Übernahme)
+    vorgaben_stand_am: datetime | None
     erstellt_am: datetime
     geaendert_am: datetime
 
@@ -141,8 +155,6 @@ class ObjektNeu(BaseModel):
     baujahr: int | None = Field(default=None, ge=1000, le=2100)
     klimadaten_id: int | None = None
     delta_u_wb: float | None = Field(default=None, ge=0)
-    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0)
-    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0)
     pauschale_abweichungen: dict[str, float] = Field(default_factory=dict)
 
 
@@ -155,8 +167,6 @@ class ObjektAenderung(BaseModel):
     baujahr: int | None = Field(default=None, ge=1000, le=2100)
     klimadaten_id: int | None = None
     delta_u_wb: float | None = Field(default=None, ge=0)
-    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0)
-    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0)
     pauschale_abweichungen: dict[str, float] | None = None
 
 
@@ -171,8 +181,6 @@ class ObjektLesen(Lesbar):
     baujahr: int | None
     klimadaten_id: int | None
     delta_u_wb: float | None
-    hoehenzuschlag_grenzhoehe_m: float | None
-    hoehenzuschlag_prozent_je_m: float | None
     pauschale_abweichungen: dict[str, float]
 
 
@@ -374,9 +382,7 @@ class PauschaleLesen(Lesbar):
 class FachvorgabenWerte(BaseModel):
     rueckfall_neubau_w_m2: float | None = Field(default=None, ge=0, le=500)
     rueckfall_effizienzhaus_sanierung_w_m2: float | None = Field(default=None, ge=0, le=500)
-    rueckfall_sonstiger_bestand_w_m2: float | None = Field(default=None, ge=0, le=500)
-    hoehenzuschlag_grenzhoehe_m: float | None = Field(default=None, ge=0, le=20)
-    hoehenzuschlag_prozent_je_m: float | None = Field(default=None, ge=0, le=100)
+    hoehe_hinweis_m: float | None = Field(default=None, ge=0, le=20)
     delta_u_wb: float | None = Field(default=None, ge=0, le=1)
     quelle: str = ""
 
@@ -435,9 +441,10 @@ class ObjektPaket(ObjektLesen):
 
 
 class ProjektPaket(ProjektLesen):
-    """Vollständiger Projektstand für den Offline-Speicher des Geräts."""
+    """Vollständiger Projektstand für den Offline-Speicher des Geräts, mit den eingefrorenen Fachvorgaben."""
 
     objekte: list[ObjektPaket]
+    vorgaben_stand: dict | None
 
 
 class OfflineVorgaben(BaseModel):
@@ -447,3 +454,38 @@ class OfflineVorgaben(BaseModel):
     fachvorgaben: FachvorgabenGesamt
     bauteile: list[BauteilLesen]
     klimadaten: list[KlimadatenLesen]
+
+
+# ── Eingefrorene Fachvorgaben je Projekt ────────────────────────────────────
+
+
+class VorgabenUnterschied(BaseModel):
+    bereich: Literal["Einzelwert", "Raumtyp", "Pauschale"]
+    bezeichnung: str
+    alt: float | str | None
+    neu: float | str | None
+
+
+class RaumAuswirkung(BaseModel):
+    raum_id: int
+    bezeichnung: str
+    alt_w: float | None
+    neu_w: float | None
+
+
+class VorgabenAuswirkung(BaseModel):
+    """Summe der maßgeblichen Raumheizlasten mit dem Projektstand (alt) und den aktuellen zentralen Vorgaben (neu)."""
+
+    summe_alt_w: float
+    summe_neu_w: float
+    raeume: list[RaumAuswirkung]
+
+
+class ProjektVorgaben(BaseModel):
+    """Die Fachvorgaben, mit denen das Projekt rechnet, und was sich zentral seitdem geändert hat."""
+
+    stand_am: datetime | None
+    # gleicher Aufbau wie FachvorgabenGesamt (werte, raumtypen, pauschalen, gebaeudestandards)
+    vorgaben: dict
+    unterschiede: list[VorgabenUnterschied]
+    auswirkung: VorgabenAuswirkung | None

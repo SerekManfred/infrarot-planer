@@ -75,6 +75,11 @@ def raumtyp_loeschen(raumtyp_id: int, db: Session = Depends(get_db)):
 @router.put("/pauschalen", response_model=PauschaleLesen | None, dependencies=[Depends(vorgaben_pflege)])
 def pauschale_setzen(daten: PauschaleSetzen, db: Session = Depends(get_db)):
     hole_oder_404(db, BibRaumtyp, daten.raumtyp_id)
+    if daten.gebaeudestandard == "sonstiger_bestand":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Für „sonstiger Bestand“ gibt es keine Tabellenwerte – die Pauschale wird je Raum eingegeben.",
+        )
     eintrag = db.scalars(select(HeizlastPauschale).where(
         HeizlastPauschale.raumtyp_id == daten.raumtyp_id,
         HeizlastPauschale.gebaeudestandard == daten.gebaeudestandard,

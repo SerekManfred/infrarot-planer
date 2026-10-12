@@ -1,7 +1,10 @@
 """Projekte, Schnellerfassung, Heizlastquellen, Fachvorgaben, Projektstatus und Protokoll.
 
 Alle Zahlen sind TESTWERTE (Fantasiewerte). Vorgaben der Testdatenbank (conftest):
-Rückfall Neubau 45 W/m², Effizienzhaus-Sanierung 75 W/m², sonstiger Bestand leer, Grenzhöhe 2,90 m, ΔU_WB 0,05.
+Rückfall Neubau 45 W/m², Effizienzhaus-Sanierung 75 W/m², Hinweis-Höhe 2,90 m, ΔU_WB 0,05.
+
+Projekte rechnen mit ihrer beim Anlegen eingefrorenen Kopie der Fachvorgaben. Ändern Tests die zentralen Vorgaben
+nach dem Anlegen, übernehmen sie diese ausdrücklich (_uebernehmen).
 """
 import pytest
 
@@ -37,6 +40,14 @@ def _raum(client, projekt, **daten):
 
 def _auswertung(client, projekt):
     antwort = client.get(f"/api/objekte/{projekt['objekt']['id']}/auswertung")
+    assert antwort.status_code == 200, antwort.text
+    return antwort.json()
+
+
+def _uebernehmen(client, projekt, benutzer):
+    """Aktuelle zentrale Fachvorgaben ins Projekt übernehmen (wie der Klick in der Oberfläche)."""
+    anmelden(client, benutzer.email)
+    antwort = client.post(f"/api/projekte/{projekt['projekt']['id']}/vorgaben/uebernehmen")
     assert antwort.status_code == 200, antwort.text
     return antwort.json()
 
@@ -79,7 +90,7 @@ def test_quelle_a_rueckfallwert_ohne_raumtyp(client, projekt):
 def test_quelle_a_herkunft_vorgabe_projekt_raum(client, projekt, aussendienst, fachpruefer):
     typ = _raumtyp(client, fachpruefer)
     client.put("/api/fachvorgaben/pauschalen", json={"raumtyp_id": typ["id"], "gebaeudestandard": "neubau", "w_m2": 33, "quelle": "TESTWERT"})
-    anmelden(client, aussendienst.email)
+    _uebernehmen(client, projekt, aussendienst)
     raum = _raum(client, projekt, raumtyp_id=typ["id"])
     assert _auswertung(client, projekt)["raeume"][0]["werte"]["pauschale_w_m2"] == {"wert": 33, "herkunft": "vorgabe"}
 
@@ -92,43 +103,44 @@ def test_quelle_a_herkunft_vorgabe_projekt_raum(client, projekt, aussendienst, f
     assert r["phi_a_w"] == pytest.approx(39 * 20)
 
 
-def test_sonstiger_bestand_hinweis_und_vorgabe_fehlt(client, aussendienst):
+def test_sonstiger_bestand_pauschale_je_raum_pflicht(client, aussendienst, fachpruefer):
+    anmelden(client, fachpruefer.email)
+    typ = _post(client, "/api/fachvorgaben/raumtypen", {"bezeichnung": "TESTRAUM"})
+    # keine Tabellenwerte für „sonstiger Bestand“
+    antwort = client.put("/api/fachvorgaben/pauschalen", json={"raumtyp_id": typ["id"], "gebaeudestandard": "sonstiger_bestand", "w_m2": 99})
+    assert antwort.status_code == 422
+    assert "je Raum" in antwort.json()["detail"]
+
     anmelden(client, aussendienst.email)
     p = _post(client, "/api/projekte", {"nummer": "B-1", "bezeichnung": "Altbau", "gebaeudestandard": "sonstiger_bestand"})
     objekt_id = p["objekte"][0]["id"]
     geschoss = _post(client, f"/api/objekte/{objekt_id}/geschosse", {"bezeichnung": "EG"})
-    _post(client, f"/api/geschosse/{geschoss['id']}/raeume", {"bezeichnung": "Wohnen", "laenge_m": 4, "breite_m": 5})
+    raum = _post(client, f"/api/geschosse/{geschoss['id']}/raeume", {"bezeichnung": "Wohnen", "laenge_m": 4, "breite_m": 5, "raumtyp_id": typ["id"]})
     a = client.get(f"/api/objekte/{objekt_id}/auswertung").json()
     assert a["hinweise"] == ["Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen."]
     r = a["raeume"][0]
     assert r["phi_massgeblich_w"] is None
     assert r["werte"]["pauschale_w_m2"]["herkunft"] == "fehlt"
-    assert r["hinweise"][0].startswith("Vorgabe fehlt: Pauschale")
-    assert a["summe"]["raeume_ohne_ergebnis"] == 1
+    assert r["hinweise"] == ["Eingabe fehlt: Pauschale W/m² für diesen Raum (bei „sonstiger Bestand“ Pflicht)"]
+    assert a["vorgaben"]["rueckfall_w_m2"] == {"wert": None, "herkunft": "fehlt"}
 
-
-def test_hoehenzuschlag(client, projekt, aussendienst, fachpruefer):
-    _raum(client, projekt, hoehe_m=3.4)
-    r = _auswertung(client, projekt)["raeume"][0]
-    # Raum über der Grenzhöhe, aber Zuschlag in % je m nicht gepflegt
-    assert r["phi_a_w"] == pytest.approx(45 * 20)
-    assert any("Höhenzuschlag" in h and "2,90 m" in h for h in r["hinweise"])
-
-    anmelden(client, fachpruefer.email)
-    werte = client.get("/api/fachvorgaben").json()["werte"]
-    werte["hoehenzuschlag_prozent_je_m"] = 20
-    assert client.put("/api/fachvorgaben/werte", json=werte).status_code == 200
-    anmelden(client, aussendienst.email)
-    r = _auswertung(client, projekt)["raeume"][0]
-    # (3,4 − 2,9) m · 20 %/m = 10 %
-    assert r["phi_a_w"] == pytest.approx(45 * 20 * 1.10)
+    _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 110})
+    r = client.get(f"/api/objekte/{objekt_id}/auswertung").json()["raeume"][0]
+    assert r["phi_massgeblich_w"] == pytest.approx(2200)
     assert r["hinweise"] == []
 
-    # Projektabweichung der Grenzhöhe
-    _patch(client, f"/api/objekte/{projekt['objekt']['id']}", {"hoehenzuschlag_grenzhoehe_m": 3.4})
-    a = _auswertung(client, projekt)
-    assert a["vorgaben"]["hoehenzuschlag_grenzhoehe_m"] == {"wert": 3.4, "herkunft": "projekt"}
-    assert a["raeume"][0]["phi_a_w"] == pytest.approx(45 * 20)
+
+def test_hohe_raeume_nur_hinweis_kein_zuschlag(client, projekt):
+    raum = _raum(client, projekt, hoehe_m=3.4)
+    r = _auswertung(client, projekt)["raeume"][0]
+    assert r["phi_a_w"] == pytest.approx(45 * 20)
+    assert r["hinweise"] == ["Raumhöhe über 2,90 m – Pauschale prüfen und ggf. manuell anpassen."]
+    assert "hoehenzuschlag_faktor" not in (r["pauschal"] or {})
+    # nach manueller Anpassung kein Hinweis mehr
+    _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 50})
+    r = _auswertung(client, projekt)["raeume"][0]
+    assert r["phi_a_w"] == pytest.approx(50 * 20)
+    assert r["hinweise"] == []
 
 
 # ── Quellen B und C ─────────────────────────────────────────────────────────
@@ -159,7 +171,7 @@ def gegenprobe(client, projekt, aussendienst, fachpruefer):
     klima = client.get("/api/bibliotheken/klimadaten").json()[0]
     bauteile = {b["bezeichnung"]: b["id"] for b in client.get("/api/bibliotheken/bauteile").json()}
 
-    anmelden(client, aussendienst.email)
+    _uebernehmen(client, projekt, aussendienst)
     _patch(client, f"/api/objekte/{projekt['objekt']['id']}", {"klimadaten_id": klima["id"]})
     raum = _raum(client, projekt, raumtyp_id=typ["id"])  # 4 × 5 × 2,5 m
     wand = _post(client, f"/api/raeume/{raum['id']}/flaechen", {
@@ -187,7 +199,10 @@ def test_quelle_c_reduktionsfaktor_des_angrenzenden_raumtyps(client, projekt, ge
 
     anmelden(client, fachpruefer.email)
     _patch(client, f"/api/fachvorgaben/raumtypen/{gegenprobe['keller']['id']}", {"reduktionsfaktor": 0.5})
+    # erst nach der Übernahme wirkt der neue Reduktionsfaktor im Projekt
     anmelden(client, aussendienst.email)
+    assert _auswertung(client, projekt)["raeume"][0]["phi_c_w"] is None
+    _uebernehmen(client, projekt, aussendienst)
     r = _auswertung(client, projekt)["raeume"][0]
     # Kellerdecke: 20 m² · (1,0 + 0,05) · 0,5 · 30 K = 315 W zusätzlich
     assert r["phi_c_w"] == pytest.approx(509.25 + 315)
@@ -279,12 +294,12 @@ def test_protokoll(client, projekt, aussendienst, fachpruefer):
 def test_protokoll_fachvorgaben(client, fachpruefer):
     anmelden(client, fachpruefer.email)
     werte = client.get("/api/fachvorgaben").json()["werte"]
-    werte["rueckfall_sonstiger_bestand_w_m2"] = 99
+    werte["hoehe_hinweis_m"] = 3.0
     client.put("/api/fachvorgaben/werte", json=werte)
     eintrag = client.get("/api/fachvorgaben/protokoll").json()[0]
     assert eintrag["objektart"] == "Fachvorgaben"
     assert eintrag["benutzer_name"] == "fachpruefer"
-    assert eintrag["aenderungen"]["rueckfall_sonstiger_bestand_w_m2"] == [None, 99]
+    assert eintrag["aenderungen"]["hoehe_hinweis_m"] == [2.9, 3.0]
 
 
 def test_pauschale_entfernen_und_raumtyp_in_verwendung(client, projekt, aussendienst, fachpruefer):
