@@ -5,6 +5,9 @@
 // Fehlende Werte werden nie geschätzt, sondern als „Vorgabe fehlt“ bzw. „Eingabe fehlt“ gemeldet.
 //
 // Herkunft eines Werts: raum → projekt → vorgabe → rueckfall; theta_e aus den Klimadaten; sonst „fehlt“.
+// Festlegungen Auftraggeber 12.10.2026:
+// - kein automatischer Höhenzuschlag; über der Hinweis-Höhe (2,80 m) nur ein Hinweis zur Pauschale
+// - „sonstiger Bestand“: keine Rückfall- oder Tabellenwerte, die Pauschale ist je Raum Pflichteingabe
 
 import { berechneAuswertung, type AuswertungEingabe, type AuswertungRaumEingabe, type AuswertungRaumErgebnis, type Heizlastquelle } from './auswertung';
 import type { PauschalEingabe } from './pauschal';
@@ -19,6 +22,11 @@ export interface Wert {
 }
 
 export const HINWEIS_SONSTIGER_BESTAND = 'Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.';
+export const PFLICHT_PAUSCHALE_SONSTIGER_BESTAND = 'Eingabe fehlt: Pauschale W/m² für diesen Raum (bei „sonstiger Bestand“ Pflicht)';
+
+export function hinweisRaumhoehe(grenzeM: number): string {
+  return `Raumhöhe über ${zahlText(grenzeM)} m – Pauschale prüfen und ggf. manuell anpassen.`;
+}
 
 export interface PlanungOeffnung {
   id: number;
@@ -83,20 +91,18 @@ export interface ObjektPlanung {
     gebaeudestandard: Gebaeudestandard;
     gebaeudestandard_text: string;
     delta_u_wb: number | null;
-    hoehenzuschlag_grenzhoehe_m: number | null;
-    hoehenzuschlag_prozent_je_m: number | null;
-    /** {raumtyp_id: W/m²} */
+    /** {raumtyp_id: W/m²}; gilt nicht bei „sonstiger Bestand“ */
     pauschale_abweichungen: Record<string, number>;
     /** Norm-Außentemperatur der zugeordneten Klimadaten; null ohne Zuordnung */
     theta_e: number | null;
   };
-  /** zentrale Fachvorgaben (Einzelwerte) */
+  /** Fachvorgaben (Einzelwerte) im Stand des Projekts */
   vorgaben: {
     rueckfall_neubau_w_m2: number | null;
     rueckfall_effizienzhaus_sanierung_w_m2: number | null;
     rueckfall_sonstiger_bestand_w_m2: number | null;
-    hoehenzuschlag_grenzhoehe_m: number | null;
-    hoehenzuschlag_prozent_je_m: number | null;
+    /** Raumhöhe in m, ab der ein Hinweis zur Pauschale erscheint */
+    hoehe_hinweis_m: number | null;
     delta_u_wb: number | null;
   };
   pauschalen: { raumtyp_id: number; gebaeudestandard: Gebaeudestandard; w_m2: number }[];
@@ -127,7 +133,7 @@ export interface ObjektAuswertung {
   rechenkern_version: string;
   objekt: { id: number; bezeichnung: string; gebaeudestandard: Gebaeudestandard; gebaeudestandard_text: string };
   hinweise: string[];
-  vorgaben: Record<'rueckfall_w_m2' | 'hoehenzuschlag_grenzhoehe_m' | 'hoehenzuschlag_prozent_je_m' | 'delta_u_wb' | 'theta_e', Wert>;
+  vorgaben: Record<'rueckfall_w_m2' | 'hoehe_hinweis_m' | 'delta_u_wb' | 'theta_e', Wert>;
   raeume: ObjektRaumAuswertung[];
   summe: { phi_massgeblich_w: number; raeume_mit_ergebnis: number; raeume_ohne_ergebnis: number };
 }
@@ -223,19 +229,19 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
   const bauteile = new Map(planung.bauteile.map((b) => [b.id, b.u_wert]));
   const uWert = (e: { u_wert: number | null; bauteil_id: number | null }) =>
     e.u_wert !== null ? e.u_wert : e.bauteil_id !== null ? (bauteile.get(e.bauteil_id) ?? null) : null;
-  const rueckfall = v[`rueckfall_${gs}_w_m2`];
+  const sonstigerBestand = gs === 'sonstiger_bestand';
+  // bei „sonstiger Bestand“ bewusst kein Rückfallwert (Festlegung 12.10.2026)
+  const rueckfall = sonstigerBestand ? null : v[`rueckfall_${gs}_w_m2`];
   const abweichungen = objekt.pauschale_abweichungen ?? {};
 
   const objektWerte: ObjektAuswertung['vorgaben'] = {
     rueckfall_w_m2: wert(rueckfall, 'vorgabe'),
-    hoehenzuschlag_grenzhoehe_m: zuerst([objekt.hoehenzuschlag_grenzhoehe_m, 'projekt'], [v.hoehenzuschlag_grenzhoehe_m, 'vorgabe']),
-    hoehenzuschlag_prozent_je_m: zuerst([objekt.hoehenzuschlag_prozent_je_m, 'projekt'], [v.hoehenzuschlag_prozent_je_m, 'vorgabe']),
+    hoehe_hinweis_m: wert(v.hoehe_hinweis_m, 'vorgabe'),
     delta_u_wb: zuerst([objekt.delta_u_wb, 'projekt'], [v.delta_u_wb, 'vorgabe']),
     theta_e: wert(objekt.theta_e, 'klimadaten'),
   };
-  const grenzhoehe = objektWerte.hoehenzuschlag_grenzhoehe_m.wert;
-  const prozent = objektWerte.hoehenzuschlag_prozent_je_m.wert;
-  const objektHinweise = gs === 'sonstiger_bestand' ? [HINWEIS_SONSTIGER_BESTAND] : [];
+  const hinweisHoehe = objektWerte.hoehe_hinweis_m.wert;
+  const objektHinweise = sonstigerBestand ? [HINWEIS_SONSTIGER_BESTAND] : [];
 
   const infos: Omit<ObjektRaumAuswertung, keyof Omit<AuswertungRaumErgebnis, 'id' | 'bezeichnung' | 'quelle' | 'fehler'>>[] = [];
   const raeumeEingabe: AuswertungRaumEingabe[] = [];
@@ -244,12 +250,14 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
       const raumtyp = raum.raumtyp_id !== null ? raumtypen.get(raum.raumtyp_id) : undefined;
       const hinweise: string[] = [];
       const werte = {
-        pauschale_w_m2: zuerst(
-          [raum.pauschale_w_m2, 'raum'],
-          [raumtyp ? abweichungen[String(raum.raumtyp_id)] : null, 'projekt'],
-          [raumtyp ? tabelle.get(`${raum.raumtyp_id}|${gs}`) : null, 'vorgabe'],
-          [rueckfall, 'rueckfall'],
-        ),
+        pauschale_w_m2: sonstigerBestand
+          ? zuerst([raum.pauschale_w_m2, 'raum'])
+          : zuerst(
+              [raum.pauschale_w_m2, 'raum'],
+              [raumtyp ? abweichungen[String(raum.raumtyp_id)] : null, 'projekt'],
+              [raumtyp ? tabelle.get(`${raum.raumtyp_id}|${gs}`) : null, 'vorgabe'],
+              [rueckfall, 'rueckfall'],
+            ),
         theta_int: zuerst([raum.theta_int, 'raum'], [raumtyp?.theta_int, 'vorgabe']),
         luftwechsel: zuerst([raum.luftwechsel, 'raum'], [raumtyp?.luftwechsel, 'vorgabe']),
       };
@@ -259,18 +267,16 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
       const q = werte.pauschale_w_m2.wert;
       if (raum.flaeche_m2 === null) {
         hinweise.push('Eingabe fehlt: Fläche (Länge × Breite)');
+      } else if (q === null && sonstigerBestand) {
+        hinweise.push(PFLICHT_PAUSCHALE_SONSTIGER_BESTAND);
       } else if (q === null) {
         hinweise.push(`Vorgabe fehlt: Pauschale W/m² für „${raumtyp ? raumtyp.bezeichnung : 'ohne Raumtyp'}“ / ${objekt.gebaeudestandard_text}`);
       } else {
-        pauschal = { flaeche_m2: raum.flaeche_m2, pauschale_w_m2: q, hoehe_m: raum.hoehe_m };
-        const ueberGrenze = grenzhoehe !== null && raum.hoehe_m !== null && raum.hoehe_m > grenzhoehe;
-        if (ueberGrenze && prozent !== null) {
-          pauschal.hoehenzuschlag = { grenzhoehe_m: grenzhoehe, prozent_je_m: prozent };
-        } else if (ueberGrenze) {
-          hinweise.push(`Vorgabe fehlt: Höhenzuschlag (% je m) – Raum höher als ${zahlText(grenzhoehe as number)} m, ohne Zuschlag gerechnet`);
-        } else if (raum.hoehe_m === null && prozent !== null) {
-          hinweise.push('Eingabe fehlt: Raumhöhe – Höhenzuschlag nicht geprüft');
-        }
+        pauschal = { flaeche_m2: raum.flaeche_m2, pauschale_w_m2: q };
+      }
+      // Hinweis entfällt, sobald die Pauschale für den Raum von Hand gesetzt ist
+      if (hinweisHoehe !== null && raum.hoehe_m !== null && raum.hoehe_m > hinweisHoehe && werte.pauschale_w_m2.herkunft !== 'raum') {
+        hinweise.push(hinweisRaumhoehe(hinweisHoehe));
       }
 
       // Quelle B

@@ -2,7 +2,7 @@
 
 Eigenständiges TypeScript-Modul für die Fachberechnungen. Läuft unverändert im Browser (offline, PWA) und auf dem Server (Node-CLI, wird vom Backend aufgerufen). Keine Abhängigkeiten zu Web-Framework oder Datenbank.
 
-Stand: Phase 1C (Version 0.3.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe; Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`), die Server und Browser (offline) gemeinsam nutzen. Später: Modulauslegung.
+Stand: Phase 1D (Version 0.4.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe; Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`), die Server und Browser (offline) gemeinsam nutzen. Später: Modulauslegung.
 
 ## Befehle
 
@@ -20,8 +20,7 @@ docker run --rm --name infrarot-npm-rechenkern --user "$(id -u):$(id -g)" -e npm
 ## Quelle A: Pauschalverfahren (`src/pauschal.ts`)
 
 ```
-Φ_A = q · A · (1 + z_H)
-z_H = p/100 · (h − h_G)   für h > h_G, sonst 0
+Φ_A = q · A
 A   = Länge · Breite      (Rechteckraum)
 ```
 
@@ -30,12 +29,10 @@ A   = Länge · Breite      (Rechteckraum)
 | Φ_A | pauschale Raumheizlast | W | `phi_w` |
 | q | Heizlast-Pauschale | W/m² | `pauschale_w_m2` |
 | A | Raumfläche | m² | `flaeche_m2` |
-| z_H | Höhenzuschlag (0,05 = 5 %) | – | `hoehenzuschlag_faktor` |
-| h | Raumhöhe | m | `hoehe_m` |
-| h_G | Grenzhöhe | m | `grenzhoehe_m` |
-| p | Zuschlag je Meter Mehrhöhe | %/m | `prozent_je_m` |
 
-Ohne `hoehenzuschlag` wird kein Zuschlag gerechnet. Die Werte q, h_G und p kommen aus den Fachvorgaben des Backends.
+Einen automatischen Höhenzuschlag gibt es nicht (Festlegung Auftraggeber 12.10.2026). Ist ein Raum höher als die Hinweis-Höhe (Fachvorgabe, 2,80 m), meldet `berechneObjekt` den Hinweis „Raumhöhe über 2,80 m – Pauschale prüfen und ggf. manuell anpassen.“. Der Hinweis entfällt, sobald die Pauschale für den Raum von Hand gesetzt ist.
+
+Bei „sonstiger Bestand“ gibt es weder Tabellen- noch Projekt- noch Rückfallwerte. Die Pauschale ist dort je Raum eine Pflichteingabe.
 
 ## Auswertung über alle Quellen (`src/auswertung.ts`)
 
@@ -104,6 +101,6 @@ Typen siehe `src/typen.ts`.
 - zentrale Fachvorgaben, Pauschalen-Matrix, Raumtypen, U-Werte der Bauteilbibliothek
 - Geschosse → Räume → Flächen → Öffnungen
 
-Die Funktion löst je Raum die Werte mit Herkunft auf. Die Reihenfolge ist Raum › Projekt › Vorgabe › Rückfallwert, sonst „Vorgabe fehlt“. Sie meldet fehlende Eingaben und rechnet über `berechneAuswertung`. JSON-Schnittstelle: `{"art": "objekt", ...}` liefert `{eingabe, auswertung}`.
+Die Funktion löst je Raum die Werte mit Herkunft auf. Die Reihenfolge ist Raum › Projekt › Vorgabe › Rückfallwert, bei „sonstiger Bestand“ nur der Raumwert; sonst „Vorgabe fehlt“ bzw. „Eingabe fehlt“. Die Fachvorgaben in der Eingabe sind der eingefrorene Stand des Projekts. Sie meldet fehlende Eingaben und rechnet über `berechneAuswertung`. JSON-Schnittstelle: `{"art": "objekt", ...}` liefert `{eingabe, auswertung}`.
 
 Das Backend ruft diese Funktion über die CLI auf, das Frontend offline direkt im Browser. Beide kommen so zum selben Ergebnis, mit denselben Hinweistexten.

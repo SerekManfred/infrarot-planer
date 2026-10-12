@@ -1,7 +1,14 @@
 // Alle Zahlenwerte in diesen Tests sind TESTWERTE (Fantasiewerte), keine Fachvorgaben.
 
 import { describe, expect, it } from 'vitest';
-import { berechneObjekt, HINWEIS_SONSTIGER_BESTAND, verarbeiteJson, type ObjektPlanung, type PlanungRaum } from '../src';
+import {
+  berechneObjekt,
+  HINWEIS_SONSTIGER_BESTAND,
+  PFLICHT_PAUSCHALE_SONSTIGER_BESTAND,
+  verarbeiteJson,
+  type ObjektPlanung,
+  type PlanungRaum,
+} from '../src';
 
 function raum(teil: Partial<PlanungRaum> = {}): PlanungRaum {
   return {
@@ -31,8 +38,6 @@ function planung(raeume: PlanungRaum[], teil: Partial<ObjektPlanung['objekt']> =
       gebaeudestandard: 'neubau',
       gebaeudestandard_text: 'Neubau',
       delta_u_wb: null,
-      hoehenzuschlag_grenzhoehe_m: null,
-      hoehenzuschlag_prozent_je_m: null,
       pauschale_abweichungen: {},
       theta_e: null,
       ...teil,
@@ -41,8 +46,7 @@ function planung(raeume: PlanungRaum[], teil: Partial<ObjektPlanung['objekt']> =
       rueckfall_neubau_w_m2: 45,
       rueckfall_effizienzhaus_sanierung_w_m2: 75,
       rueckfall_sonstiger_bestand_w_m2: null,
-      hoehenzuschlag_grenzhoehe_m: 2.9,
-      hoehenzuschlag_prozent_je_m: null,
+      hoehe_hinweis_m: 2.9,
       delta_u_wb: 0.05,
     },
     pauschalen: [{ raumtyp_id: 10, gebaeudestandard: 'neubau', w_m2: 33 }],
@@ -79,25 +83,48 @@ describe('berechneObjekt – Quelle A und Herkunft', () => {
     expect(ohneTyp.phi_a_w).toBe(900);
   });
 
-  it('fehlende Pauschale → „Vorgabe fehlt“ mit Raumtyp und Gebäudestandard', () => {
-    const p = planung([raum()], { gebaeudestandard: 'sonstiger_bestand', gebaeudestandard_text: 'sonstiger Bestand' });
-    const { auswertung } = berechneObjekt(p);
+  it('sonstiger Bestand: weder Tabelle noch Projektwert noch Rückfall – Pauschale je Raum Pflicht', () => {
+    const vorgabeDa = planung([raum()], {
+      gebaeudestandard: 'sonstiger_bestand',
+      gebaeudestandard_text: 'sonstiger Bestand',
+      pauschale_abweichungen: { '10': 36 },
+    });
+    vorgabeDa.pauschalen.push({ raumtyp_id: 10, gebaeudestandard: 'sonstiger_bestand', w_m2: 99 });
+    vorgabeDa.vorgaben.rueckfall_sonstiger_bestand_w_m2 = 98;
+    const { auswertung } = berechneObjekt(vorgabeDa);
     expect(auswertung.hinweise).toEqual([HINWEIS_SONSTIGER_BESTAND]);
-    expect(auswertung.raeume[0].hinweise).toEqual(['Vorgabe fehlt: Pauschale W/m² für „TESTWOHNEN“ / sonstiger Bestand']);
+    expect(auswertung.vorgaben.rueckfall_w_m2).toEqual({ wert: null, herkunft: 'fehlt' });
+    expect(auswertung.raeume[0].hinweise).toEqual([PFLICHT_PAUSCHALE_SONSTIGER_BESTAND]);
     expect(auswertung.raeume[0].phi_massgeblich_w).toBeNull();
     expect(auswertung.summe.raeume_ohne_ergebnis).toBe(1);
+
+    vorgabeDa.geschosse[0].raeume[0].pauschale_w_m2 = 120;
+    const mitRaumwert = berechneObjekt(vorgabeDa).auswertung.raeume[0];
+    expect(mitRaumwert.werte.pauschale_w_m2).toEqual({ wert: 120, herkunft: 'raum' });
+    expect(mitRaumwert.phi_a_w).toBe(2400);
+    expect(mitRaumwert.hinweise).toEqual([]);
   });
 
-  it('Höhe über der Grenzhöhe ohne Zuschlagswert → Hinweis, kein Zuschlag', () => {
+  it('fehlende Tabellen- und Rückfallwerte → „Vorgabe fehlt“ mit Raumtyp und Gebäudestandard', () => {
+    const p = planung([raum()], { gebaeudestandard: 'effizienzhaus_sanierung', gebaeudestandard_text: 'Effizienzhaus-Sanierung' });
+    p.vorgaben.rueckfall_effizienzhaus_sanierung_w_m2 = null;
+    const r = berechneObjekt(p).auswertung.raeume[0];
+    expect(r.hinweise).toEqual(['Vorgabe fehlt: Pauschale W/m² für „TESTWOHNEN“ / Effizienzhaus-Sanierung']);
+  });
+
+  it('Raum höher als die Hinweis-Höhe: nur Hinweis, kein Zuschlag', () => {
     const r = berechneObjekt(planung([raum({ hoehe_m: 3.2 })])).auswertung.raeume[0];
     expect(r.phi_a_w).toBe(660);
-    expect(r.hinweise).toEqual(['Vorgabe fehlt: Höhenzuschlag (% je m) – Raum höher als 2,90 m, ohne Zuschlag gerechnet']);
+    expect(r.hinweise).toEqual(['Raumhöhe über 2,90 m – Pauschale prüfen und ggf. manuell anpassen.']);
+    // genau auf der Grenze und ohne Höhe: kein Hinweis
+    expect(berechneObjekt(planung([raum({ hoehe_m: 2.9 })])).auswertung.raeume[0].hinweise).toEqual([]);
+    expect(berechneObjekt(planung([raum({ hoehe_m: null })])).auswertung.raeume[0].hinweise).toEqual([]);
   });
 
-  it('Höhenzuschlag aus dem Projekt: 3,4 m bei 2,9 m und 10 %/m → +5 %', () => {
-    const r = berechneObjekt(planung([raum({ hoehe_m: 3.4 })], { hoehenzuschlag_prozent_je_m: 10 })).auswertung.raeume[0];
-    expect(r.phi_a_w).toBeCloseTo(693, 9);
-    expect(r.pauschal?.hoehenzuschlag_faktor).toBeCloseTo(0.05, 12);
+  it('kein Hinweis mehr, wenn die Pauschale für den Raum von Hand angepasst ist', () => {
+    const r = berechneObjekt(planung([raum({ hoehe_m: 3.4, pauschale_w_m2: 40 })])).auswertung.raeume[0];
+    expect(r.phi_a_w).toBe(800);
+    expect(r.hinweise).toEqual([]);
   });
 
   it('fehlende Fläche und fehlender Hottgenroth-Wert', () => {

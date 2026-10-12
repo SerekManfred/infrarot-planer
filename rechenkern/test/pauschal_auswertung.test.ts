@@ -5,14 +5,13 @@ import {
   abweichung,
   berechneAuswertung,
   berechnePauschal,
-  hoehenzuschlagFaktor,
   rechteckFlaeche,
   verarbeiteJson,
   type AuswertungRaumEingabe,
   type RaumEingabe,
 } from '../src';
 
-const TESTWERT = { pauschale_w_m2: 50, grenzhoehe_m: 2.8, prozent_je_m: 10 };
+const TESTWERT = { pauschale_w_m2: 50 };
 
 describe('rechteckFlaeche', () => {
   it('Länge × Breite', () => {
@@ -24,37 +23,17 @@ describe('rechteckFlaeche', () => {
   });
 });
 
-describe('hoehenzuschlagFaktor', () => {
-  const z = { grenzhoehe_m: TESTWERT.grenzhoehe_m, prozent_je_m: TESTWERT.prozent_je_m };
-  it('bis zur Grenzhöhe kein Zuschlag', () => {
-    expect(hoehenzuschlagFaktor(2.5, z)).toBe(0);
-    expect(hoehenzuschlagFaktor(2.8, z)).toBe(0);
-  });
-  it('linear je Meter Mehrhöhe', () => {
-    // 3,30 m − 2,80 m = 0,5 m → 10 %/m · 0,5 m = 5 %
-    expect(hoehenzuschlagFaktor(3.3, z)).toBeCloseTo(0.05, 12);
-  });
-});
-
 describe('berechnePauschal', () => {
-  it('ohne Höhenzuschlag: q · A', () => {
+  it('q · A', () => {
     const e = berechnePauschal({ flaeche_m2: 20, pauschale_w_m2: TESTWERT.pauschale_w_m2 });
+    expect(e).toEqual({ flaeche_m2: 20, pauschale_w_m2: 50, phi_w: 1000 });
+  });
+  it('kein Höhenzuschlag: zusätzliche Angaben ändern nichts', () => {
+    const e = berechnePauschal({ flaeche_m2: 20, pauschale_w_m2: 50, hoehe_m: 4, hoehenzuschlag: { prozent_je_m: 10 } } as never);
     expect(e.phi_w).toBe(1000);
-    expect(e.hoehenzuschlag_faktor).toBe(0);
   });
-  it('mit Höhenzuschlag: q · A · (1 + z_H)', () => {
-    const e = berechnePauschal({
-      flaeche_m2: 20,
-      pauschale_w_m2: TESTWERT.pauschale_w_m2,
-      hoehe_m: 3.3,
-      hoehenzuschlag: { grenzhoehe_m: TESTWERT.grenzhoehe_m, prozent_je_m: TESTWERT.prozent_je_m },
-    });
-    expect(e.phi_w).toBeCloseTo(1050, 10);
-  });
-  it('Höhenzuschlag ohne Raumhöhe → Fehler', () => {
-    expect(() =>
-      berechnePauschal({ flaeche_m2: 20, pauschale_w_m2: 50, hoehenzuschlag: { grenzhoehe_m: 2.8, prozent_je_m: 10 } }),
-    ).toThrow(/hoehe_m/);
+  it('negative Pauschale → Fehler', () => {
+    expect(() => berechnePauschal({ flaeche_m2: 20, pauschale_w_m2: -1 })).toThrow(/pauschale_w_m2/);
   });
 });
 
