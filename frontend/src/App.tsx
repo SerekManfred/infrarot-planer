@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RECHENKERN_VERSION } from '@infrarot/rechenkern';
-import { api, ApiFehler, type Benutzer } from './api';
+import { api, ApiFehler, hatRolle, type Benutzer } from './api';
 import { Anmeldung } from './komponenten/Anmeldung';
 import { BenutzerVerwaltung } from './komponenten/Benutzer';
 import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
@@ -10,7 +10,7 @@ import { Projektliste } from './komponenten/Projektliste';
 import { Verbindung } from './komponenten/Verbindung';
 import { gehe, useAdresse } from './navigation';
 import { offline, useOffline } from './offline/daten';
-import { ROLLEN } from './texte';
+import { rollenText } from './texte';
 
 export function App() {
   // undefined = wird noch geprüft, null = nicht angemeldet
@@ -82,7 +82,7 @@ export function App() {
     ? [
         ['', 'Projekte', true],
         ['fachvorgaben', 'Fachvorgaben', true],
-        ['benutzer', 'Benutzer', benutzer.rolle === 'admin'],
+        ['benutzer', 'Benutzer', hatRolle(benutzer, 'admin')],
         ['konto', 'Konto', true],
       ]
     : [];
@@ -108,7 +108,7 @@ export function App() {
           <span className="kopf-rechts">
             <Verbindung />
             <span>
-              {benutzer.name} <small>({ROLLEN[benutzer.rolle]})</small>
+              {benutzer.name} <small>({rollenText(benutzer.rollen)})</small>
             </span>
             <button className="knopf-leise" onClick={abmelden} disabled={abmeldung}>
               {abmeldung ? 'Abmelden …' : 'Abmelden'}
@@ -128,7 +128,7 @@ export function App() {
         )}
         {benutzer && seite === 'projekt' && id && <ProjektSeite key={id} projektId={Number(id)} benutzer={benutzer} />}
         {benutzer && seite === 'fachvorgaben' && <FachvorgabenSeite benutzer={benutzer} />}
-        {benutzer && seite === 'benutzer' && benutzer.rolle === 'admin' && <BenutzerVerwaltung benutzer={benutzer} />}
+        {benutzer && seite === 'benutzer' && hatRolle(benutzer, 'admin') && <BenutzerVerwaltung benutzer={benutzer} />}
         {benutzer && seite === 'konto' && <Konto benutzer={benutzer} />}
         {benutzer && !seite && <Projektliste />}
       </main>

@@ -1,9 +1,18 @@
 // Projektansicht: Kopf mit Status und Gebäudestandard, darunter Räume, Projektvorgaben und Protokoll.
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Benutzer, type Fachvorgaben, type Gebaeudestandard, type Objekt, type Projektstatus, type ProjektDetail } from '../api';
+import {
+  api,
+  hatRolle,
+  type Benutzer,
+  type Gebaeudestandard,
+  type Objekt,
+  type ProjektDetail,
+  type Projektstatus,
+  type ProjektVorgaben,
+} from '../api';
 import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, STATUS, zeitpunkt } from '../texte';
+import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, STATUS, watt, zahl, zeitpunkt } from '../texte';
 import { Meldung, Schalter, Textfeld } from './Felder';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
@@ -14,7 +23,8 @@ const REITER: Record<Reiter, string> = { raeume: 'Räume', vorgaben: 'Projektvor
 
 export function ProjektSeite({ projektId, benutzer }: { projektId: number; benutzer: Benutzer }) {
   const [projekt, setProjekt] = useState<ProjektDetail | null>(null);
-  const [vorgaben, setVorgaben] = useState<Fachvorgaben | null>(null);
+  // Fachvorgaben im Stand des Projekts (eingefroren) und Unterschiede zu den zentralen
+  const [projektVorgaben, setProjektVorgaben] = useState<ProjektVorgaben | null>(null);
   const [reiter, setReiter] = useState<Reiter>('raeume');
   const [fehler, setFehler] = useState('');
   // Zähler, damit Unteransichten nach Änderungen neu laden (z. B. Status, Auswertung)
@@ -27,10 +37,10 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
     try {
       const [p, v] = await Promise.all([
         api.get<ProjektDetail>(`/projekte/${projektId}`),
-        api.get<Fachvorgaben>('/fachvorgaben'),
+        api.get<ProjektVorgaben>(`/projekte/${projektId}/vorgaben`),
       ]);
       setProjekt(p);
-      setVorgaben(v);
+      setProjektVorgaben(v);
     } catch (e) {
       setFehler((e as Error).message);
     }
@@ -53,7 +63,8 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
     [laden],
   );
 
-  if (!projekt || !vorgaben) return fehler ? <Meldung>{fehler}</Meldung> : <p>Wird geladen …</p>;
+  if (!projekt || !projektVorgaben) return fehler ? <Meldung>{fehler}</Meldung> : <p>Wird geladen …</p>;
+  const vorgaben = projektVorgaben.vorgaben;
   const objekt: Objekt = projekt.objekte[0];
   // Ein anderes Gerät hat das Projekt ausgecheckt: hier nur lesen
   const fremdAusgecheckt = projekt.ausgecheckt_am !== null && !lokal;
@@ -77,7 +88,8 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
           {projekt.status === 'geprueft' && <small className="leise"> am {zeitpunkt(projekt.geprueft_am)}</small>}
           {projekt.status === 'freigegeben' && <small className="leise"> am {zeitpunkt(projekt.freigegeben_am)}</small>}
         </div>
-        {benutzer.rolle === 'fachpruefer' && !lokal && !fremdAusgecheckt && (
+        {/* Prüfen und Freigeben nur mit Rolle Fachprüfer (auch kombiniert mit Admin) */}
+        {hatRolle(benutzer, 'fachpruefer') && !lokal && !fremdAusgecheckt && (
           <div className="knopfreihe">
             {projekt.status === 'entwurf' && (
               <button className="knopf" onClick={() => status('geprueft')}>
@@ -104,6 +116,13 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
         <Meldung art="hinweis">Fachlich geprüft. Jede Änderung setzt das Projekt zurück auf „Vor-Ort-Entwurf“.</Meldung>
       )}
       {fehler && <Meldung>{fehler}</Meldung>}
+
+      <VorgabenStand
+        pv={projektVorgaben}
+        freigegeben={projekt.status === 'freigegeben'}
+        uebernehmbar={!gesperrt && !lokal}
+        uebernehmen={() => aendern(() => api.post(`/projekte/${projektId}/vorgaben/uebernehmen`))}
+      />
 
       <div className="karte kopfdaten">
         <label>
@@ -222,7 +241,7 @@ function OfflineKarte({
           von {projekt.ausgecheckt_von_name} auf Gerät „{projekt.ausgecheckt_geraet}“ seit {zeitpunkt(projekt.ausgecheckt_am)}.
           Änderungen sind erst nach dem Einchecken möglich.
         </div>
-        {benutzer.rolle === 'admin' && (
+        {hatRolle(benutzer, 'admin') && (
           <button
             className="knopf-gefahr"
             disabled={laeuft}
@@ -247,6 +266,109 @@ function OfflineKarte({
         {laeuft ? 'Wird ausgecheckt …' : 'Für Offline-Bearbeitung auschecken'}
       </button>
       {fehler && <Meldung>{fehler}</Meldung>}
+    </div>
+  );
+}
+
+function wertText(w: number | string | null): string {
+  if (w === null) return '–';
+  return typeof w === 'number' ? zahl(w, w % 1 === 0 ? 0 : 2) : w;
+}
+
+/** Stand der eingefrorenen Fachvorgaben; bei zentralen Änderungen Unterschiede, Auswirkung und Übernahme per Klick */
+function VorgabenStand({
+  pv,
+  freigegeben,
+  uebernehmbar,
+  uebernehmen,
+}: {
+  pv: ProjektVorgaben;
+  freigegeben: boolean;
+  uebernehmbar: boolean;
+  uebernehmen: () => Promise<void>;
+}) {
+  const [offen, setOffen] = useState(false);
+  const stand = `Fachvorgaben-Stand des Projekts: ${zeitpunkt(pv.stand_am)}`;
+  if (freigegeben) return <p className="leise klein-text">{stand} (freigegeben, bleibt unverändert)</p>;
+  if (pv.unterschiede === null) return <p className="leise klein-text">{stand} (Vergleich mit den zentralen Vorgaben erst nach dem Einchecken)</p>;
+  if (pv.unterschiede.length === 0) return <p className="leise klein-text">{stand} – entspricht den zentralen Vorgaben</p>;
+
+  const a = pv.auswirkung;
+  const differenz = a ? a.summe_neu_w - a.summe_alt_w : 0;
+  return (
+    <div className="karte vorgaben-aenderung">
+      <div className="zeile">
+        <div>
+          <strong>Die zentralen Fachvorgaben haben sich geändert.</strong>
+          <br />
+          <small>
+            {stand}. Das Projekt rechnet weiter mit diesem Stand, bis die neuen Werte übernommen werden.
+            {a && (
+              <>
+                {' '}
+                Summe Heizlast: {watt(a.summe_alt_w)} → <strong>{watt(a.summe_neu_w)}</strong> ({differenz >= 0 ? '+' : ''}
+                {watt(differenz)})
+              </>
+            )}
+          </small>
+        </div>
+        <button className="knopf-leise klein" onClick={() => setOffen(!offen)} aria-expanded={offen}>
+          {offen ? 'Unterschiede ausblenden' : `${pv.unterschiede.length} Unterschied(e) anzeigen`}
+        </button>
+      </div>
+      {offen && (
+        <>
+          <div className="tabelle-rahmen">
+            <table className="tabelle">
+              <thead>
+                <tr>
+                  <th>Bereich</th>
+                  <th>Vorgabe</th>
+                  <th>Projekt (alt)</th>
+                  <th>zentral (neu)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pv.unterschiede.map((u, i) => (
+                  <tr key={i}>
+                    <td>{u.bereich}</td>
+                    <td>{u.bezeichnung}</td>
+                    <td>{wertText(u.alt)}</td>
+                    <td>
+                      <strong>{wertText(u.neu)}</strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {a && a.raeume.length > 0 && (
+            <>
+              <h3>Auswirkung auf die Räume</h3>
+              <ul className="auswirkung">
+                {a.raeume.map((r) => (
+                  <li key={r.raum_id}>
+                    {r.bezeichnung}: {watt(r.alt_w)} → <strong>{watt(r.neu_w)}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+      {uebernehmbar ? (
+        <button
+          className="knopf"
+          onClick={() =>
+            window.confirm('Neue zentrale Fachvorgaben in dieses Projekt übernehmen? Die Heizlast wird neu berechnet; die Übernahme wird protokolliert.') &&
+            void uebernehmen()
+          }
+        >
+          Neue Vorgaben übernehmen
+        </button>
+      ) : (
+        <small className="leise">Übernahme nicht möglich, solange das Projekt gesperrt oder auf einem Gerät ausgecheckt ist.</small>
+      )}
     </div>
   );
 }

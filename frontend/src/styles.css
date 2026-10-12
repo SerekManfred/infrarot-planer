@@ -166,6 +166,23 @@ tr.inaktiv { color: var(--leise); }
 .summe span { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
 .summe strong { font-size: 1.4rem; color: var(--blau); }
 
+/* ── Eingefrorene Fachvorgaben ── */
+.vorgaben-aenderung { border: 2px solid var(--orange); background: var(--orange-hell); }
+.vorgaben-aenderung .zeile { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+.vorgaben-aenderung .tabelle { margin: 0.75rem 0; }
+.vorgaben-aenderung .knopf { margin-top: 0.5rem; }
+.auswirkung { margin: 0.25rem 0 0.5rem; padding-left: 1.2rem; }
+.klein-text { font-size: 0.85rem; margin: 0 0 0.5rem; }
+
+/* ── Rollen (mehrere wählbar) ── */
+.rollenwahl { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
+.rollenwahl button {
+  min-height: 44px; padding: 0.35rem 0.75rem; border-radius: 8px; border: 2px solid var(--blau);
+  background: #fff; color: var(--blau); font-size: 0.9rem; cursor: pointer;
+}
+.rollenwahl button.aktiv { background: var(--blau); color: #fff; font-weight: 600; }
+.rollenwahl button:disabled.aktiv { opacity: 0.75; }
+
 /* ── Offline-Betrieb ── */
 .verbindung-rahmen { position: relative; }
 .verbindung {

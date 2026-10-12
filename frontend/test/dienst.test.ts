@@ -140,7 +140,7 @@ describe('Auschecken und lokale Bearbeitung', () => {
     server.fehler = { pfad: /raeume/, status: 401, meldung: 'Nicht angemeldet' };
     await dienst.synchronisieren();
     expect(dienst.zustand.anmeldungNoetig).toBe(true);
-    await dienst.angemeldet({ id: 1, email: 't@test.invalid', name: 'Test', rolle: 'aussendienst', aktiv: true });
+    await dienst.angemeldet({ id: 1, email: 't@test.invalid', name: 'Test', rollen: ['aussendienst'], aktiv: true });
     await vi.runAllTimersAsync();
     expect(dienst.zustand).toMatchObject({ anmeldungNoetig: false, ausstehend: 0 });
   });

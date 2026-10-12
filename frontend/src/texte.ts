@@ -2,10 +2,14 @@
 import type { Angrenzung, Gebaeudestandard, Herkunft, Heizlastquelle, Projektstatus, Rolle } from './api';
 
 export const ROLLEN: Record<Rolle, string> = {
-  aussendienst: 'Außendienst MEH',
-  fachpruefer: 'Fachprüfer Serek',
   admin: 'Admin',
+  fachpruefer: 'Fachprüfer Serek',
+  aussendienst: 'Außendienst MEH',
 };
+
+export function rollenText(rollen: Rolle[]): string {
+  return rollen.map((r) => ROLLEN[r]).join(' + ');
+}
 
 export const STATUS: Record<Projektstatus, string> = {
   entwurf: 'Vor-Ort-Entwurf',

@@ -285,7 +285,7 @@ export class OfflineDienst {
       const geraet = await this.speicher.wertLesen<string>(W.geraet);
       if (!benutzer) throw new ApiFehler(0, 'Server nicht erreichbar');
       const ids: number[] = [await this.neueId(), await this.neueId()];
-      const { lp, eintraege } = neuesProjekt(daten, () => ids.shift()!, benutzer, geraet ?? 'dieses Gerät', this.jetzt());
+      const { lp, eintraege } = neuesProjekt(daten, () => ids.shift()!, benutzer, geraet ?? 'dieses Gerät', this.jetzt(), this.vorgaben);
       this.projekte = [...this.projekte, lp];
       await this.speicher.projektSchreiben(lp);
       for (const e of eintraege) await this.speicher.eintragAnhaengen({ ...e, zeit: this.jetzt() });

@@ -1,7 +1,7 @@
 // Eigenes Konto: Passwort ändern
 import { useState, type FormEvent } from 'react';
 import { api, type Benutzer } from '../api';
-import { ROLLEN } from '../texte';
+import { rollenText } from '../texte';
 import { Meldung } from './Felder';
 
 export function Konto({ benutzer }: { benutzer: Benutzer }) {
@@ -31,7 +31,7 @@ export function Konto({ benutzer }: { benutzer: Benutzer }) {
     <section>
       <h1>Konto</h1>
       <p>
-        {benutzer.name} · {benutzer.email} · {ROLLEN[benutzer.rolle]}
+        {benutzer.name} · {benutzer.email} · {rollenText(benutzer.rollen)}
       </p>
       <form className="karte anmeldung" onSubmit={absenden}>
         <h2>Passwort ändern</h2>

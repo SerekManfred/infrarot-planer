@@ -1,4 +1,5 @@
-// Abweichungen dieses Projekts von den zentralen Fachvorgaben und Klimadaten des Gebäudes.
+// Abweichungen dieses Projekts von seinen Fachvorgaben und Klimadaten des Gebäudes.
+// „Vorgabe“ meint hier den im Projekt eingefrorenen Stand der Fachvorgaben (siehe VorgabenStand in Projekt.tsx).
 import { useEffect, useState } from 'react';
 import { api, type Fachvorgaben, type Klimadaten, type Objekt } from '../api';
 import { GEBAEUDESTANDARDS, zahl } from '../texte';
@@ -21,7 +22,7 @@ function zentral(wert: number | null, einheit: string, stellen = 2): string {
 export function Projektvorgaben({ objekt, vorgaben, gesperrt, aendern }: Props) {
   const v = vorgaben.werte;
   const gs = objekt.gebaeudestandard;
-  const rueckfall = v[`rueckfall_${gs}_w_m2` as const];
+  const rueckfall = gs === 'sonstiger_bestand' ? null : v[`rueckfall_${gs}_w_m2` as const];
   const setzen = (feld: keyof Objekt) => (wert: unknown) => aendern(() => api.patch(`/objekte/${objekt.id}`, { [feld]: wert }));
 
   function pauschaleSetzen(raumtypId: number, wert: number | null) {
@@ -34,8 +35,8 @@ export function Projektvorgaben({ objekt, vorgaben, gesperrt, aendern }: Props) 
   return (
     <div>
       <Meldung art="hinweis">
-        Leere Felder = zentrale Fachvorgabe gilt. Eingetragene Projektwerte sind Abweichungen und werden in der Raumliste als „Projektwert“
-        gekennzeichnet.
+        Leere Felder = Fachvorgabe des Projekts gilt. Eingetragene Projektwerte sind Abweichungen und werden in der Raumliste als
+        „Projektwert“ gekennzeichnet.
       </Meldung>
 
       <div className="karte">
@@ -44,24 +45,15 @@ export function Projektvorgaben({ objekt, vorgaben, gesperrt, aendern }: Props) 
           <thead>
             <tr>
               <th>Vorgabe</th>
-              <th>zentral</th>
+              <th>Vorgabe</th>
               <th>dieses Projekt</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>Höhenzuschlag ab Raumhöhe</td>
-              <td>{zentral(v.hoehenzuschlag_grenzhoehe_m, 'm')}</td>
-              <td>
-                <Zahlfeld wert={objekt.hoehenzuschlag_grenzhoehe_m} einheit="m" hervorheben={objekt.hoehenzuschlag_grenzhoehe_m !== null} gesperrt={gesperrt} onSpeichern={setzen('hoehenzuschlag_grenzhoehe_m')} />
-              </td>
-            </tr>
-            <tr>
-              <td>Höhenzuschlag je Meter Mehrhöhe</td>
-              <td>{zentral(v.hoehenzuschlag_prozent_je_m, '%/m', 1)}</td>
-              <td>
-                <Zahlfeld wert={objekt.hoehenzuschlag_prozent_je_m} einheit="%/m" hervorheben={objekt.hoehenzuschlag_prozent_je_m !== null} gesperrt={gesperrt} onSpeichern={setzen('hoehenzuschlag_prozent_je_m')} />
-              </td>
+              <td>Hinweis „Pauschale prüfen“ ab Raumhöhe (kein Zuschlag)</td>
+              <td>{zentral(v.hoehe_hinweis_m, 'm')}</td>
+              <td className="leise">–</td>
             </tr>
             <tr>
               <td>Wärmebrückenzuschlag ΔU_WB (für C)</td>
@@ -74,14 +66,20 @@ export function Projektvorgaben({ objekt, vorgaben, gesperrt, aendern }: Props) 
         </table>
       </div>
 
+      {gs === 'sonstiger_bestand' ? (
+        <div className="karte">
+          <h2>Heizlast-Pauschalen ({GEBAEUDESTANDARDS[gs]})</h2>
+          <p>Für „sonstiger Bestand“ gibt es keine Tabellen- oder Rückfallwerte. Die Pauschale in W/m² wird bei jedem Raum eingegeben (Pflicht).</p>
+        </div>
+      ) : (
       <div className="karte">
         <h2>Heizlast-Pauschalen ({GEBAEUDESTANDARDS[gs]})</h2>
-        {vorgaben.raumtypen.length === 0 && <p className="leise">Noch keine Raumtypen gepflegt.</p>}
+        {vorgaben.raumtypen.length === 0 && <p className="leise">Noch keine Raumtypen gepflegt – es gilt der Rückfallwert.</p>}
         <table className="tabelle schmal">
           <thead>
             <tr>
               <th>Raumtyp</th>
-              <th>zentral</th>
+              <th>Vorgabe</th>
               <th>dieses Projekt</th>
             </tr>
           </thead>
@@ -108,6 +106,7 @@ export function Projektvorgaben({ objekt, vorgaben, gesperrt, aendern }: Props) 
           </tbody>
         </table>
       </div>
+      )}
 
       <KlimadatenWahl objekt={objekt} gesperrt={gesperrt} onWahl={setzen('klimadaten_id')} />
     </div>

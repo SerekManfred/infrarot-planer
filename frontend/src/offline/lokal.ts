@@ -6,7 +6,8 @@
 // beim Übertragen durch die IDs des Servers (pfadAufloesen).
 
 import { berechneObjekt, type ObjektPlanung } from '@infrarot/rechenkern';
-import type { Gebaeudestandard, ObjektPaket, OfflineVorgaben, ProjektPaket } from '../api';
+import type { Fachvorgaben, Gebaeudestandard, ObjektPaket, OfflineVorgaben, ProjektPaket, ProjektVorgaben } from '../api';
+import { GEBAEUDESTANDARDS } from '../texte';
 
 export type Methode = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -66,7 +67,7 @@ const ARTEN = new Set<string>(['projekte', 'objekte', 'geschosse', 'raeume', 'fl
 const NEU: Record<Exclude<Art, 'projekte'>, Record<string, unknown>> = {
   objekte: {
     strasse: '', plz: '', ort: '', baujahr: null, klimadaten_id: null, delta_u_wb: null,
-    hoehenzuschlag_grenzhoehe_m: null, hoehenzuschlag_prozent_je_m: null, pauschale_abweichungen: {},
+    pauschale_abweichungen: {},
   },
   geschosse: { reihenfolge: 0 },
   raeume: {
@@ -115,11 +116,11 @@ function finde(paket: ProjektPaket, art: Art, id: number): Fund | null {
   return null;
 }
 
-/** Zerlegt /raeume/5/flaechen in ['raeume', 5, 'flaechen']; null, wenn der Pfad keine Projektdaten betrifft */
+/** Zerlegt /raeume/5/flaechen in ['raeume', 5, 'flaechen'] (Rest mit „/“); null, wenn der Pfad keine Projektdaten betrifft */
 function zerlege(pfad: string): [Art, number, string | undefined] | null {
   const teile = pfad.split('?')[0].split('/').filter(Boolean);
-  if (teile.length < 2 || teile.length > 3 || !ARTEN.has(teile[0]) || !/^-?\d+$/.test(teile[1])) return null;
-  return [teile[0] as Art, Number(teile[1]), teile[2]];
+  if (teile.length < 2 || teile.length > 4 || !ARTEN.has(teile[0]) || !/^-?\d+$/.test(teile[1])) return null;
+  return [teile[0] as Art, Number(teile[1]), teile.length > 2 ? teile.slice(2).join('/') : undefined];
 }
 
 /** Lokales Projekt, zu dem der Pfad gehört – oder null (dann geht die Anfrage ans Netz) */
@@ -160,34 +161,38 @@ function name(knoten: Knoten): string {
   return typeof b === 'string' && b ? `„${b}“` : '';
 }
 
-export function planungAus(objekt: ObjektPaket, vorgaben: OfflineVorgaben): ObjektPlanung {
-  const fv = vorgaben.fachvorgaben;
-  const klima = vorgaben.klimadaten.find((k) => k.id === objekt.klimadaten_id);
+/** Fachvorgaben, mit denen das Projekt rechnet: sein eingefrorener Stand (sonst der Schnappschuss des Geräts) */
+export function projektStand(paket: ProjektPaket, vorgaben: OfflineVorgaben | null): Fachvorgaben | null {
+  if (paket.vorgaben_stand) return { ...paket.vorgaben_stand, gebaeudestandards: GEBAEUDESTANDARDS };
+  return vorgaben ? vorgaben.fachvorgaben : null;
+}
+
+/** Rechenkern-Eingabe: eingefrorene Fachvorgaben des Projekts, Bibliotheken (U-Werte, Klimadaten) vom Gerät */
+export function planungAus(objekt: ObjektPaket, fv: Fachvorgaben, vorgaben: OfflineVorgaben | null): ObjektPlanung {
+  const klima = vorgaben?.klimadaten.find((k) => k.id === objekt.klimadaten_id);
   return {
     objekt: {
       id: objekt.id,
       bezeichnung: objekt.bezeichnung,
       gebaeudestandard: objekt.gebaeudestandard,
-      gebaeudestandard_text: fv.gebaeudestandards[objekt.gebaeudestandard],
+      gebaeudestandard_text: GEBAEUDESTANDARDS[objekt.gebaeudestandard],
       delta_u_wb: objekt.delta_u_wb,
-      hoehenzuschlag_grenzhoehe_m: objekt.hoehenzuschlag_grenzhoehe_m,
-      hoehenzuschlag_prozent_je_m: objekt.hoehenzuschlag_prozent_je_m,
       pauschale_abweichungen: objekt.pauschale_abweichungen ?? {},
       theta_e: klima ? klima.theta_e : null,
     },
     vorgaben: {
       rueckfall_neubau_w_m2: fv.werte.rueckfall_neubau_w_m2,
       rueckfall_effizienzhaus_sanierung_w_m2: fv.werte.rueckfall_effizienzhaus_sanierung_w_m2,
-      rueckfall_sonstiger_bestand_w_m2: fv.werte.rueckfall_sonstiger_bestand_w_m2,
-      hoehenzuschlag_grenzhoehe_m: fv.werte.hoehenzuschlag_grenzhoehe_m,
-      hoehenzuschlag_prozent_je_m: fv.werte.hoehenzuschlag_prozent_je_m,
+      // bewusst kein Rückfallwert für „sonstiger Bestand“ (Pauschale je Raum Pflicht)
+      rueckfall_sonstiger_bestand_w_m2: null,
+      hoehe_hinweis_m: fv.werte.hoehe_hinweis_m,
       delta_u_wb: fv.werte.delta_u_wb,
     },
     pauschalen: fv.pauschalen.map((p) => ({ raumtyp_id: p.raumtyp_id, gebaeudestandard: p.gebaeudestandard, w_m2: p.w_m2 })),
     raumtypen: fv.raumtypen.map((t) => ({
       id: t.id, bezeichnung: t.bezeichnung, theta_int: t.theta_int, luftwechsel: t.luftwechsel, reduktionsfaktor: t.reduktionsfaktor,
     })),
-    bauteile: vorgaben.bauteile.map((b) => ({ id: b.id, u_wert: b.u_wert })),
+    bauteile: (vorgaben?.bauteile ?? []).map((b) => ({ id: b.id, u_wert: b.u_wert })),
     geschosse: (sortiert('geschosse', objekt.geschosse as unknown as Knoten[]) as unknown as ObjektPaket['geschosse']).map((g) => ({
       id: g.id,
       bezeichnung: g.bezeichnung,
@@ -242,8 +247,19 @@ export function ausfuehren(
   }
 
   if (art === 'objekte' && unterpfad === 'auswertung' && methode === 'GET') {
-    if (!vorgaben) throw new LokalFehler(503, 'Fachvorgaben sind auf diesem Gerät noch nicht gespeichert – bitte einmal online öffnen.');
-    return { antwort: berechneObjekt(planungAus(fund.knoten as unknown as ObjektPaket, vorgaben)).auswertung, eintrag: null };
+    const fv = projektStand(lp.paket, vorgaben);
+    if (!fv) throw new LokalFehler(503, 'Fachvorgaben sind auf diesem Gerät noch nicht gespeichert – bitte einmal online öffnen.');
+    return { antwort: berechneObjekt(planungAus(fund.knoten as unknown as ObjektPaket, fv, vorgaben)).auswertung, eintrag: null };
+  }
+  if (art === 'projekte' && unterpfad === 'vorgaben' && methode === 'GET') {
+    const fv = projektStand(lp.paket, vorgaben);
+    if (!fv) throw new LokalFehler(503, 'Fachvorgaben sind auf diesem Gerät noch nicht gespeichert – bitte einmal online öffnen.');
+    // Vergleich mit den zentralen Vorgaben macht der Server – erst nach dem Einchecken
+    const antwort: ProjektVorgaben = { stand_am: lp.paket.vorgaben_stand_am, vorgaben: fv, unterschiede: null, auswirkung: null };
+    return { antwort, eintrag: null };
+  }
+  if (art === 'projekte' && unterpfad === 'vorgaben/uebernehmen') {
+    throw new LokalFehler(409, 'Neue Fachvorgaben können erst nach dem Einchecken übernommen werden.');
   }
   if (art === 'projekte' && unterpfad === 'status') {
     throw new LokalFehler(409, 'Statuswechsel erst, nachdem das Projekt eingecheckt ist.');
@@ -292,6 +308,8 @@ export function neuesProjekt(
   benutzer: { id: number; name: string },
   geraet: string,
   jetzt: string,
+  /** Fachvorgaben-Schnappschuss des Geräts: damit rechnet das Projekt bis zur Übertragung */
+  vorgaben: OfflineVorgaben | null = null,
 ): { lp: LokalesProjekt; eintraege: Omit<Eintrag, 'zeit'>[] } {
   const id = neueId();
   const objektId = neueId();
@@ -311,6 +329,10 @@ export function neuesProjekt(
     ausgecheckt_von_name: benutzer.name,
     ausgecheckt_geraet: geraet,
     ausgecheckt_am: jetzt,
+    vorgaben_stand_am: vorgaben ? vorgaben.stand : null,
+    vorgaben_stand: vorgaben
+      ? { werte: vorgaben.fachvorgaben.werte, raumtypen: vorgaben.fachvorgaben.raumtypen, pauschalen: vorgaben.fachvorgaben.pauschalen }
+      : null,
     erstellt_am: jetzt,
     geaendert_am: jetzt,
     objekte: [

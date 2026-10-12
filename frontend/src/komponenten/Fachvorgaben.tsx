@@ -1,6 +1,6 @@
 // Zentrale Fachvorgaben: lesen alle; pflegen Fachprüfer und Admins.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, type Benutzer, type Fachvorgaben, type FachvorgabenWerte, type Gebaeudestandard, type Raumtyp } from '../api';
+import { api, hatRolle, type Benutzer, type Fachvorgaben, type FachvorgabenWerte, type Gebaeudestandard, type Raumtyp } from '../api';
 import { GEBAEUDESTANDARDS, zahl, zeitpunkt } from '../texte';
 import { Meldung, Textfeld, Zahlfeld } from './Felder';
 import { Protokoll } from './Protokoll';
@@ -9,7 +9,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
   const [vorgaben, setVorgaben] = useState<Fachvorgaben | null>(null);
   const [fehler, setFehler] = useState('');
   const [stand, setStand] = useState(0);
-  const darf = benutzer.rolle === 'fachpruefer' || benutzer.rolle === 'admin';
+  const darf = hatRolle(benutzer, 'fachpruefer', 'admin');
 
   const laden = useCallback(() => {
     api.get<Fachvorgaben>('/fachvorgaben').then(setVorgaben).catch((e) => setFehler(e.message));
@@ -35,19 +35,23 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       return api.put('/fachvorgaben/werte', { ...rest, [feld]: wert });
     });
   const standards = Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[];
+  // „sonstiger Bestand“: keine Rückfall- und Tabellenwerte, Pauschale je Raum Pflicht (Festlegung 12.10.2026)
+  const mitRueckfall = standards.filter((gs): gs is Exclude<Gebaeudestandard, 'sonstiger_bestand'> => gs !== 'sonstiger_bestand');
 
   return (
     <section>
       <h1>Fachvorgaben</h1>
       <Meldung art="hinweis">
         Leere Felder bedeuten „Vorgabe fehlt“ – das Programm rechnet dann nicht mit geschätzten Werten. {darf ? 'Jede Änderung wird protokolliert.' : 'Pflege durch Fachprüfer und Admins.'}
+        <br />
+        Bestehende Projekte rechnen mit ihrem eingefrorenen Stand; dort erscheinen Änderungen als Unterschied und werden nur per Klick übernommen.
       </Meldung>
       {fehler && <Meldung>{fehler}</Meldung>}
 
       <div className="karte">
         <h2>Zentrale Werte</h2>
         <div className="raster">
-          {standards.map((gs) => (
+          {mitRueckfall.map((gs) => (
             <label key={gs}>
               Rückfallwert {GEBAEUDESTANDARDS[gs]}
               <Zahlfeld
@@ -59,13 +63,13 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
               />
             </label>
           ))}
+          <div>
+            <span className="feldname">Rückfallwert {GEBAEUDESTANDARDS.sonstiger_bestand}</span>
+            <small className="leise">keiner – Pauschale je Raum Pflicht</small>
+          </div>
           <label>
-            Höhenzuschlag ab Raumhöhe
-            <Zahlfeld wert={w.hoehenzuschlag_grenzhoehe_m} einheit="m" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('hoehenzuschlag_grenzhoehe_m')} />
-          </label>
-          <label>
-            Höhenzuschlag je Meter Mehrhöhe
-            <Zahlfeld wert={w.hoehenzuschlag_prozent_je_m} einheit="%/m" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('hoehenzuschlag_prozent_je_m')} />
+            Hinweis „Pauschale prüfen“ ab Raumhöhe
+            <Zahlfeld wert={w.hoehe_hinweis_m} einheit="m" platzhalter="kein Hinweis" gesperrt={!darf} onSpeichern={werteSetzen('hoehe_hinweis_m')} />
           </label>
           <label>
             ΔU_WB (Quelle C)
@@ -82,7 +86,8 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       <div className="karte">
         <h2>Raumtypen und Pauschalen (W/m²)</h2>
         <p className="leise">
-          Leere Pauschale → Rückfallwert des Gebäudestandards. θint, Luftwechsel und Reduktionsfaktor f werden nur für die Gegenprobe C gebraucht.
+          Leere Pauschale → Rückfallwert des Gebäudestandards. Für „sonstiger Bestand“ gibt es keine Tabellenwerte (Eingabe je Raum). θint,
+          Luftwechsel und Reduktionsfaktor f werden nur für die Gegenprobe C gebraucht.
         </p>
         <div className="tabelle-rahmen">
           <table className="tabelle vorgaben">
@@ -137,6 +142,13 @@ function RaumtypZeile({
         <Textfeld wert={typ.bezeichnung} pflicht gesperrt={!darf} onSpeichern={setzen('bezeichnung')} />
       </td>
       {(Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[]).map((gs) => {
+        if (gs === 'sonstiger_bestand') {
+          return (
+            <td key={gs} className="leise">
+              je Raum
+            </td>
+          );
+        }
         const wert = vorgaben.pauschalen.find((p) => p.raumtyp_id === typ.id && p.gebaeudestandard === gs)?.w_m2 ?? null;
         const rueckfall = vorgaben.werte[`rueckfall_${gs}_w_m2` as const];
         return (

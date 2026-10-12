@@ -1,4 +1,4 @@
-// Benutzerverwaltung (nur Admin)
+// Benutzerverwaltung (nur Admin). Rollen sind kombinierbar, z. B. Admin + Fachprüfer.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type Benutzer, type Rolle } from '../api';
 import { ROLLEN } from '../texte';
@@ -43,7 +43,7 @@ export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
               <tr>
                 <th>Name</th>
                 <th>E-Mail</th>
-                <th>Rolle</th>
+                <th>Rollen</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -56,17 +56,12 @@ export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
                   </td>
                   <td>{b.email}</td>
                   <td>
-                    <select
-                      value={b.rolle}
-                      disabled={b.id === ich.id}
-                      onChange={(e) => aendern(() => api.patch(`/benutzer/${b.id}`, { rolle: e.target.value }))}
-                    >
-                      {(Object.keys(ROLLEN) as Rolle[]).map((r) => (
-                        <option key={r} value={r}>
-                          {ROLLEN[r]}
-                        </option>
-                      ))}
-                    </select>
+                    <RollenWahl
+                      rollen={b.rollen}
+                      // das eigene Konto kann die Admin-Rolle nicht abgeben
+                      fest={b.id === ich.id ? ['admin'] : []}
+                      onWahl={(rollen) => aendern(() => api.patch(`/benutzer/${b.id}`, { rollen }))}
+                    />
                   </td>
                   <td>
                     <button
@@ -97,14 +92,14 @@ function NeuerBenutzer({ onAngelegt }: { onAngelegt: (name: string) => void }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [passwort, setPasswort] = useState('');
-  const [rolle, setRolle] = useState<Rolle>('aussendienst');
+  const [rollen, setRollen] = useState<Rolle[]>(['aussendienst']);
   const [fehler, setFehler] = useState('');
 
   async function absenden(e: FormEvent) {
     e.preventDefault();
     setFehler('');
     try {
-      await api.post('/benutzer', { email, name, passwort, rolle });
+      await api.post('/benutzer', { email, name, passwort, rollen });
       onAngelegt(name);
       setEmail('');
       setName('');
@@ -129,20 +124,38 @@ function NeuerBenutzer({ onAngelegt }: { onAngelegt: (name: string) => void }) {
         Erstes Passwort (mind. 12 Zeichen)
         <input type="password" autoComplete="new-password" minLength={12} value={passwort} onChange={(e) => setPasswort(e.target.value)} required />
       </label>
-      <label>
-        Rolle
-        <select value={rolle} onChange={(e) => setRolle(e.target.value as Rolle)}>
-          {(Object.keys(ROLLEN) as Rolle[]).map((r) => (
-            <option key={r} value={r}>
-              {ROLLEN[r]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div>
+        <span className="feldname">Rollen</span>
+        <RollenWahl rollen={rollen} onWahl={setRollen} />
+      </div>
       {fehler && <Meldung>{fehler}</Meldung>}
       <button className="knopf" type="submit">
         Anlegen
       </button>
     </form>
+  );
+}
+
+/** Rollen als Umschaltknöpfe (mehrere möglich, mindestens eine) */
+function RollenWahl({ rollen, fest = [], onWahl }: { rollen: Rolle[]; fest?: Rolle[]; onWahl: (rollen: Rolle[]) => void }) {
+  function umschalten(r: Rolle) {
+    const neu = rollen.includes(r) ? rollen.filter((x) => x !== r) : [...rollen, r];
+    if (neu.length > 0) onWahl((Object.keys(ROLLEN) as Rolle[]).filter((x) => neu.includes(x)));
+  }
+  return (
+    <span className="rollenwahl" role="group" aria-label="Rollen">
+      {(Object.keys(ROLLEN) as Rolle[]).map((r) => (
+        <button
+          key={r}
+          type="button"
+          aria-pressed={rollen.includes(r)}
+          className={rollen.includes(r) ? 'aktiv' : ''}
+          disabled={fest.includes(r) || (rollen.length === 1 && rollen.includes(r))}
+          onClick={() => umschalten(r)}
+        >
+          {ROLLEN[r]}
+        </button>
+      ))}
+    </span>
   );
 }

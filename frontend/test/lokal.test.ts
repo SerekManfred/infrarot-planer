@@ -92,8 +92,40 @@ describe('ausfuehren', () => {
     expect(a.vorgaben.theta_e).toEqual({ wert: -10, herkunft: 'klimadaten' });
   });
 
-  it('ohne Schnappschuss keine Auswertung, Statuswechsel nicht lokal, Protokoll ans Netz', () => {
-    expect(() => ausfuehren(lp(), null, 'GET', '/objekte/50/auswertung', undefined, zaehler())).toThrow(LokalFehler);
+  it('rechnet mit den eingefrorenen Vorgaben des Projekts, nicht mit dem neueren Schnappschuss des Geräts', () => {
+    const geraet = vorgaben();
+    geraet.fachvorgaben.pauschalen[0].w_m2 = 99;
+    const a = ausfuehren(lp(), geraet, 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort as { summe: { phi_massgeblich_w: number } };
+    expect(a.summe.phi_massgeblich_w).toBe(660);
+    // ohne Schnappschuss des Geräts genügt der Projektstand
+    expect(ausfuehren(lp(), null, 'GET', '/objekte/50/auswertung', undefined, zaehler())).not.toBeNull();
+  });
+
+  it('hoher Raum: Hinweis statt Zuschlag (Hinweis-Höhe aus dem Projektstand)', () => {
+    const p = lp();
+    ausfuehren(p, null, 'PATCH', '/raeume/5000', { hoehe_m: 3.2 }, zaehler());
+    const a = ausfuehren(p, null, 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort as {
+      raeume: { phi_a_w: number; hinweise: string[] }[];
+    };
+    expect(a.raeume[0].phi_a_w).toBe(660);
+    expect(a.raeume[0].hinweise).toEqual(['Raumhöhe über 2,90 m – Pauschale prüfen und ggf. manuell anpassen.']);
+  });
+
+  it('Projektvorgaben lokal ohne Vergleich; Übernahme erst nach dem Einchecken', () => {
+    const v = ausfuehren(lp(), null, 'GET', '/projekte/5/vorgaben', undefined, zaehler())!.antwort as {
+      unterschiede: unknown;
+      vorgaben: { werte: { rueckfall_neubau_w_m2: number }; gebaeudestandards: Record<string, string> };
+    };
+    expect(v.unterschiede).toBeNull();
+    expect(v.vorgaben.werte.rueckfall_neubau_w_m2).toBe(45);
+    expect(v.vorgaben.gebaeudestandards.neubau).toBe('Neubau');
+    expect(() => ausfuehren(lp(), null, 'POST', '/projekte/5/vorgaben/uebernehmen', {}, zaehler())).toThrow(/Einchecken/);
+  });
+
+  it('ohne Fachvorgaben keine Auswertung, Statuswechsel nicht lokal, Protokoll ans Netz', () => {
+    const ohneStand = lp();
+    ohneStand.paket.vorgaben_stand = null;
+    expect(() => ausfuehren(ohneStand, null, 'GET', '/objekte/50/auswertung', undefined, zaehler())).toThrow(LokalFehler);
     expect(() => ausfuehren(lp(), null, 'POST', '/projekte/5/status', { status: 'geprueft' }, zaehler())).toThrow(/eingecheckt/);
     expect(ausfuehren(lp(), null, 'GET', '/projekte/5/protokoll', undefined, zaehler())).toBeNull();
   });
@@ -111,7 +143,9 @@ describe('neuesProjekt und pfadAufloesen', () => {
       { id: 1, name: 'Test' },
       'Tablet 1',
       '2026-10-10T08:00:00Z',
+      vorgaben(),
     );
+    expect(neu.paket.vorgaben_stand?.werte.rueckfall_neubau_w_m2).toBe(45);
     expect(neu.id).toBe(-1);
     expect(neu.paket.objekte[0]).toMatchObject({ id: -2, projekt_id: -1, gebaeudestandard: 'neubau', geschosse: [] });
     expect(eintraege.map((e) => e.pfad)).toEqual(['/projekte', '/projekte/-1/auschecken']);

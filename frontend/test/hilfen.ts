@@ -8,9 +8,7 @@ export function vorgaben(): OfflineVorgaben {
       werte: {
         rueckfall_neubau_w_m2: 45,
         rueckfall_effizienzhaus_sanierung_w_m2: 75,
-        rueckfall_sonstiger_bestand_w_m2: null,
-        hoehenzuschlag_grenzhoehe_m: 2.9,
-        hoehenzuschlag_prozent_je_m: null,
+        hoehe_hinweis_m: 2.9,
         delta_u_wb: 0.05,
         quelle: 'TESTWERT',
       },
@@ -41,6 +39,9 @@ export function paket(): ProjektPaket {
     ausgecheckt_von_name: 'Test',
     ausgecheckt_geraet: 'Tablet 1',
     ausgecheckt_am: '2026-10-10T08:00:00Z',
+    // eingefrorene Fachvorgaben des Projekts (beim Anlegen)
+    vorgaben_stand_am: '2026-10-10T08:00:00Z',
+    vorgaben_stand: (({ werte, raumtypen, pauschalen }) => ({ werte, raumtypen, pauschalen }))(vorgaben().fachvorgaben),
     erstellt_am: '2026-10-10T08:00:00Z',
     geaendert_am: '2026-10-10T08:00:00Z',
     objekte: [
@@ -55,8 +56,6 @@ export function paket(): ProjektPaket {
         baujahr: null,
         klimadaten_id: null,
         delta_u_wb: null,
-        hoehenzuschlag_grenzhoehe_m: null,
-        hoehenzuschlag_prozent_je_m: null,
         pauschale_abweichungen: {},
         geschosse: [
           {

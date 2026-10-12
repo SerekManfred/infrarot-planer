@@ -167,6 +167,7 @@ function RaumKarte({
   stand: number;
 }) {
   const [details, setDetails] = useState(false);
+  const sonstigerBestand = objekt.gebaeudestandard === 'sonstiger_bestand';
   const speichern = (feld: keyof Raum) => (wert: unknown) => aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert }));
 
   return (
@@ -207,6 +208,19 @@ function RaumKarte({
           Höhe
           <Zahlfeld wert={raum.hoehe_m} einheit="m" gesperrt={gesperrt} onSpeichern={speichern('hoehe_m')} />
         </label>
+        {sonstigerBestand && (
+          // „sonstiger Bestand“: keine Vorgabe, die Pauschale ist je Raum Pflicht (Festlegung 12.10.2026)
+          <label>
+            Pauschale (Pflicht)
+            <Zahlfeld
+              wert={raum.pauschale_w_m2}
+              einheit="W/m²"
+              pflicht
+              gesperrt={gesperrt}
+              onSpeichern={speichern('pauschale_w_m2')}
+            />
+          </label>
+        )}
       </div>
 
       <div className="quelle">
@@ -228,6 +242,7 @@ function RaumKarte({
       {details && (
         <div className="details">
           <div className="raster">
+            {!sonstigerBestand && (
             <label>
               Pauschale nur für diesen Raum
               <Zahlfeld
@@ -239,6 +254,7 @@ function RaumKarte({
                 onSpeichern={speichern('pauschale_w_m2')}
               />
             </label>
+            )}
             <label>
               Innentemperatur (für C)
               <Zahlfeld
@@ -297,7 +313,6 @@ function Ergebnis({ e }: { e: AuswertungRaum }) {
       <div className="nebenwerte">
         <span>
           A: {watt(e.phi_a_w)} · {q.wert === null ? '–' : `${zahl(q.wert, 0)} W/m²`} <HerkunftMarke w={q} />
-          {e.pauschal && e.pauschal.hoehenzuschlag_faktor > 0 && <> · Höhenzuschlag {prozent(e.pauschal.hoehenzuschlag_faktor)}</>}
         </span>
         {e.phi_b_w !== null && <span>B: {watt(e.phi_b_w)}</span>}
         {e.phi_c_w !== null && (

@@ -11,9 +11,11 @@ interface ZahlfeldProps {
   min?: number;
   hervorheben?: boolean;
   beschriftung?: string;
+  /** leer ist nicht erlaubt: rot markiert, bis ein Wert eingetragen ist */
+  pflicht?: boolean;
 }
 
-export function Zahlfeld({ wert, onSpeichern, einheit, platzhalter, gesperrt, min = 0, hervorheben, beschriftung }: ZahlfeldProps) {
+export function Zahlfeld({ wert, onSpeichern, einheit, platzhalter, gesperrt, min = 0, hervorheben, beschriftung, pflicht }: ZahlfeldProps) {
   const [text, setText] = useState(alsText(wert));
   const [ungueltig, setUngueltig] = useState(false);
   useEffect(() => setText(alsText(wert)), [wert]);
@@ -29,12 +31,13 @@ export function Zahlfeld({ wert, onSpeichern, einheit, platzhalter, gesperrt, mi
   }
 
   return (
-    <span className={`zahlfeld${hervorheben ? ' abweichung' : ''}${ungueltig ? ' ungueltig' : ''}`}>
+    <span className={`zahlfeld${hervorheben ? ' abweichung' : ''}${ungueltig || (pflicht && wert === null) ? ' ungueltig' : ''}`}>
       <input
         aria-label={beschriftung}
         inputMode="decimal"
         value={text}
-        placeholder={platzhalter}
+        placeholder={platzhalter ?? (pflicht ? 'Pflicht' : undefined)}
+        required={pflicht}
         disabled={gesperrt}
         onChange={(e) => setText(e.target.value)}
         onBlur={verlassen}

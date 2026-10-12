@@ -15,8 +15,13 @@ export interface Benutzer {
   id: number;
   email: string;
   name: string;
-  rolle: Rolle;
+  /** kombinierbar, z. B. ['admin', 'fachpruefer'] */
+  rollen: Rolle[];
   aktiv: boolean;
+}
+
+export function hatRolle(b: Benutzer, ...rollen: Rolle[]): boolean {
+  return rollen.some((r) => b.rollen.includes(r));
 }
 
 export interface Projekt {
@@ -36,6 +41,8 @@ export interface Projekt {
   ausgecheckt_von_name: string | null;
   ausgecheckt_geraet: string | null;
   ausgecheckt_am: string | null;
+  /** Stand der im Projekt eingefrorenen Fachvorgaben */
+  vorgaben_stand_am: string | null;
   erstellt_am: string;
   geaendert_am: string;
 }
@@ -51,8 +58,6 @@ export interface Objekt {
   baujahr: number | null;
   klimadaten_id: number | null;
   delta_u_wb: number | null;
-  hoehenzuschlag_grenzhoehe_m: number | null;
-  hoehenzuschlag_prozent_je_m: number | null;
   pauschale_abweichungen: Record<string, number>;
 }
 
@@ -141,9 +146,8 @@ export interface Klimadaten {
 export interface FachvorgabenWerte {
   rueckfall_neubau_w_m2: number | null;
   rueckfall_effizienzhaus_sanierung_w_m2: number | null;
-  rueckfall_sonstiger_bestand_w_m2: number | null;
-  hoehenzuschlag_grenzhoehe_m: number | null;
-  hoehenzuschlag_prozent_je_m: number | null;
+  /** Raumhöhe, ab der ein Hinweis zur Pauschale erscheint (kein Höhenzuschlag) */
+  hoehe_hinweis_m: number | null;
   delta_u_wb: number | null;
   quelle: string;
   geaendert_am?: string;
@@ -184,7 +188,7 @@ export interface AuswertungRaum {
   phi_c_w: number | null;
   phi_massgeblich_w: number | null;
   abweichung_c: number | null;
-  pauschal: { hoehenzuschlag_faktor: number } | null;
+  pauschal: { flaeche_m2: number; pauschale_w_m2: number; phi_w: number } | null;
 }
 
 export interface Auswertung {
@@ -192,7 +196,7 @@ export interface Auswertung {
   objekt: { id: number; gebaeudestandard: Gebaeudestandard; gebaeudestandard_text: string };
   hinweise: string[];
   vorgaben: Record<
-    'rueckfall_w_m2' | 'hoehenzuschlag_grenzhoehe_m' | 'hoehenzuschlag_prozent_je_m' | 'delta_u_wb' | 'theta_e',
+    'rueckfall_w_m2' | 'hoehe_hinweis_m' | 'delta_u_wb' | 'theta_e',
     Wert
   >;
   raeume: AuswertungRaum[];
@@ -214,6 +218,28 @@ export interface ObjektPaket extends Objekt {
 }
 export interface ProjektPaket extends Projekt {
   objekte: ObjektPaket[];
+  /** eingefrorene Fachvorgaben des Projekts (wie Fachvorgaben, ohne Texte) */
+  vorgaben_stand: Omit<Fachvorgaben, 'gebaeudestandards'> | null;
+}
+
+export interface VorgabenUnterschied {
+  bereich: 'Einzelwert' | 'Raumtyp' | 'Pauschale';
+  bezeichnung: string;
+  alt: number | string | null;
+  neu: number | string | null;
+}
+
+/** GET /projekte/{id}/vorgaben: womit das Projekt rechnet und was sich zentral geändert hat */
+export interface ProjektVorgaben {
+  stand_am: string | null;
+  vorgaben: Fachvorgaben;
+  /** null = nicht geprüft (Projekt auf diesem Gerät ausgecheckt) */
+  unterschiede: VorgabenUnterschied[] | null;
+  auswirkung: {
+    summe_alt_w: number;
+    summe_neu_w: number;
+    raeume: { raum_id: number; bezeichnung: string; alt_w: number | null; neu_w: number | null }[];
+  } | null;
 }
 
 /** Schnappschuss für das Rechnen ohne Netz (GET /offline/vorgaben) */
