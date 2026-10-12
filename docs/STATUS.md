@@ -118,5 +118,5 @@ Hinweise:
 **Betrieb:**
 - Wird `schulung-caddy-1` von der Schulungsplattform einmal neu erstellt, fehlt die Netzwerkverbindung. Dann `docker network connect infrarot-proxy schulung-caddy-1` ausführen (`docs/BETRIEB.md`).
 - Sicherungskopie außer Haus und Benachrichtigung bei fehlgeschlagener Sicherung.
-- Aus der früheren Installation ist noch das leere Netzwerk `infrarot-planer_infrarot-net` übrig. Es wurde nicht gelöscht, weil nur die Volumes beauftragt waren. Es enthält keine Daten. Löschen geht mit `docker network rm infrarot-planer_infrarot-net`.
+- Das leere Netzwerk `infrarot-planer_infrarot-net` der früheren Installation wurde am 12.10.2026 entfernt. Übrig sind nur `infrarot-netz` (intern, mit Datenbank) und `infrarot-proxy` (Caddy ↔ Frontend/Backend).
 - Die App-Icons und Farben sind Platzhalter bis zum CI.
