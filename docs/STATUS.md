@@ -1,6 +1,6 @@
 # Status
 
-Stand: 12.10.2026, Ende Phase 1 Teil D (Festlegungen des Auftraggebers umgesetzt)
+Stand: 13.10.2026, Ende Phase 1 Teil D (Festlegungen des Auftraggebers umgesetzt), erste Nutzung durch den Auftraggeber
 
 Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst der MEH, Fachvorgaben und Prüfung durch die Energieberatung Serek. Fachregeln: `docs/FACHKONZEPT.md`. Betrieb und HTTPS: `docs/BETRIEB.md`.
 
@@ -22,10 +22,14 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 - Sicherung des Caddyfile: `/opt/schulung/Caddyfile.bak-2026-10-12`. Rückweg: `sudo bash betrieb/caddy_einrichten.sh rueckbau`.
 - Die Infrarot-Ports bleiben nur an 127.0.0.1 gebunden.
 
-**Daten:** ein Konto, serek.manfred@googlemail.com, mit den Rollen **Admin + Fachprüfer**. Die E-Mail-Adresse war bereits richtig, das Passwort ist unverändert. Keine Projekte, leere Bibliotheken. Fachvorgaben:
-- Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; „sonstiger Bestand“ bewusst ohne Rückfallwert (Pauschale je Raum Pflicht)
-- Hinweis „Pauschale prüfen“ ab Raumhöhe 2,80 m (kein Zuschlag)
-- ΔU_WB: 0,05 W/(m²K)
+**Daten (13.10.2026):** ein Konto, serek.manfred@googlemail.com, mit den Rollen **Admin + Fachprüfer**.
+- Nach Fehlversuchen und Anmeldesperre am 13.10.2026 wurde das Passwort per `passwort-setzen` neu gesetzt (Sperre aufgehoben, protokolliert, `backend/README.md`). Seitdem klappt die Anmeldung.
+- Zwei Testprojekte des Auftraggebers: „Test1“ (Entwurf, mit dem Tablet ausgecheckt und wieder eingecheckt) und „Test2“ (fachlich geprüft).
+- Raumtypen: Wohnraum, Küche, Bad, Flur, Technik, Abstell, Schlafen, Kind. Pauschalen Neubau vom Auftraggeber eingetragen: Bad 60, Flur 30, Technik 20, Schlafen 30 W/m². Alle übrigen Raumtypen und alles bei „Effizienzhaus-Sanierung“ nutzen die Rückfallwerte.
+- Fachvorgaben:
+  - Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; „sonstiger Bestand“ bewusst ohne Rückfallwert (Pauschale je Raum Pflicht)
+  - Hinweis „Pauschale prüfen“ ab Raumhöhe 2,80 m (kein Zuschlag)
+  - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
 
@@ -110,6 +114,10 @@ Hinweise:
 - Raumtypen mit Pauschalen je Gebäudestandard (Neubau, Effizienzhaus-Sanierung). Bis dahin gelten 40 / 70 W/m².
   - Nach dem Einpflegen erscheinen die neuen Werte in bestehenden Projekten als Unterschied und werden dort per Klick übernommen.
 - Niedrige Priorität, nur für Quelle C: Klimadaten (DIN/TS 12831-1) und Pauschal-U-Werte als CSV, θint, Luftwechsel und Reduktionsfaktoren je Raumtyp.
+
+**Quellenangaben der Fachvorgaben (bitte prüfen):**
+- Der allgemeine Quellentext lautet noch „Festlegung Auftraggeber 10.10.2026: … Grenzhöhe Höhenzuschlag 2,80 m …“. Seit dem 12.10.2026 gibt es keinen Höhenzuschlag mehr, nur noch die Hinweis-Höhe. Den Text bitte unter Fachvorgaben anpassen; die App ändert ihn nicht selbst.
+- Pauschalen je Raumtyp übernehmen beim Speichern diesen allgemeinen Quellentext, ein eigenes Quellenfeld je Pauschale gibt es nicht (`frontend/src/komponenten/Fachvorgaben.tsx`). Die vier Neubau-Pauschalen vom 13.10.2026 tragen deshalb den Text vom 10.10.2026. Das lässt sich auf Wunsch um ein eigenes Quellenfeld je Pauschale erweitern.
 
 **Als Nächstes geplant:** Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan.
 
