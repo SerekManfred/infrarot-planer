@@ -2,7 +2,7 @@
 
 Eigenständiges TypeScript-Modul für die Fachberechnungen. Läuft unverändert im Browser (offline, PWA) und auf dem Server (Node-CLI, wird vom Backend aufgerufen). Keine Abhängigkeiten zu Web-Framework oder Datenbank.
 
-Stand: Phase 1D (Version 0.4.0) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe; Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`), die Server und Browser (offline) gemeinsam nutzen. Später: Modulauslegung.
+Stand: Phase 1D (Version 0.4.1, Hinweistext Altbau) – Heizlastquellen A (Pauschal), B (Hottgenroth-Übernahme), C (vereinfachte Berechnung) mit Gegenprobe; Objektauswertung mit Vorgaben-Auflösung (`src/objekt.ts`), die Server und Browser (offline) gemeinsam nutzen. Später: Modulauslegung.
 
 ## Befehle
 

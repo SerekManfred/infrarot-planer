@@ -7,7 +7,8 @@
 // Herkunft eines Werts: raum → projekt → vorgabe → rueckfall; theta_e aus den Klimadaten; sonst „fehlt“.
 // Festlegungen Auftraggeber 12.10.2026:
 // - kein automatischer Höhenzuschlag; über der Hinweis-Höhe (2,80 m) nur ein Hinweis zur Pauschale
-// - „sonstiger Bestand“: keine Rückfall- oder Tabellenwerte, die Pauschale ist je Raum Pflichteingabe
+// - „sonstiger Bestand“ (angezeigt als „Altbau (nicht Effizienzhaus)“): keine Rückfall- oder Tabellenwerte,
+//   die Pauschale ist je Raum Pflicht und wird vom Fachprüfer festgelegt (Festlegung 13.10.2026)
 
 import { berechneAuswertung, type AuswertungEingabe, type AuswertungRaumEingabe, type AuswertungRaumErgebnis, type Heizlastquelle } from './auswertung';
 import type { PauschalEingabe } from './pauschal';
@@ -22,7 +23,8 @@ export interface Wert {
 }
 
 export const HINWEIS_SONSTIGER_BESTAND = 'Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.';
-export const PFLICHT_PAUSCHALE_SONSTIGER_BESTAND = 'Eingabe fehlt: Pauschale W/m² für diesen Raum (bei „sonstiger Bestand“ Pflicht)';
+export const PFLICHT_PAUSCHALE_SONSTIGER_BESTAND =
+  'Eingabe fehlt: Pauschale W/m² für diesen Raum – wird bei „Altbau (nicht Effizienzhaus)“ vom Fachprüfer festgelegt';
 
 export function hinweisRaumhoehe(grenzeM: number): string {
   return `Raumhöhe über ${zahlText(grenzeM)} m – Pauschale prüfen und ggf. manuell anpassen.`;
