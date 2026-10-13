@@ -1,6 +1,6 @@
 // Lokale Bearbeitung eines ausgecheckten Projekts. Zahlen sind TESTWERTE.
 import { describe, expect, it } from 'vitest';
-import { ausfuehren, LokalFehler, neuesProjekt, pfadAufloesen, projektFuerPfad, type LokalesProjekt } from '../src/offline/lokal';
+import { ausfuehren, LokalFehler, neuesProjekt, pfadAufloesen, projektFuerPfad, wartetAufFachpruefer, type LokalesProjekt } from '../src/offline/lokal';
 import { paket, vorgaben } from './hilfen';
 
 function lp(): LokalesProjekt {
@@ -55,6 +55,20 @@ describe('ausfuehren', () => {
     p.paket.status = 'geprueft';
     ausfuehren(p, null, 'PATCH', '/raeume/5000', { hoehe_m: 2.6 }, zaehler());
     expect(p.paket.status).toBe('entwurf');
+  });
+
+  it('Altbau wartet auf den Fachprüfer, solange ein Raum keinen W/m²-Wert hat – auch offline', () => {
+    const p = lp();
+    const lesen = () => (ausfuehren(p, null, 'GET', '/projekte/5', undefined, zaehler())!.antwort as { wartet_auf_fachpruefer: boolean }).wartet_auf_fachpruefer;
+    expect(lesen()).toBe(false); // Neubau
+    p.paket.objekte[0].gebaeudestandard = 'sonstiger_bestand';
+    expect(wartetAufFachpruefer(p.paket)).toBe(true);
+    expect(lesen()).toBe(true);
+    ausfuehren(p, null, 'PATCH', '/raeume/5000', { pauschale_w_m2: 99 }, zaehler());
+    expect(lesen()).toBe(false);
+    // neuer Raum ohne Wert: wartet wieder
+    ausfuehren(p, null, 'POST', '/geschosse/500/raeume', { bezeichnung: 'Bad' }, zaehler());
+    expect(lesen()).toBe(true);
   });
 
   it('löscht mit allen Kindern', () => {

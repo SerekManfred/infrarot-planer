@@ -24,6 +24,11 @@ export function hatRolle(b: Benutzer, ...rollen: Rolle[]): boolean {
   return rollen.some((r) => b.rollen.includes(r));
 }
 
+/** Volle Fachansicht (Kontrollrechnung, Fachvorgaben) für Fachprüfer und Admins; der Außendienst sieht die vereinfachte */
+export function fachansicht(b: Benutzer): boolean {
+  return hatRolle(b, 'fachpruefer', 'admin');
+}
+
 export interface Projekt {
   id: number;
   nummer: string;
@@ -43,6 +48,8 @@ export interface Projekt {
   ausgecheckt_am: string | null;
   /** Stand der im Projekt eingefrorenen Fachvorgaben */
   vorgaben_stand_am: string | null;
+  /** Altbau mit Räumen ohne W/m²-Wert: wartet auf den Fachprüfer, gesperrt für Prüfung und Angebot (abgeleitet) */
+  wartet_auf_fachpruefer: boolean;
   erstellt_am: string;
   geaendert_am: string;
 }

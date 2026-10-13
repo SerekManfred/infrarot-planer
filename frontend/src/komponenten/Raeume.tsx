@@ -1,9 +1,13 @@
 // Schnellerfassung vor Ort: Geschoss wählen, Räume als Rechteck (Länge × Breite, Höhe, Raumtyp) erfassen.
-// Fläche und Heizlast erscheinen sofort; Bauteile nur bei Bedarf für die Gegenprobe C.
+// Fläche und Heizlast erscheinen sofort; Bauteile nur bei Bedarf für die Kontrollrechnung (Gegenprobe C).
+// Der Außendienst sieht eine vereinfachte Karte (Raumtyp, Maße, W/m² nur zur Ansicht, Heizlast); Fachprüfer und Admins alles.
 import { useEffect, useState } from 'react';
 import {
   api,
+  fachansicht,
+  hatRolle,
   type Auswertung,
+  type Benutzer,
   type AuswertungRaum,
   type Fachvorgaben,
   type Geschoss,
@@ -12,15 +16,27 @@ import {
   type Raum,
   type Wert,
 } from '../api';
-import { HERKUNFT, prozent, QUELLEN, watt, zahl } from '../texte';
+import {
+  BEGRIFF,
+  GEBAEUDESTANDARDS,
+  HERKUNFT,
+  HILFE,
+  hinweisFuerAussendienst,
+  PAUSCHALE_DURCH_FACHPRUEFER,
+  prozent,
+  QUELLEN,
+  watt,
+  zahl,
+} from '../texte';
 import { Bauteile } from './Bauteile';
-import { Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
+import { Hilfe, Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
 
 interface Props {
   objekt: Objekt;
   vorgaben: Fachvorgaben;
+  benutzer: Benutzer;
   gesperrt: boolean;
   aendern: Aendern;
   stand: number;
@@ -28,7 +44,7 @@ interface Props {
 
 const GESCHOSS_VORSCHLAEGE = ['KG', 'EG', 'OG', 'DG'];
 
-export function Raeume({ objekt, vorgaben, gesperrt, aendern, stand }: Props) {
+export function Raeume({ objekt, vorgaben, benutzer, gesperrt, aendern, stand }: Props) {
   const [geschosse, setGeschosse] = useState<Geschoss[] | null>(null);
   const [aktiv, setAktiv] = useState<number | null>(null);
   const [raeume, setRaeume] = useState<Raum[]>([]);
@@ -118,6 +134,7 @@ export function Raeume({ objekt, vorgaben, gesperrt, aendern, stand }: Props) {
               ergebnis={ergebnisse.get(raum.id)}
               objekt={objekt}
               vorgaben={vorgaben}
+              benutzer={benutzer}
               gesperrt={gesperrt}
               aendern={aendern}
               stand={stand}
@@ -154,6 +171,7 @@ function RaumKarte({
   ergebnis,
   objekt,
   vorgaben,
+  benutzer,
   gesperrt,
   aendern,
   stand,
@@ -162,31 +180,42 @@ function RaumKarte({
   ergebnis: AuswertungRaum | undefined;
   objekt: Objekt;
   vorgaben: Fachvorgaben;
+  benutzer: Benutzer;
   gesperrt: boolean;
   aendern: Aendern;
   stand: number;
 }) {
   const [details, setDetails] = useState(false);
-  const sonstigerBestand = objekt.gebaeudestandard === 'sonstiger_bestand';
+  const altbau = objekt.gebaeudestandard === 'sonstiger_bestand';
+  // Außendienst: vereinfachte Karte; W/m² setzt nur der Fachprüfer (Festlegung 13.10.2026, Server prüft ebenso)
+  const fach = fachansicht(benutzer);
+  const pauschaleGesperrt = gesperrt || !hatRolle(benutzer, 'fachpruefer');
   const speichern = (feld: keyof Raum) => (wert: unknown) => aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert }));
+  const pauschale = ergebnis?.werte.pauschale_w_m2.wert ?? null;
 
   return (
     <article className="karte raum">
       <div className="raum-kopf">
-        <Textfeld wert={raum.bezeichnung} pflicht gesperrt={gesperrt} beschriftung="Raumbezeichnung" onSpeichern={speichern('bezeichnung')} />
-        <select
-          aria-label="Raumtyp"
-          value={raum.raumtyp_id ?? ''}
-          disabled={gesperrt}
-          onChange={(e) => speichern('raumtyp_id')(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">– Raumtyp –</option>
-          {vorgaben.raumtypen.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.bezeichnung}
-            </option>
-          ))}
-        </select>
+        <label>
+          Raum
+          <Textfeld wert={raum.bezeichnung} pflicht gesperrt={gesperrt} beschriftung="Raumbezeichnung" onSpeichern={speichern('bezeichnung')} />
+        </label>
+        <label>
+          Raumtyp
+          <Hilfe begriff="Raumtyp" text={HILFE.raumtyp} />
+          <select
+            value={raum.raumtyp_id ?? ''}
+            disabled={gesperrt}
+            onChange={(e) => speichern('raumtyp_id')(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">– bitte wählen –</option>
+            {vorgaben.raumtypen.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.bezeichnung}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="masse">
@@ -206,57 +235,73 @@ function RaumKarte({
         </span>
         <label>
           Höhe
+          <Hilfe begriff="Höhe" text={HILFE.hoehe} />
           <Zahlfeld wert={raum.hoehe_m} einheit="m" gesperrt={gesperrt} onSpeichern={speichern('hoehe_m')} />
         </label>
-        {sonstigerBestand && (
-          // „sonstiger Bestand“: keine Vorgabe, die Pauschale ist je Raum Pflicht (Festlegung 12.10.2026)
+        {altbau && !pauschaleGesperrt ? (
+          // Altbau: keine Vorgabe, die Pauschale legt der Fachprüfer je Raum fest (Pflicht)
           <label>
             Pauschale (Pflicht)
-            <Zahlfeld
-              wert={raum.pauschale_w_m2}
-              einheit="W/m²"
-              pflicht
-              gesperrt={gesperrt}
-              onSpeichern={speichern('pauschale_w_m2')}
-            />
+            <Hilfe begriff={GEBAEUDESTANDARDS.sonstiger_bestand} text={HILFE.altbau} />
+            <Zahlfeld wert={raum.pauschale_w_m2} einheit="W/m²" pflicht gesperrt={false} onSpeichern={speichern('pauschale_w_m2')} />
           </label>
+        ) : (
+          (altbau || !fach) && (
+            <span className="flaeche">
+              <small>
+                Pauschale
+                <Hilfe begriff="Pauschale" text={altbau ? HILFE.altbau : HILFE.pauschale} />
+              </small>
+              {pauschale !== null ? `${zahl(pauschale, 0)} W/m²` : altbau ? <span className="fehlt-text">{PAUSCHALE_DURCH_FACHPRUEFER}</span> : '–'}
+            </span>
+          )
         )}
       </div>
 
-      <div className="quelle">
-        <span className="feldname">Heizlastquelle</span>
-        <Schalter wert={raum.heizlastquelle} optionen={QUELLEN} gesperrt={gesperrt} onWahl={(q: Heizlastquelle) => speichern('heizlastquelle')(q)} />
-        {raum.heizlastquelle === 'B' && (
-          <label className="inline">
-            Hottgenroth
-            <Zahlfeld wert={raum.hottgenroth_w} einheit="W" gesperrt={gesperrt} onSpeichern={speichern('hottgenroth_w')} />
-          </label>
-        )}
-      </div>
+      {fach && (
+        <div className="quelle">
+          <span className="feldname">
+            Heizlastquelle
+            <Hilfe begriff="Heizlastquelle" text={HILFE.heizlastquelle} />
+          </span>
+          <Schalter wert={raum.heizlastquelle} optionen={QUELLEN} gesperrt={gesperrt} onWahl={(q: Heizlastquelle) => speichern('heizlastquelle')(q)} />
+          {raum.heizlastquelle === 'B' && (
+            <label className="inline">
+              Hottgenroth
+              <Hilfe begriff="Hottgenroth" text={HILFE.hottgenroth} />
+              <Zahlfeld wert={raum.hottgenroth_w} einheit="W" gesperrt={gesperrt} onSpeichern={speichern('hottgenroth_w')} />
+            </label>
+          )}
+        </div>
+      )}
 
-      {ergebnis && <Ergebnis e={ergebnis} />}
+      {ergebnis && (fach ? <Ergebnis e={ergebnis} /> : <ErgebnisEinfach e={ergebnis} />)}
 
-      <button className="aufklapper" onClick={() => setDetails(!details)} aria-expanded={details}>
-        {details ? '▾' : '▸'} Abweichungen und Bauteile (Gegenprobe C)
-      </button>
-      {details && (
+      {fach && (
+        <button className="aufklapper" onClick={() => setDetails(!details)} aria-expanded={details}>
+          {details ? '▾' : '▸'} Abweichungen und Kontrollrechnung (Bauteile)
+        </button>
+      )}
+      {fach && details && (
         <div className="details">
           <div className="raster">
-            {!sonstigerBestand && (
-            <label>
-              Pauschale nur für diesen Raum
-              <Zahlfeld
-                wert={raum.pauschale_w_m2}
-                einheit="W/m²"
-                hervorheben={raum.pauschale_w_m2 !== null}
-                platzhalter={ergebnis && ergebnis.werte.pauschale_w_m2.herkunft !== 'raum' ? zahl(ergebnis.werte.pauschale_w_m2.wert, 0) : ''}
-                gesperrt={gesperrt}
-                onSpeichern={speichern('pauschale_w_m2')}
-              />
-            </label>
+            {!altbau && (
+              <label>
+                Pauschale nur für diesen Raum
+                <Hilfe begriff="Pauschale" text={HILFE.pauschale} />
+                <Zahlfeld
+                  wert={raum.pauschale_w_m2}
+                  einheit="W/m²"
+                  hervorheben={raum.pauschale_w_m2 !== null}
+                  platzhalter={ergebnis && ergebnis.werte.pauschale_w_m2.herkunft !== 'raum' ? zahl(ergebnis.werte.pauschale_w_m2.wert, 0) : ''}
+                  gesperrt={pauschaleGesperrt}
+                  onSpeichern={speichern('pauschale_w_m2')}
+                />
+              </label>
             )}
             <label>
-              Innentemperatur (für C)
+              {BEGRIFF.raumtemperatur}
+              <Hilfe begriff="Raumtemperatur" text={HILFE.raumtemperatur} />
               <Zahlfeld
                 wert={raum.theta_int}
                 einheit="°C"
@@ -267,7 +312,8 @@ function RaumKarte({
               />
             </label>
             <label>
-              Luftwechsel (für C)
+              {BEGRIFF.luftwechsel}
+              <Hilfe begriff="Luftwechsel" text={HILFE.luftwechsel} />
               <Zahlfeld
                 wert={raum.luftwechsel}
                 einheit="1/h"
@@ -279,15 +325,15 @@ function RaumKarte({
             </label>
           </div>
           <Bauteile raum={raum} objekt={objekt} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} stand={stand} />
-          {!gesperrt && (
-            <button
-              className="knopf-gefahr"
-              onClick={() => window.confirm(`Raum „${raum.bezeichnung}“ löschen?`) && aendern(() => api.loeschen(`/raeume/${raum.id}`))}
-            >
-              Raum löschen
-            </button>
-          )}
         </div>
+      )}
+      {!gesperrt && (fach ? details : true) && (
+        <button
+          className="knopf-gefahr"
+          onClick={() => window.confirm(`Raum „${raum.bezeichnung}“ löschen?`) && aendern(() => api.loeschen(`/raeume/${raum.id}`))}
+        >
+          Raum löschen
+        </button>
       )}
     </article>
   );
@@ -307,31 +353,59 @@ function Ergebnis({ e }: { e: AuswertungRaum }) {
   return (
     <div className="ergebnis">
       <div className="hauptwert">
-        <small>Heizlast ({QUELLEN[e.quelle]})</small>
+        <small>
+          Heizlast ({QUELLEN[e.quelle]})
+          <Hilfe begriff="Heizlast" text={HILFE.heizlast} />
+        </small>
         <strong>{watt(e.phi_massgeblich_w)}</strong>
       </div>
       <div className="nebenwerte">
         <span>
           A: {watt(e.phi_a_w)} · {q.wert === null ? '–' : `${zahl(q.wert, 0)} W/m²`} <HerkunftMarke w={q} />
+          <Hilfe begriff="Herkunft des W/m²-Werts" text={HILFE.herkunft} />
         </span>
         {e.phi_b_w !== null && <span>B: {watt(e.phi_b_w)}</span>}
         {e.phi_c_w !== null && (
           <span>
             C: {watt(e.phi_c_w)}
             {e.abweichung_c !== null && (
-              <span className={Math.abs(e.abweichung_c) > 0.2 ? 'abweichung-gross' : ''}> · Abweichung {prozent(e.abweichung_c)}</span>
+              <>
+                <span className={Math.abs(e.abweichung_c) > 0.2 ? 'abweichung-gross' : ''}> · Abweichung {prozent(e.abweichung_c)}</span>
+                <Hilfe begriff="Abweichung" text={HILFE.abweichung} />
+              </>
             )}
           </span>
         )}
       </div>
-      {e.hinweise.length > 0 && (
-        <ul className="hinweise">
-          {e.hinweise.map((h) => (
-            <li key={h}>{h}</li>
-          ))}
-        </ul>
-      )}
+      <Hinweise liste={e.hinweise} />
     </div>
+  );
+}
+
+/** Außendienst: nur die Heizlast und verständliche Hinweise (ohne Quellen A/B/C und Kontrollrechnung) */
+function ErgebnisEinfach({ e }: { e: AuswertungRaum }) {
+  return (
+    <div className="ergebnis">
+      <div className="hauptwert">
+        <small>
+          Heizlast
+          <Hilfe begriff="Heizlast" text={HILFE.heizlast} />
+        </small>
+        <strong>{watt(e.phi_massgeblich_w)}</strong>
+      </div>
+      <Hinweise liste={e.hinweise.map(hinweisFuerAussendienst).filter((h): h is string => h !== null)} />
+    </div>
+  );
+}
+
+function Hinweise({ liste }: { liste: string[] }) {
+  if (liste.length === 0) return null;
+  return (
+    <ul className="hinweise">
+      {liste.map((h) => (
+        <li key={h}>{h}</li>
+      ))}
+    </ul>
   );
 }
 
@@ -342,6 +416,7 @@ function Summe({ auswertung }: { auswertung: Auswertung }) {
     <div className="karte summe">
       <span>
         Summe Raumheizlasten ({summe.raeume_mit_ergebnis} Räume)
+        <Hilfe begriff="Summe Raumheizlasten" text={HILFE.heizlastSumme} />
         <strong>{watt(summe.phi_massgeblich_w)}</strong>
       </span>
       {summe.raeume_ohne_ergebnis > 0 && (

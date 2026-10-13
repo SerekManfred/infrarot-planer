@@ -1,8 +1,8 @@
-// Detaillierte Bauteilmasken eines Raums – nur nötig für die Gegenprobe C.
+// Detaillierte Bauteilmasken eines Raums – nur nötig für die Kontrollrechnung (Gegenprobe C); nur in der Fachansicht.
 import { useEffect, useState } from 'react';
 import { api, type Angrenzung, type Bauteil, type Fachvorgaben, type Flaeche, type Objekt, type Oeffnung, type Raum } from '../api';
-import { ANGRENZUNG } from '../texte';
-import { Meldung, Textfeld, Zahlfeld } from './Felder';
+import { ANGRENZUNG, BEGRIFF, HILFE } from '../texte';
+import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
 
@@ -46,7 +46,10 @@ export function Bauteile({ raum, objekt, vorgaben, gesperrt, aendern, stand }: P
 
   return (
     <div className="bauteile">
-      <h3>Bauteile für die Gegenprobe C</h3>
+      <h3>
+        Bauteile für die Kontrollrechnung (C)
+        <Hilfe begriff="Kontrollrechnung" text={HILFE.kontrollrechnung} />
+      </h3>
       {objekt.klimadaten_id === null && <Meldung art="warnung">Für C fehlen noch die Klimadaten des Gebäudes (Reiter „Projektvorgaben“).</Meldung>}
       {bibliothek.length === 0 && <Meldung art="hinweis">Die Bauteilbibliothek ist leer – U-Werte bitte direkt eingeben oder Bibliothek importieren.</Meldung>}
       {flaechen.map((f) => (
@@ -61,7 +64,8 @@ export function Bauteile({ raum, objekt, vorgaben, gesperrt, aendern, stand }: P
               <BauteilAuswahl bibliothek={bibliothek} wert={f.bauteil_id} gesperrt={gesperrt} onWahl={fl(f.id)('bauteil_id')} />
             </label>
             <label>
-              U-Wert eigener
+              {BEGRIFF.uWert}, eigener
+              <Hilfe begriff="U-Wert" text={HILFE.uWert} />
               <Zahlfeld wert={f.u_wert} einheit="W/m²K" hervorheben={f.u_wert !== null} gesperrt={gesperrt} onSpeichern={fl(f.id)('u_wert')} />
             </label>
             <label>
@@ -70,6 +74,7 @@ export function Bauteile({ raum, objekt, vorgaben, gesperrt, aendern, stand }: P
             </label>
             <label>
               grenzt an
+              <Hilfe begriff="grenzt an" text={HILFE.angrenzung} />
               <select value={f.angrenzung} disabled={gesperrt} onChange={(e) => fl(f.id)('angrenzung')(e.target.value as Angrenzung)}>
                 {(Object.keys(ANGRENZUNG) as Angrenzung[]).map((a) => (
                   <option key={a} value={a}>
@@ -90,13 +95,14 @@ export function Bauteile({ raum, objekt, vorgaben, gesperrt, aendern, stand }: P
                     <option value="">–</option>
                     {vorgaben.raumtypen.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.bezeichnung} {t.reduktionsfaktor === null ? '(f fehlt)' : `(f = ${String(t.reduktionsfaktor).replace('.', ',')})`}
+                        {t.bezeichnung} {t.reduktionsfaktor === null ? '(Korrekturfaktor fehlt)' : `(f = ${String(t.reduktionsfaktor).replace('.', ',')})`}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  Faktor f eigener
+                  {BEGRIFF.korrekturfaktor}, eigener
+                  <Hilfe begriff="Korrekturfaktor angrenzender Raum" text={HILFE.korrekturfaktor} />
                   <Zahlfeld wert={f.f_korrektur} hervorheben={f.f_korrektur !== null} min={-1} gesperrt={gesperrt} onSpeichern={fl(f.id)('f_korrektur')} />
                 </label>
               </>
@@ -114,7 +120,8 @@ export function Bauteile({ raum, objekt, vorgaben, gesperrt, aendern, stand }: P
                 <BauteilAuswahl bibliothek={bibliothek} wert={o.bauteil_id} gesperrt={gesperrt} onWahl={oe(o.id)('bauteil_id')} />
               </label>
               <label>
-                U-Wert eigener
+                {BEGRIFF.uWert}, eigener
+                <Hilfe begriff="U-Wert" text={HILFE.uWert} />
                 <Zahlfeld wert={o.u_wert} einheit="W/m²K" hervorheben={o.u_wert !== null} gesperrt={gesperrt} onSpeichern={oe(o.id)('u_wert')} />
               </label>
               <label>

@@ -22,6 +22,7 @@ import {
   type LokalesProjekt,
   type Methode,
   type ProjektNeuDaten,
+  wartetAufFachpruefer,
 } from './lokal';
 import type { Speicher } from './speicher';
 
@@ -213,7 +214,7 @@ export class OfflineDienst {
     }
     const lokal = this.projekte.map((lp) => {
       const { objekte: _o, ...projekt } = lp.paket;
-      return projekt as Projekt;
+      return { ...projekt, wartet_auf_fachpruefer: wartetAufFachpruefer(lp.paket) } as Projekt;
     });
     const lokaleIds = new Set(this.projekte.map((lp) => aufgeloesteId(lp.id, this.zuordnung)));
     return [...lokal, ...liste.filter((p) => !lokaleIds.has(p.id))];

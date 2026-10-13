@@ -41,6 +41,7 @@ export function paket(): ProjektPaket {
     ausgecheckt_am: '2026-10-10T08:00:00Z',
     // eingefrorene Fachvorgaben des Projekts (beim Anlegen)
     vorgaben_stand_am: '2026-10-10T08:00:00Z',
+    wartet_auf_fachpruefer: false,
     vorgaben_stand: (({ werte, raumtypen, pauschalen }) => ({ werte, raumtypen, pauschalen }))(vorgaben().fachvorgaben),
     erstellt_am: '2026-10-10T08:00:00Z',
     geaendert_am: '2026-10-10T08:00:00Z',

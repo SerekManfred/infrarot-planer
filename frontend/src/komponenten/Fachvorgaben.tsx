@@ -1,8 +1,8 @@
-// Zentrale Fachvorgaben: lesen alle; pflegen Fachprüfer und Admins.
+// Zentrale Fachvorgaben: nur für Fachprüfer und Admins sichtbar und von ihnen gepflegt (der Außendienst sieht die Seite nicht).
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, hatRolle, type Benutzer, type Fachvorgaben, type FachvorgabenWerte, type Gebaeudestandard, type Raumtyp } from '../api';
-import { GEBAEUDESTANDARDS, zahl, zeitpunkt } from '../texte';
-import { Meldung, Textfeld, Zahlfeld } from './Felder';
+import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, zahl, zeitpunkt } from '../texte';
+import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 import { Protokoll } from './Protokoll';
 
 export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
@@ -35,7 +35,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       return api.put('/fachvorgaben/werte', { ...rest, [feld]: wert });
     });
   const standards = Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[];
-  // „sonstiger Bestand“: keine Rückfall- und Tabellenwerte, Pauschale je Raum Pflicht (Festlegung 12.10.2026)
+  // Altbau („sonstiger Bestand“): keine Rückfall- und Tabellenwerte, Pauschale je Raum durch den Fachprüfer (Festlegungen 12./13.10.2026)
   const mitRueckfall = standards.filter((gs): gs is Exclude<Gebaeudestandard, 'sonstiger_bestand'> => gs !== 'sonstiger_bestand');
 
   return (
@@ -54,6 +54,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
           {mitRueckfall.map((gs) => (
             <label key={gs}>
               Rückfallwert {GEBAEUDESTANDARDS[gs]}
+              <Hilfe begriff="Rückfallwert" text={HILFE.rueckfallwert} />
               <Zahlfeld
                 wert={w[`rueckfall_${gs}_w_m2` as const]}
                 einheit="W/m²"
@@ -64,19 +65,25 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
             </label>
           ))}
           <div>
-            <span className="feldname">Rückfallwert {GEBAEUDESTANDARDS.sonstiger_bestand}</span>
-            <small className="leise">keiner – Pauschale je Raum Pflicht</small>
+            <span className="feldname">
+              Rückfallwert {GEBAEUDESTANDARDS.sonstiger_bestand}
+              <Hilfe begriff={GEBAEUDESTANDARDS.sonstiger_bestand} text={HILFE.altbau} />
+            </span>
+            <small className="leise">keiner – der Fachprüfer legt die Pauschale je Raum fest</small>
           </div>
           <label>
             Hinweis „Pauschale prüfen“ ab Raumhöhe
+            <Hilfe begriff="Hinweis ab Raumhöhe" text={HILFE.hinweisHoehe} />
             <Zahlfeld wert={w.hoehe_hinweis_m} einheit="m" platzhalter="kein Hinweis" gesperrt={!darf} onSpeichern={werteSetzen('hoehe_hinweis_m')} />
           </label>
           <label>
-            ΔU_WB (Quelle C)
+            {BEGRIFF.waermebruecken}, nur Kontrollrechnung
+            <Hilfe begriff="Wärmebrückenzuschlag" text={HILFE.waermebruecken} />
             <Zahlfeld wert={w.delta_u_wb} einheit="W/(m²K)" platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={werteSetzen('delta_u_wb')} />
           </label>
           <label className="ganze-breite">
-            Quelle / Festlegung
+            {BEGRIFF.quelle} / Festlegung
+            <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
             <Textfeld wert={w.quelle} gesperrt={!darf} onSpeichern={werteSetzen('quelle')} />
           </label>
         </div>
@@ -84,23 +91,45 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       </div>
 
       <div className="karte">
-        <h2>Raumtypen und Pauschalen (W/m²)</h2>
+        <h2>
+          Raumtypen und Pauschalen (W/m²)
+          <Hilfe begriff="Pauschale" text={HILFE.pauschale} />
+        </h2>
         <p className="leise">
-          Leere Pauschale → Rückfallwert des Gebäudestandards. Für „sonstiger Bestand“ gibt es keine Tabellenwerte (Eingabe je Raum). θint,
-          Luftwechsel und Reduktionsfaktor f werden nur für die Gegenprobe C gebraucht.
+          Leere Pauschale → Rückfallwert des Gebäudestandards. Für „{GEBAEUDESTANDARDS.sonstiger_bestand}“ gibt es keine Tabellenwerte; der
+          Fachprüfer legt die Pauschale je Raum fest. Raumtemperatur, Luftwechsel und Korrekturfaktor werden nur für die Kontrollrechnung
+          gebraucht.
         </p>
         <div className="tabelle-rahmen">
           <table className="tabelle vorgaben">
             <thead>
               <tr>
-                <th>Raumtyp</th>
+                <th>
+                  Raumtyp
+                  <Hilfe begriff="Raumtyp" text={HILFE.raumtyp} />
+                </th>
                 {standards.map((gs) => (
-                  <th key={gs}>{GEBAEUDESTANDARDS[gs]}</th>
+                  <th key={gs}>
+                    {GEBAEUDESTANDARDS[gs]}
+                    <Hilfe begriff={GEBAEUDESTANDARDS[gs]} text={HILFE_GEBAEUDESTANDARD[gs]} />
+                  </th>
                 ))}
-                <th>θint °C</th>
-                <th>n 1/h</th>
-                <th>f</th>
-                <th>Quelle</th>
+                <th>
+                  {BEGRIFF.raumtemperatur}
+                  <Hilfe begriff="Raumtemperatur" text={HILFE.raumtemperatur} />
+                </th>
+                <th>
+                  {BEGRIFF.luftwechsel}
+                  <Hilfe begriff="Luftwechsel" text={HILFE.luftwechsel} />
+                </th>
+                <th>
+                  {BEGRIFF.korrekturfaktor}
+                  <Hilfe begriff="Korrekturfaktor angrenzender Raum" text={HILFE.korrekturfaktor} />
+                </th>
+                <th>
+                  {BEGRIFF.quelle}
+                  <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
+                </th>
                 {darf && <th />}
               </tr>
             </thead>

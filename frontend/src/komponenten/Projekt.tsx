@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   api,
+  fachansicht,
   hatRolle,
   type Benutzer,
   type Gebaeudestandard,
@@ -12,8 +13,8 @@ import {
 } from '../api';
 import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, STATUS, watt, zahl, zeitpunkt } from '../texte';
-import { Meldung, Schalter, Textfeld } from './Felder';
+import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
+import { GebaeudestandardHilfe, Hilfe, Meldung, Schalter, Textfeld } from './Felder';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
 import { Raeume } from './Raeume';
@@ -69,6 +70,10 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
   // Ein anderes Gerät hat das Projekt ausgecheckt: hier nur lesen
   const fremdAusgecheckt = projekt.ausgecheckt_am !== null && !lokal;
   const gesperrt = projekt.status === 'freigegeben' || fremdAusgecheckt;
+  const fach = fachansicht(benutzer);
+  const status_ = statusAnzeige(projekt);
+  // Projektvorgaben (Pauschalen je Projekt, Kontrollrechnung) nur in der Fachansicht
+  const reiterListe = (Object.keys(REITER) as Reiter[]).filter((r) => r !== 'vorgaben' || fach);
 
   function status(neu: Projektstatus) {
     void aendern(() => api.post(`/projekte/${projektId}/status`, { status: neu }));
@@ -84,7 +89,8 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
           <h1>
             {projekt.nummer} · {projekt.bezeichnung}
           </h1>
-          <span className={`status status-${projekt.status}`}>{STATUS[projekt.status]}</span>
+          <span className={`status ${status_.klasse}`}>{status_.text}</span>
+          {projekt.wartet_auf_fachpruefer && <Hilfe begriff="wartet auf Fachprüfer" text={HILFE.wartet} />}
           {projekt.status === 'geprueft' && <small className="leise"> am {zeitpunkt(projekt.geprueft_am)}</small>}
           {projekt.status === 'freigegeben' && <small className="leise"> am {zeitpunkt(projekt.freigegeben_am)}</small>}
         </div>
@@ -92,7 +98,12 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
         {hatRolle(benutzer, 'fachpruefer') && !lokal && !fremdAusgecheckt && (
           <div className="knopfreihe">
             {projekt.status === 'entwurf' && (
-              <button className="knopf" onClick={() => status('geprueft')}>
+              <button
+                className="knopf"
+                disabled={projekt.wartet_auf_fachpruefer}
+                title={projekt.wartet_auf_fachpruefer ? 'Erst bei allen Räumen die W/m²-Pauschale festlegen' : ''}
+                onClick={() => status('geprueft')}
+              >
                 Als fachlich geprüft markieren
               </button>
             )}
@@ -143,7 +154,10 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
           />
         </label>
         <div>
-          <span className="feldname">Gebäudestandard</span>
+          <span className="feldname">
+            Gebäudestandard
+            <GebaeudestandardHilfe />
+          </span>
           <Schalter
             wert={objekt.gebaeudestandard}
             optionen={GEBAEUDESTANDARDS}
@@ -153,17 +167,35 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
         </div>
       </div>
       {objekt.gebaeudestandard === 'sonstiger_bestand' && <Meldung art="warnung">{HINWEIS_SONSTIGER_BESTAND}</Meldung>}
+      {projekt.wartet_auf_fachpruefer && (
+        <Meldung art="hinweis">
+          {hatRolle(benutzer, 'fachpruefer')
+            ? 'Wartet auf Fachprüfer: Bitte bei allen Räumen die W/m²-Pauschale festlegen. Bis dahin kann das Projekt nicht geprüft und nicht angeboten werden.'
+            : `Wartet auf Fachprüfer: ${PAUSCHALE_DURCH_FACHPRUEFER}. Bis dahin ist das Projekt für Angebote gesperrt. Die Räume können Sie wie gewohnt erfassen.`}
+        </Meldung>
+      )}
 
       <div className="reiter" role="tablist">
-        {(Object.keys(REITER) as Reiter[]).map((r) => (
+        {reiterListe.map((r) => (
           <button key={r} role="tab" aria-selected={r === reiter} className={r === reiter ? 'aktiv' : ''} onClick={() => setReiter(r)}>
             {REITER[r]}
           </button>
         ))}
       </div>
 
-      {reiter === 'raeume' && <Raeume objekt={objekt} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} stand={stand} />}
-      {reiter === 'vorgaben' && <Projektvorgaben objekt={objekt} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} stand={stand} />}
+      {reiter === 'raeume' && (
+        <Raeume objekt={objekt} vorgaben={vorgaben} benutzer={benutzer} gesperrt={gesperrt} aendern={aendern} stand={stand} />
+      )}
+      {reiter === 'vorgaben' && fach && (
+        <Projektvorgaben
+          objekt={objekt}
+          vorgaben={vorgaben}
+          gesperrt={gesperrt}
+          pauschaleGesperrt={gesperrt || !hatRolle(benutzer, 'fachpruefer')}
+          aendern={aendern}
+          stand={stand}
+        />
+      )}
       {reiter === 'protokoll' && <Protokoll pfad={`/projekte/${projektId}/protokoll`} stand={stand} />}
     </section>
   );
@@ -261,7 +293,10 @@ function OfflineKarte({
   if (projekt.status === 'freigegeben') return null;
   return (
     <div className="karte offline-karte">
-      <span>Ohne Netz weiterarbeiten? Projekt auf dieses Gerät holen und für andere sperren.</span>
+      <span>
+        Ohne Netz weiterarbeiten? Projekt auf dieses Gerät holen und für andere sperren.
+        <Hilfe begriff="Auschecken" text={HILFE.auschecken} />
+      </span>
       <button className="knopf-zweit" disabled={laeuft || !online} onClick={auschecken}>
         {laeuft ? 'Wird ausgecheckt …' : 'Für Offline-Bearbeitung auschecken'}
       </button>
@@ -289,9 +324,10 @@ function VorgabenStand({
 }) {
   const [offen, setOffen] = useState(false);
   const stand = `Fachvorgaben-Stand des Projekts: ${zeitpunkt(pv.stand_am)}`;
-  if (freigegeben) return <p className="leise klein-text">{stand} (freigegeben, bleibt unverändert)</p>;
-  if (pv.unterschiede === null) return <p className="leise klein-text">{stand} (Vergleich mit den zentralen Vorgaben erst nach dem Einchecken)</p>;
-  if (pv.unterschiede.length === 0) return <p className="leise klein-text">{stand} – entspricht den zentralen Vorgaben</p>;
+  const hilfe = <Hilfe begriff="Fachvorgaben-Stand" text={HILFE.vorgabenStand} />;
+  if (freigegeben) return <p className="leise klein-text">{stand} (freigegeben, bleibt unverändert){hilfe}</p>;
+  if (pv.unterschiede === null) return <p className="leise klein-text">{stand} (Vergleich mit den zentralen Vorgaben erst nach dem Einchecken){hilfe}</p>;
+  if (pv.unterschiede.length === 0) return <p className="leise klein-text">{stand} – entspricht den zentralen Vorgaben{hilfe}</p>;
 
   const a = pv.auswirkung;
   const differenz = a ? a.summe_neu_w - a.summe_alt_w : 0;

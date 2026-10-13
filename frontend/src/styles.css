@@ -137,7 +137,8 @@ tr.inaktiv { color: var(--leise); }
 
 /* Raumkarte */
 .raum-kopf { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.raum-kopf input, .raum-kopf select { margin: 0; font-weight: 600; }
+.raum-kopf label { margin: 0; }
+.raum-kopf input, .raum-kopf select { margin-top: 0.25rem; font-weight: 600; }
 .masse { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.75rem; margin: 0.75rem 0; }
 .masse label { margin: 0; flex: 0 1 130px; }
 .mal { font-size: 1.4rem; color: var(--leise); padding-bottom: 0.6rem; }
@@ -213,3 +214,22 @@ tr.inaktiv { color: var(--leise); }
   .raum-kopf, .kopfdaten { grid-template-columns: 1fr; }
   .kopf-rechts { margin-left: 0; }
 }
+
+/* ── ⓘ-Hilfe neben Fachbegriffen: sichtbar klein, Tippfläche ca. 44 px ── */
+.hilfe { display: inline-block; position: relative; vertical-align: middle; margin-left: 0.3rem; font-weight: 400; }
+.hilfe-knopf {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 50%; color: var(--blau); font-size: 1.05rem; line-height: 1;
+  cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.hilfe-knopf::after { content: ''; position: absolute; inset: -10px; }
+.hilfe-knopf[aria-expanded='true'], .hilfe-knopf:hover { background: var(--blau-hell); }
+.hilfe-knopf:focus-visible { outline: 2px solid var(--blau); outline-offset: 1px; }
+.hilfe-text {
+  position: fixed; z-index: 50; display: block; padding: 0.6rem 0.75rem; border-radius: 8px;
+  background: var(--text); color: #fff; font-size: 0.9rem; font-weight: 400; line-height: 1.4; text-align: left;
+  white-space: normal; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); cursor: default;
+}
+.status-wartet { background: var(--warnung-hell); color: var(--warnung); }
+.hilfe-absatz { display: block; margin-top: 0.4rem; }
+.fehlt-text { color: var(--warnung); font-size: 0.95rem; font-weight: 600; }

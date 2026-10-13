@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RECHENKERN_VERSION } from '@infrarot/rechenkern';
-import { api, ApiFehler, hatRolle, type Benutzer } from './api';
+import { api, ApiFehler, fachansicht, hatRolle, type Benutzer } from './api';
 import { Anmeldung } from './komponenten/Anmeldung';
 import { BenutzerVerwaltung } from './komponenten/Benutzer';
 import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
@@ -81,7 +81,8 @@ export function App() {
   const menue: [string, string, boolean][] = benutzer
     ? [
         ['', 'Projekte', true],
-        ['fachvorgaben', 'Fachvorgaben', true],
+        // Fachvorgaben (Raumtypen und Pauschalen) nur für Fachprüfer und Admins, nicht für den Außendienst
+        ['fachvorgaben', 'Fachvorgaben', fachansicht(benutzer)],
         ['benutzer', 'Benutzer', hatRolle(benutzer, 'admin')],
         ['konto', 'Konto', true],
       ]
@@ -127,7 +128,7 @@ export function App() {
           </>
         )}
         {benutzer && seite === 'projekt' && id && <ProjektSeite key={id} projektId={Number(id)} benutzer={benutzer} />}
-        {benutzer && seite === 'fachvorgaben' && <FachvorgabenSeite benutzer={benutzer} />}
+        {benutzer && seite === 'fachvorgaben' && fachansicht(benutzer) && <FachvorgabenSeite benutzer={benutzer} />}
         {benutzer && seite === 'benutzer' && hatRolle(benutzer, 'admin') && <BenutzerVerwaltung benutzer={benutzer} />}
         {benutzer && seite === 'konto' && <Konto benutzer={benutzer} />}
         {benutzer && !seite && <Projektliste />}

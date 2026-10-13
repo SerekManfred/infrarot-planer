@@ -138,7 +138,11 @@ function flach(art: Art, knoten: Knoten): Record<string, unknown> {
   const { [kinderArt]: _kinder, ...rest } = knoten;
   if (art === 'projekte') {
     // GET /projekte/{id} liefert die Gebäude mit, aber ohne Geschosse
-    return { ...rest, objekte: (knoten.objekte as Knoten[]).map((o) => flach('objekte', o)) };
+    return {
+      ...rest,
+      wartet_auf_fachpruefer: wartetAufFachpruefer(knoten as unknown as ProjektPaket),
+      objekte: (knoten.objekte as Knoten[]).map((o) => flach('objekte', o)),
+    };
   }
   return rest;
 }
@@ -159,6 +163,18 @@ function raumFlaeche(raum: Knoten) {
 function name(knoten: Knoten): string {
   const b = knoten.bezeichnung ?? knoten.nummer;
   return typeof b === 'string' && b ? `„${b}“` : '';
+}
+
+/**
+ * Wie Projekt.wartet_auf_fachpruefer im Backend (app/models.py): Altbau mit mindestens einem Raum ohne W/m²-Wert.
+ * Offline aus dem lokalen Stand berechnet, damit neue Räume den Status sofort ändern.
+ */
+export function wartetAufFachpruefer(paket: ProjektPaket): boolean {
+  return paket.objekte.some(
+    (o) =>
+      o.gebaeudestandard === 'sonstiger_bestand' &&
+      o.geschosse.some((g) => g.raeume.some((r) => r.pauschale_w_m2 === null || r.pauschale_w_m2 === undefined)),
+  );
 }
 
 /** Fachvorgaben, mit denen das Projekt rechnet: sein eingefrorener Stand (sonst der Schnappschuss des Geräts) */
@@ -330,6 +346,7 @@ export function neuesProjekt(
     ausgecheckt_geraet: geraet,
     ausgecheckt_am: jetzt,
     vorgaben_stand_am: vorgaben ? vorgaben.stand : null,
+    wartet_auf_fachpruefer: false,
     vorgaben_stand: vorgaben
       ? { werte: vorgaben.fachvorgaben.werte, raumtypen: vorgaben.fachvorgaben.raumtypen, pauschalen: vorgaben.fachvorgaben.pauschalen }
       : null,

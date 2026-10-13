@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type Gebaeudestandard, type Projekt, type ProjektDetail } from '../api';
 import { gehe } from '../navigation';
 import { useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, STATUS, zeitpunkt } from '../texte';
-import { Meldung, Schalter } from './Felder';
+import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, zeitpunkt } from '../texte';
+import { GebaeudestandardHilfe, Meldung, Schalter } from './Felder';
 
 export function Projektliste() {
   const [projekte, setProjekte] = useState<Projekt[] | null>(null);
@@ -57,7 +57,7 @@ export function Projektliste() {
                   </td>
                   <td>{p.kunde_name}</td>
                   <td>
-                    <span className={`status status-${p.status}`}>{STATUS[p.status]}</span>
+                    <span className={`status ${statusAnzeige(p).klasse}`}>{statusAnzeige(p).text}</span>
                     {lokal.includes(p.id) ? (
                       <span className="sperre eigen">auf diesem Gerät</span>
                     ) : (
@@ -120,9 +120,16 @@ function NeuesProjekt() {
         <input value={ort} onChange={(e) => setOrt(e.target.value)} maxLength={200} />
       </label>
       <div className="ganze-breite">
-        <span className="feldname">Gebäudestandard (Pflicht)</span>
+        <span className="feldname">
+          Gebäudestandard (Pflicht)
+          <GebaeudestandardHilfe />
+        </span>
         <Schalter wert={standard as Gebaeudestandard} optionen={GEBAEUDESTANDARDS} onWahl={setStandard} />
-        {standard === 'sonstiger_bestand' && <Meldung art="warnung">{HINWEIS_SONSTIGER_BESTAND}</Meldung>}
+        {standard === 'sonstiger_bestand' && (
+          <Meldung art="warnung">
+            {HINWEIS_SONSTIGER_BESTAND} {PAUSCHALE_DURCH_FACHPRUEFER}; bis dahin ist das Projekt für Angebote gesperrt.
+          </Meldung>
+        )}
       </div>
       {fehler && <Meldung>{fehler}</Meldung>}
       <button className="knopf" type="submit">
