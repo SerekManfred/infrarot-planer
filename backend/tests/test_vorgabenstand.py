@@ -49,7 +49,10 @@ def test_uebernahme_per_klick_protokolliert(client, projekt, aussendienst, fachp
     _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
     anmelden(client, aussendienst.email)
     vorher = client.get(f"/api/projekte/{pid}").json()["vorgaben_stand_am"]
+    # nur der Fachprüfer übernimmt (Festlegung 13.10.2026)
+    assert client.post(f"/api/projekte/{pid}/vorgaben/uebernehmen").status_code == 403
 
+    anmelden(client, fachpruefer.email)
     v = client.post(f"/api/projekte/{pid}/vorgaben/uebernehmen").json()
     assert v["unterschiede"] == []
     assert v["vorgaben"]["werte"]["rueckfall_neubau_w_m2"] == 50
@@ -57,7 +60,7 @@ def test_uebernahme_per_klick_protokolliert(client, projekt, aussendienst, fachp
     assert _auswertung(client, projekt)["raeume"][0]["phi_massgeblich_w"] == pytest.approx(1000)
 
     eintrag = next(e for e in client.get(f"/api/projekte/{pid}/protokoll").json() if e["aktion"] == "vorgaben_uebernommen")
-    assert eintrag["benutzer_name"] == aussendienst.name
+    assert eintrag["benutzer_name"] == fachpruefer.name
     assert eintrag["aenderungen"]["heizlast_summe_w"] == [900, 1000]
     assert eintrag["aenderungen"]["unterschiede"][0]["neu"] == 50
 
@@ -72,6 +75,7 @@ def test_neuer_raumtyp_und_pauschale_als_unterschied(client, projekt, aussendien
     assert {"bereich": "Pauschale", "bezeichnung": "TESTBAD / Neubau (W/m²)", "alt": None, "neu": 60} in v["unterschiede"]
     # Raumtypen im Projekt erst nach Übernahme
     assert v["vorgaben"]["raumtypen"] == []
+    anmelden(client, fachpruefer.email)
     v = client.post(f"/api/projekte/{projekt['projekt']['id']}/vorgaben/uebernehmen").json()
     assert [t["bezeichnung"] for t in v["vorgaben"]["raumtypen"]] == ["TESTBAD"]
 
@@ -103,6 +107,75 @@ def test_uebernahme_setzt_geprueft_zurueck_und_respektiert_sperre(client, projek
     client.post(f"/api/projekte/{pid}/auschecken", json={"geraet": "Tablet 1"})
     _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=55)
     assert client.post(f"/api/projekte/{pid}/vorgaben/uebernehmen").status_code == 423
+
+
+# ── Neue Vorgaben: nur Fachprüfer entscheidet, bis dahin kein Angebot (Festlegung 13.10.2026) ──
+
+
+def _projekt(client, projekt):  # noqa: F811
+    return client.get(f"/api/projekte/{projekt['projekt']['id']}").json()
+
+
+def test_neue_vorgaben_sperren_angebot_bis_entscheidung(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+    _raum(client, projekt)
+    pid = projekt["projekt"]["id"]
+    p = _projekt(client, projekt)
+    assert (p["vorgaben_offen"], p["angebot_gesperrt"]) == (False, False)
+
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
+    p = _projekt(client, projekt)
+    assert (p["vorgaben_offen"], p["angebot_gesperrt"], p["wartet_auf_fachpruefer"]) == (True, True, False)
+    assert [x["vorgaben_offen"] for x in client.get("/api/projekte").json()] == [True]
+    assert _vorgaben(client, projekt)["offen"] is True
+
+    # Prüfen erst nach der Entscheidung
+    antwort = client.post(f"/api/projekte/{pid}/status", json={"status": "geprueft"})
+    assert antwort.status_code == 409
+    assert "übernehmen oder bewusst ablehnen" in antwort.json()["detail"]
+
+    # Außendienst darf weder übernehmen noch ablehnen
+    anmelden(client, aussendienst.email)
+    assert client.post(f"/api/projekte/{pid}/vorgaben/ablehnen", json={}).status_code == 403
+    assert client.post(f"/api/projekte/{pid}/vorgaben/uebernehmen").status_code == 403
+
+    # Fachprüfer lehnt bewusst ab: Projekt rechnet weiter mit 45 W/m², Sperre entfällt, protokolliert
+    anmelden(client, fachpruefer.email)
+    v = client.post(f"/api/projekte/{pid}/vorgaben/ablehnen", json={"bemerkung": "TESTBEGRÜNDUNG"}).json()
+    assert v["offen"] is False and v["abgelehnt_am"]
+    assert v["unterschiede"][0]["neu"] == 50  # weiter sichtbar, damit der Fachprüfer später doch übernehmen kann
+    assert _auswertung(client, projekt)["summe"]["phi_massgeblich_w"] == pytest.approx(900)
+    p = _projekt(client, projekt)
+    assert (p["vorgaben_offen"], p["angebot_gesperrt"]) == (False, False)
+    eintrag = next(e for e in client.get(f"/api/projekte/{pid}/protokoll").json() if e["aktion"] == "vorgaben_abgelehnt")
+    assert eintrag["benutzer_name"] == fachpruefer.name
+    assert eintrag["aenderungen"]["bemerkung"] == "TESTBEGRÜNDUNG"
+    assert eintrag["aenderungen"]["unterschiede"][0]["neu"] == 50
+    assert client.post(f"/api/projekte/{pid}/status", json={"status": "geprueft"}).status_code == 200
+    assert _projekt(client, projekt)["status"] == "geprueft"  # Ablehnen ändert keine Projektdaten
+
+    # zentral erneut geändert: wieder offen
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=55)
+    assert _projekt(client, projekt)["vorgaben_offen"] is True
+    # nur die Quelle geändert: zählt nicht als neue Vorgabe
+    client.post(f"/api/projekte/{pid}/vorgaben/ablehnen")
+    _werte_setzen(client, fachpruefer, quelle="TESTQUELLE NEU")
+    assert _projekt(client, projekt)["vorgaben_offen"] is False
+
+    # später doch übernommen: Ablehnung erledigt
+    v = client.post(f"/api/projekte/{pid}/vorgaben/uebernehmen").json()
+    assert v["unterschiede"] == [] and v["abgelehnt_am"] is None
+    assert _projekt(client, projekt)["vorgaben_offen"] is False
+
+
+def test_freigegeben_hat_keine_offenen_vorgaben(client, projekt, fachpruefer):  # noqa: F811
+    pid = projekt["projekt"]["id"]
+    anmelden(client, fachpruefer.email)
+    client.post(f"/api/projekte/{pid}/status", json={"status": "geprueft"})
+    client.post(f"/api/projekte/{pid}/status", json={"status": "freigegeben"})
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
+    p = _projekt(client, projekt)
+    assert (p["vorgaben_offen"], p["angebot_gesperrt"]) == (False, False)
+    assert client.post(f"/api/projekte/{pid}/vorgaben/ablehnen").status_code == 409
 
 
 def test_offline_paket_enthaelt_vorgabenstand(client, projekt):  # noqa: F811

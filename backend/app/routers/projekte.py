@@ -5,7 +5,8 @@ löschen dürfen nur Admins. Freigegebene Projekte sind gesperrt (app/projektzug
 Zur Offline-Bearbeitung checkt ein Gerät ein Projekt aus; solange ist es für alle anderen gesperrt.
 Einchecken kann das Gerät selbst; ein Admin kann die Sperre lösen.
 Jedes Projekt rechnet mit seiner Kopie der Fachvorgaben (app/vorgabenstand.py); neue zentrale Werte werden
-nur auf Klick übernommen.
+nur auf Klick übernommen. Übernehmen oder bewusst ablehnen darf nur der Fachprüfer; bis dahin ist kein Angebot
+möglich (Projekt.vorgaben_offen).
 Altbau-Projekte mit Räumen ohne W/m²-Wert „warten auf den Fachprüfer“ (Projekt.wartet_auf_fachpruefer): Sie können
 nicht als geprüft markiert werden und sind damit auch für Angebote gesperrt.
 """
@@ -18,13 +19,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_admin, nur_fachpruefer
 from app.auswertung import objekt_auswerten
-from app.vorgabenstand import mit_texten, schnappschuss, unterschiede
+from app.vorgabenstand import mit_texten, offene_unterschiede, projekt_stand, schnappschuss, unterschiede
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
 from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sperre_hash, sperre_pruefen
 from app.schemas import (
     Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProjektVorgaben,
-    ProtokollLesen, StatusAenderung,
+    ProtokollLesen, StatusAenderung, VorgabenAblehnen,
 )
 
 router = APIRouter(prefix="/projekte", tags=["Projekte"], dependencies=[Depends(aktueller_benutzer)])
@@ -92,6 +93,11 @@ def status_aendern(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Altbau (nicht Effizienzhaus): Erst bei allen Räumen die W/m²-Pauschale festlegen, dann prüfen.",
+        )
+    if daten.status != "entwurf" and projekt.vorgaben_offen:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Die zentralen Fachvorgaben wurden geändert: Erst übernehmen oder bewusst ablehnen, dann prüfen.",
         )
     jetzt = datetime.now(UTC)
     # Ohne Zwischenspeichern, damit der Statuswechsel als ein Protokolleintrag erscheint
@@ -180,36 +186,36 @@ def _auswirkung(db: Session, projekt: Projekt, neu: dict) -> dict:
     return {"summe_alt_w": summe_alt, "summe_neu_w": summe_neu, "raeume": raeume}
 
 
-def _stand(db: Session, projekt: Projekt) -> dict:
-    return projekt.vorgaben_stand or schnappschuss(db)
-
-
 @router.get("/{projekt_id}/vorgaben", response_model=ProjektVorgaben)
 def vorgaben(projekt_id: int, db: Session = Depends(get_db)):
     """Fachvorgaben, mit denen das Projekt rechnet, und Unterschiede zu den aktuellen zentralen Vorgaben.
     Bei freigegebenen Projekten werden keine Unterschiede angeboten – sie bleiben unverändert."""
     projekt = hole_oder_404(db, Projekt, projekt_id)
-    stand = _stand(db, projekt)
+    stand = projekt_stand(db, projekt)
     liste: list[dict] = []
     auswirkung = None
+    offen = False
     if projekt.status != "freigegeben":
         neu = schnappschuss(db)
         liste = unterschiede(stand, neu)
         if liste:
             auswirkung = _auswirkung(db, projekt, neu)
+            offen = bool(offene_unterschiede(db, projekt, neu))
     return ProjektVorgaben(
-        stand_am=projekt.vorgaben_stand_am, vorgaben=mit_texten(stand), unterschiede=liste, auswirkung=auswirkung
+        stand_am=projekt.vorgaben_stand_am, vorgaben=mit_texten(stand), unterschiede=liste, auswirkung=auswirkung,
+        offen=offen, abgelehnt_am=projekt.vorgaben_abgelehnt_am if liste and not offen else None,
     )
 
 
 @router.post("/{projekt_id}/vorgaben/uebernehmen", response_model=ProjektVorgaben)
 def vorgaben_uebernehmen(
-    projekt_id: int, db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)
+    projekt_id: int, db: Session = Depends(get_db), benutzer: Benutzer = Depends(nur_fachpruefer)
 ):
-    """Übernimmt die aktuellen zentralen Fachvorgaben in das Projekt – nur auf ausdrücklichen Klick, protokolliert."""
+    """Übernimmt die aktuellen zentralen Fachvorgaben in das Projekt – nur Fachprüfer, auf ausdrücklichen Klick,
+    protokolliert."""
     projekt = hole_oder_404(db, Projekt, projekt_id)
     bearbeitung_pruefen(db, projekt)  # Sperre, Freigabe (409), geprüft → Entwurf
-    alt = _stand(db, projekt)
+    alt = projekt_stand(db, projekt)
     neu = schnappschuss(db)
     liste = unterschiede(alt, neu)
     if not liste:
@@ -228,7 +234,37 @@ def vorgaben_uebernehmen(
     ))
     projekt.vorgaben_stand = neu
     projekt.vorgaben_stand_am = jetzt
+    projekt.vorgaben_abgelehnt = projekt.vorgaben_abgelehnt_am = None
     projekt.geaendert_am = jetzt
+    db.commit()
+    return vorgaben(projekt_id, db)
+
+
+@router.post("/{projekt_id}/vorgaben/ablehnen", response_model=ProjektVorgaben)
+def vorgaben_ablehnen(
+    projekt_id: int, daten: VorgabenAblehnen | None = None, db: Session = Depends(get_db),
+    benutzer: Benutzer = Depends(nur_fachpruefer),
+):
+    """Der Fachprüfer lehnt die aktuellen zentralen Fachvorgaben für dieses Projekt bewusst ab: Es rechnet weiter mit
+    seinem Stand, und die Angebotssperre entfällt, bis zentral wieder etwas geändert wird. Protokolliert.
+    Die Projektdaten selbst ändern sich nicht; ein geprüftes Projekt bleibt geprüft."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    sperre_pruefen(db, projekt)
+    if projekt.status == "freigegeben":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Freigegebene Projekte bleiben ohnehin unverändert.")
+    neu = schnappschuss(db)
+    liste = offene_unterschiede(db, projekt, neu)
+    if not liste:
+        return vorgaben(projekt_id, db)
+    jetzt = datetime.now(UTC)
+    bemerkung = daten.bemerkung.strip() if daten else ""
+    db.add(Protokoll(
+        zeitpunkt=jetzt, benutzer_id=benutzer.id, projekt_id=projekt.id, objektart="Projekt", objekt_id=projekt.id,
+        aktion="vorgaben_abgelehnt",
+        aenderungen={"unterschiede": liste, **({"bemerkung": bemerkung} if bemerkung else {})},
+    ))
+    projekt.vorgaben_abgelehnt = neu
+    projekt.vorgaben_abgelehnt_am = jetzt
     db.commit()
     return vorgaben(projekt_id, db)
 

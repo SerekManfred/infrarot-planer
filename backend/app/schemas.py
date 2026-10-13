@@ -113,6 +113,10 @@ class ProjektLesen(Lesbar):
     vorgaben_stand_am: datetime | None
     # Altbau mit Räumen ohne W/m²-Wert: wartet auf den Fachprüfer, gesperrt für Prüfung und Angebot
     wartet_auf_fachpruefer: bool
+    # neue zentrale Fachvorgaben, über die der Fachprüfer noch nicht entschieden hat (übernehmen oder ablehnen)
+    vorgaben_offen: bool
+    # kein Angebot möglich: wartet_auf_fachpruefer oder vorgaben_offen
+    angebot_gesperrt: bool
     erstellt_am: datetime
     geaendert_am: datetime
 
@@ -489,5 +493,15 @@ class ProjektVorgaben(BaseModel):
     stand_am: datetime | None
     # gleicher Aufbau wie FachvorgabenGesamt (werte, raumtypen, pauschalen, gebaeudestandards)
     vorgaben: dict
+    # alle Unterschiede zum aktuellen zentralen Stand (auch bewusst abgelehnte)
     unterschiede: list[VorgabenUnterschied]
     auswirkung: VorgabenAuswirkung | None
+    # True: der Fachprüfer muss noch übernehmen oder ablehnen; bis dahin kein Angebot
+    offen: bool = False
+    # wann der Fachprüfer den aktuellen zentralen Stand zuletzt bewusst abgelehnt hat
+    abgelehnt_am: datetime | None = None
+
+
+class VorgabenAblehnen(BaseModel):
+    # Begründung des Fachprüfers, warum das Projekt bei seinem Stand bleibt (optional, protokolliert)
+    bemerkung: str = Field(default="", max_length=500)

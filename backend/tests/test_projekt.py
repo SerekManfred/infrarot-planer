@@ -45,7 +45,7 @@ def _auswertung(client, projekt):
 
 
 def _uebernehmen(client, projekt, benutzer):
-    """Aktuelle zentrale Fachvorgaben ins Projekt übernehmen (wie der Klick in der Oberfläche)."""
+    """Aktuelle zentrale Fachvorgaben ins Projekt übernehmen (wie der Klick in der Oberfläche; nur Fachprüfer)."""
     anmelden(client, benutzer.email)
     antwort = client.post(f"/api/projekte/{projekt['projekt']['id']}/vorgaben/uebernehmen")
     assert antwort.status_code == 200, antwort.text
@@ -90,7 +90,7 @@ def test_quelle_a_rueckfallwert_ohne_raumtyp(client, projekt):
 def test_quelle_a_herkunft_vorgabe_projekt_raum(client, projekt, aussendienst, fachpruefer):
     typ = _raumtyp(client, fachpruefer)
     client.put("/api/fachvorgaben/pauschalen", json={"raumtyp_id": typ["id"], "gebaeudestandard": "neubau", "w_m2": 33, "quelle": "TESTWERT"})
-    _uebernehmen(client, projekt, aussendienst)
+    _uebernehmen(client, projekt, fachpruefer)
     raum = _raum(client, projekt, raumtyp_id=typ["id"])
     assert _auswertung(client, projekt)["raeume"][0]["werte"]["pauschale_w_m2"] == {"wert": 33, "herkunft": "vorgabe"}
 
@@ -230,7 +230,7 @@ def gegenprobe(client, projekt, aussendienst, fachpruefer):
     klima = client.get("/api/bibliotheken/klimadaten").json()[0]
     bauteile = {b["bezeichnung"]: b["id"] for b in client.get("/api/bibliotheken/bauteile").json()}
 
-    _uebernehmen(client, projekt, aussendienst)
+    _uebernehmen(client, projekt, fachpruefer)
     _patch(client, f"/api/objekte/{projekt['objekt']['id']}", {"klimadaten_id": klima["id"]})
     raum = _raum(client, projekt, raumtyp_id=typ["id"])  # 4 × 5 × 2,5 m
     wand = _post(client, f"/api/raeume/{raum['id']}/flaechen", {
@@ -261,7 +261,7 @@ def test_quelle_c_reduktionsfaktor_des_angrenzenden_raumtyps(client, projekt, ge
     # erst nach der Übernahme wirkt der neue Reduktionsfaktor im Projekt
     anmelden(client, aussendienst.email)
     assert _auswertung(client, projekt)["raeume"][0]["phi_c_w"] is None
-    _uebernehmen(client, projekt, aussendienst)
+    _uebernehmen(client, projekt, fachpruefer)
     r = _auswertung(client, projekt)["raeume"][0]
     # Kellerdecke: 20 m² · (1,0 + 0,05) · 0,5 · 30 K = 315 W zusätzlich
     assert r["phi_c_w"] == pytest.approx(509.25 + 315)

@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, object_session, relationship
 
 from app.db import Base
 
@@ -206,6 +206,10 @@ class Projekt(Zeitstempel, Base):
     # Eingefrorene Fachvorgaben: Kopie beim Anlegen, neue zentrale Werte nur per bewusster Übernahme
     vorgaben_stand: Mapped[dict | None] = mapped_column(JsonDaten)
     vorgaben_stand_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Vom Fachprüfer bewusst abgelehnter zentraler Stand: solange zentral nichts Neues dazukommt, gilt die Änderung
+    # als entschieden (Festlegung 13.10.2026, app/vorgabenstand.py)
+    vorgaben_abgelehnt: Mapped[dict | None] = mapped_column(JsonDaten)
+    vorgaben_abgelehnt_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     ersteller: Mapped[Benutzer | None] = relationship(foreign_keys=[ersteller_id])
     ausgecheckt_von: Mapped[Benutzer | None] = relationship(foreign_keys=[ausgecheckt_von_id])
@@ -228,6 +232,22 @@ class Projekt(Zeitstempel, Base):
             for geschoss in objekt.geschosse
             for raum in geschoss.raeume
         )
+
+    @property
+    def vorgaben_offen(self) -> bool:
+        """Zentrale Fachvorgaben haben sich geändert, und der Fachprüfer hat sie weder übernommen noch bewusst abgelehnt.
+        Freigegebene Projekte bleiben unverändert und haben nie offene Vorgaben."""
+        from app.vorgabenstand import offene_unterschiede  # vermeidet Kreisimport (vorgabenstand nutzt die Modelle)
+
+        sitzung = object_session(self)
+        if sitzung is None or self.status == "freigegeben":
+            return False
+        return bool(offene_unterschiede(sitzung, self))
+
+    @property
+    def angebot_gesperrt(self) -> bool:
+        """Kein Angebot, solange der Fachprüfer noch etwas entscheiden muss: Altbau-W/m² oder neue Fachvorgaben."""
+        return self.wartet_auf_fachpruefer or self.vorgaben_offen
 
 
 class Objekt(Zeitstempel, Base):
