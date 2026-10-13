@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D (12.10.2026)
+Stand: Phase 1 Teil D mit Rückmeldung aus dem ersten Praxistest (13.10.2026)
 
 ## Zweck und Beteiligte
 
@@ -8,6 +8,16 @@ Stand: Phase 1 Teil D (12.10.2026)
 - **Energieberatung Serek, Fachprüfer:** pflegt die Fachvorgaben, prüft die Projekte fachlich und gibt sie frei.
 - **Admin:** verwaltet Benutzer und Betrieb, darf Fachvorgaben pflegen, prüft und gibt aber nicht frei.
 - **Rollen sind kombinierbar.** Prüfen und Freigeben erfordert immer die Rolle Fachprüfer. Ein Konto mit Admin + Fachprüfer darf also beides. Festgelegt am 12.10.2026; das Konto serek.manfred@googlemail.com hat Admin + Fachprüfer.
+
+### Bedienung durch den Außendienst (Festlegung 13.10.2026)
+
+Die App wird von Vertriebsmitarbeitern ohne Heizungs-Fachwissen bedient. Daher:
+
+- **Seite „Fachvorgaben“** (Raumtypen und Pauschalen) nur für Fachprüfer und Admins. Der Außendienst sieht sie nicht. Lesend bleibt die Schnittstelle für alle offen, weil das Tablet die Vorgaben zum Offline-Rechnen braucht.
+- **Vereinfachte Raumkarte für den Außendienst:** Raum, Raumtyp, Länge/Breite/Höhe, W/m² (nur Anzeige) und Heizlast. Ausgeblendet sind Heizlastquelle, Kontrollrechnung (Raumtemperatur, Luftwechsel, Korrekturfaktor, Bauteile, U-Werte) und der Reiter „Projektvorgaben“. Hinweise zur Kontrollrechnung entfallen; der Höhen-Hinweis lautet „… – der Fachprüfer prüft die Pauschale.“ Fachprüfer und Admins sehen alles.
+- **W/m²-Pauschalen** (je Raum und je Projekt) setzt nur die Rolle Fachprüfer. Der Server lehnt Änderungen anderer Rollen ab (403); unveränderte Werte im Datensatz stören nicht.
+- **Beschriftungen in Alltagssprache**, Formelzeichen klein dahinter: „Raumtemperatur (θint, °C)“, „Luftwechsel (n, pro Stunde)“, „Korrekturfaktor angrenzender Raum (f)“, „Quelle des Werts“.
+- **ⓘ neben Fachbegriffen:** Antippen zeigt einen kurzen Hilfetext; erneutes Antippen, Tippen daneben oder Esc schließt ihn. Texte zentral in `frontend/src/texte.ts` (`HILFE`).
 
 ## Projektstatus
 
@@ -18,6 +28,7 @@ Vor-Ort-Entwurf ──(Fachprüfer: geprüft)──▶ fachlich geprüft ──(
 ```
 
 - Nur Fachprüfer ändern den Status.
+- **„wartet auf Fachprüfer“** (Festlegung 13.10.2026): Wird angezeigt statt „Vor-Ort-Entwurf“, solange ein Projekt mit Gebäudestandard „Altbau (nicht Effizienzhaus)“ mindestens einen Raum ohne W/m²-Wert hat. Der Status wird aus den Daten abgeleitet, nicht von Hand gesetzt, und gilt auch offline auf dem Tablet. So lange kann das Projekt nicht als geprüft markiert werden und ist damit für Angebote gesperrt. Das künftige Angebotsmodul prüft dafür `wartet_auf_fachpruefer`. Ein Projekt ohne Räume wartet noch nicht.
 - **Fachlich geprüft:** Ändert danach jemand Projektdaten, fällt das Projekt automatisch auf „Vor-Ort-Entwurf“ zurück (die Prüfung gilt nur für den geprüften Stand).
 - **Freigegeben:** Projektdaten sind gesperrt. Zum Ändern setzt ein Fachprüfer das Projekt zurück auf „Vor-Ort-Entwurf“. Bei der Freigabe wird die Auswertung als unveränderliche, versionierte Berechnung gespeichert, damit spätere Änderungen an den Fachvorgaben das freigegebene Ergebnis nicht verändern.
 - Alle Benutzer sehen alle Projekte. Jede Änderung (anlegen, ändern, löschen, Status) wird mit Benutzer, Zeit und alten/neuen Werten protokolliert.
@@ -28,10 +39,10 @@ Vor-Ort-Entwurf ──(Fachprüfer: geprüft)──▶ fachlich geprüft ──(
 |---|---|
 | `neubau` | Neubau |
 | `effizienzhaus_sanierung` | Effizienzhaus-Sanierung |
-| `sonstiger_bestand` | sonstiger Bestand |
+| `sonstiger_bestand` | Altbau (nicht Effizienzhaus), bis 13.10.2026 „sonstiger Bestand“ |
 
-Bei „sonstiger Bestand“ erscheint der Hinweis: **„Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.“** Die Berechnung bleibt möglich.
-Dabei gibt es bewusst **keinen Rückfallwert und keine Tabellenwerte**. Die W/m²-Pauschale ist bei jedem Raum eine **Pflichteingabe**. Ohne sie gibt es für den Raum kein Ergebnis und den Hinweis „Eingabe fehlt: Pauschale W/m² für diesen Raum (bei „sonstiger Bestand“ Pflicht)“.
+Bei „Altbau (nicht Effizienzhaus)“ erscheint der Hinweis: **„Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.“** Die Berechnung bleibt möglich.
+Dabei gibt es bewusst **keinen Rückfallwert und keine Tabellenwerte**. Die W/m²-Pauschale ist bei jedem Raum Pflicht und wird **vom Fachprüfer festgelegt**. Der Außendienst sieht an ihrer Stelle „Pauschale wird vom Fachprüfer festgelegt“, und das Projekt „wartet auf Fachprüfer“ (siehe Projektstatus). Ohne Wert gibt es für den Raum kein Ergebnis. Der Hinweis dazu lautet: „Eingabe fehlt: Pauschale W/m² für diesen Raum – wird bei „Altbau (nicht Effizienzhaus)“ vom Fachprüfer festgelegt“.
 
 ## Heizlastquellen je Raum
 
@@ -49,7 +60,7 @@ Dabei gibt es bewusst **keinen Rückfallwert und keine Tabellenwerte**. Die W/m�
 
 - q = Heizlast-Pauschale in W/m² aus der Tabelle **Raumtyp × Gebäudestandard**.
 - Fehlt der Tabellenwert, gilt der **Rückfallwert** des Gebäudestandards. Festgelegt: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m².
-  - Für „sonstiger Bestand“ gibt es keinen Rückfallwert, die Pauschale wird je Raum eingegeben (siehe oben).
+  - Für „Altbau (nicht Effizienzhaus)“ gibt es keinen Rückfallwert, der Fachprüfer legt die Pauschale je Raum fest (siehe oben).
   - Raumtypen und Pauschalen liefert der Auftraggeber nach. Bis dahin gelten die Rückfallwerte.
 - A_Raum = Länge × Breite (Schnellerfassung) oder direkt eingegebene Fläche.
 - **Kein Höhenzuschlag** (Festlegung 12.10.2026).
@@ -70,7 +81,7 @@ Pflegbar durch Fachprüfer und Admins; jede Änderung wird protokolliert.
 
 | Vorgabe | Ebene | Überschreibbar |
 |---|---|---|
-| Pauschale W/m² je Raumtyp × Gebäudestandard (nicht „sonstiger Bestand“) | zentral | je Projekt (je Raumtyp) und je Raum |
+| Pauschale W/m² je Raumtyp × Gebäudestandard (nicht Altbau) | zentral | je Projekt (je Raumtyp) und je Raum, nur durch Fachprüfer |
 | Rückfallwert W/m² für Neubau und Effizienzhaus-Sanierung | zentral | – |
 | Hinweis ab Raumhöhe (kein Zuschlag) | zentral | – |
 | ΔU_WB | zentral | je Projekt |

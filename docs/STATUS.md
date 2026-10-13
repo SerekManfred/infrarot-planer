@@ -1,6 +1,6 @@
 # Status
 
-Stand: 13.10.2026, Ende Phase 1 Teil D (Festlegungen des Auftraggebers umgesetzt), erste Nutzung durch den Auftraggeber
+Stand: 13.10.2026, Phase 1 Teil D plus Rückmeldung aus dem ersten Praxistest (Bedienung durch den Außendienst)
 
 Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst der MEH, Fachvorgaben und Prüfung durch die Energieberatung Serek. Fachregeln: `docs/FACHKONZEPT.md`. Betrieb und HTTPS: `docs/BETRIEB.md`.
 
@@ -9,7 +9,7 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 | Container | Erreichbar | Zustand |
 |---|---|---|
 | `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `a4d2c8e61f07` (Phase 1D) |
-| `infrarot-backend` (FastAPI + Rechenkern 0.4.0, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
+| `infrarot-backend` (FastAPI + Rechenkern 0.4.1, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
 | `infrarot-frontend` (React-PWA, nginx) | `127.0.0.1:8090`, über Caddy | läuft |
 
 **Öffentlich:** https://ir-planer.mybase-test.de
@@ -27,16 +27,40 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 - Zwei Testprojekte des Auftraggebers: „Test1“ (Entwurf, mit dem Tablet ausgecheckt und wieder eingecheckt) und „Test2“ (fachlich geprüft).
 - Raumtypen: Wohnraum, Küche, Bad, Flur, Technik, Abstell, Schlafen, Kind. Pauschalen Neubau vom Auftraggeber eingetragen: Bad 60, Flur 30, Technik 20, Schlafen 30 W/m². Alle übrigen Raumtypen und alles bei „Effizienzhaus-Sanierung“ nutzen die Rückfallwerte.
 - Fachvorgaben:
-  - Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; „sonstiger Bestand“ bewusst ohne Rückfallwert (Pauschale je Raum Pflicht)
+  - Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; „Altbau (nicht Effizienzhaus)“ bewusst ohne Rückfallwert (Pauschale je Raum durch den Fachprüfer)
   - Hinweis „Pauschale prüfen“ ab Raumhöhe 2,80 m (kein Zuschlag)
   - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
 
+## Neu nach dem ersten Praxistest (13.10.2026)
+
+Die App wird von Vertriebsmitarbeitern ohne Heizungs-Fachwissen bedient. Umgesetzt (Regeln in `docs/FACHKONZEPT.md`):
+
+1. **Fachvorgaben-Seite** (Raumtypen und Pauschalen) nur für Fachprüfer und Admins. Für den Außendienst ist sie weder im Menü noch über die Adresse erreichbar.
+2. **Vereinfachte Raumkarte für den Außendienst:**
+   - sichtbar sind nur Raum, Raumtyp, Länge/Breite/Höhe, W/m² (nur Anzeige) und Heizlast;
+   - ausgeblendet sind Heizlastquelle, Kontrollrechnung, Bauteile/U-Werte und der Reiter „Projektvorgaben“;
+   - „Raum löschen“ steht direkt in der Karte.
+   - Fachprüfer und Admins sehen alles.
+   - W/m² (je Raum und je Projekt) setzt nur die Rolle Fachprüfer. Das prüft auch der Server (403).
+3. **Neue Beschriftungen:**
+   - „sonstiger Bestand“ → „Altbau (nicht Effizienzhaus)“
+   - „Raumtemperatur (θint, °C)“, „Luftwechsel (n, pro Stunde)“, „Korrekturfaktor angrenzender Raum (f)“, „Quelle des Werts“
+   - „Gegenprobe C“ heißt in der Oberfläche „Kontrollrechnung“.
+   - Der interne Schlüssel `sonstiger_bestand` bleibt, die Daten sind unverändert.
+4. **ⓘ neben Fachbegriffen:** Antippen zeigt den Hilfetext, erneutes Antippen oder Tippen daneben schließt ihn. Die Tippfläche ist rund 44 px groß, der Text bleibt auch auf dem Handy im Bild. Alle Texte stehen in `frontend/src/texte.ts` (`HILFE`).
+5. **Altbau: „wartet auf Fachprüfer“:**
+   - Der Außendienst sieht „Pauschale wird vom Fachprüfer festgelegt“.
+   - Solange ein Raum keinen W/m²-Wert hat, zeigt das Projekt den Status „wartet auf Fachprüfer“, in der Liste und im Projekt.
+   - Es kann so lange nicht als geprüft markiert werden und ist damit für Angebote gesperrt.
+   - Der Status wird aus den Daten abgeleitet (Server und Tablet, auch offline). Ein neuer Raum ohne Wert lässt das Projekt wieder warten.
+   - Das Angebotsmodul gibt es noch nicht; es muss beim Bau `wartet_auf_fachpruefer` beachten.
+
 ## Neu in Phase 1D (Festlegungen vom 12.10.2026)
 
 1. **Kein Höhenzuschlag.** Bei Räumen über 2,80 m erscheint nur „Raumhöhe über 2,80 m – Pauschale prüfen und ggf. manuell anpassen.“ Wird die Pauschale für den Raum von Hand gesetzt, verschwindet der Hinweis.
-2. **„sonstiger Bestand“:**
+2. **„sonstiger Bestand“** (seit 13.10.2026 „Altbau (nicht Effizienzhaus)“, Pauschale nur durch den Fachprüfer):
    - kein Rückfallwert und keine Tabellenwerte (der Server lehnt sie ab);
    - die W/m²-Pauschale ist in jeder Raumkarte ein Pflichtfeld, rot markiert, solange es leer ist;
    - dazu der Hinweis, dass Infrarot nicht empfohlen wird.
@@ -81,15 +105,16 @@ Funktionen aus Phase 1B (Rollen, Status, Protokoll, Fachvorgaben, Heizlastquelle
 
 | Bereich | Ergebnis |
 |---|---|
-| Rechenkern (Vitest) | 49 Tests (Höhenzuschlag-Tests ersetzt durch Hinweis- und „sonstiger Bestand“-Tests), Typprüfung fehlerfrei; laufen bei jedem Backend-Build |
-| Backend (pytest, mit echtem Rechenkern) | 62 Tests, davon neu: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
-| Frontend (Vitest) | 27 Tests der Offline-Logik, neu: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
+| Rechenkern (Vitest) | 49 Tests, Typprüfung fehlerfrei; laufen bei jedem Backend-Build. 0.4.1 ändert nur den Hinweistext für Altbau |
+| Backend (pytest, mit echtem Rechenkern) | 67 Tests. Neu am 13.10.: W/m² nur durch Fachprüfer (Außendienst und reiner Admin 403, unveränderte Werte erlaubt), Altbau wartet auf Fachprüfer (ohne Räume nicht, Prüfen gesperrt, nach Festlegung prüfbar, neuer Raum wartet wieder), Neubau wartet nie. Aus Phase 1D: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
+| Frontend (Vitest) | 33 Tests. Neu am 13.10.: „wartet auf Fachprüfer“ offline aus dem lokalen Stand, Statusanzeige, Hinweise für den Außendienst, Beschriftung Altbau. Aus Phase 1C/1D, Offline-Logik: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
 | Migration | Phase 1D auf der echten Datenbank ausgeführt (vorher Sicherung), `alembic check`: Modell und Datenbank stimmen überein |
+| Ende-zu-Ende 13.10.2026 über HTTPS | Mit zwei temporären Konten (Außendienst; Admin + Fachprüfer) 10 von 10 Prüfungen bestanden, Konten und Testprojekt danach entfernt: Altbau ohne Räume wartet nicht, mit Raum ohne W/m² schon; Text „Altbau (nicht Effizienzhaus)“ und Hinweis „vom Fachprüfer festgelegt“ (Rechenkern 0.4.1); Außendienst setzt W/m² nicht (403), ändert aber Maße; Prüfen gesperrt (409); Fachprüfer setzt 120 W/m² → 2 400 W; danach nicht mehr wartend und prüfbar |
 | Ende-zu-Ende Phase 1D über HTTPS | Mit einem temporären Konto geprüft, danach entfernt: Vorgaben-Stand beim Anlegen, 3,20 m hoher Raum → 800 W ohne Zuschlag mit Hinweis, „sonstiger Bestand“ ohne Raumpauschale ohne Ergebnis, mit 120 W/m² → 2 400 W, Außendienst darf nicht prüfen |
 | Caddy | Konfiguration vorab in einem Wegwerf-Container geprüft; Skript lief am 12.10.2026; Schulungsplattform danach weiter per HTTPS erreichbar; Caddy nicht neu gestartet |
 | Ende-zu-Ende Phase 1C über https://ir-planer.mybase-test.de | Mit zwei temporären Konten (Außendienst, Fachprüfer) 16 Prüfungen bestanden, Testkonten und Testdaten danach entfernt. Geprüft wurde: Cookie-Flags, Auschecken, Projektpaket, Schnappschuss, 423 ohne Token, Bearbeiten mit Token, Auswertung (Rechenkern 0.3.0, 4 × 5 m → 800 W mit Rückfallwert), Sperranzeige, 423 für den Fachprüfer bei Änderung, Status, fremdem Token und Einchecken, Einchecken durch das Gerät, 409 für das alte Token, danach Status möglich, Protokoll |
 
-**Nicht automatisiert geprüft:** die Bedienung im echten Tablet-Browser, also Installation, Flugmodus und Statusanzeige. Bitte einmal nach der Anleitung unten durchspielen.
+**Nicht automatisiert geprüft:** die Bedienung im echten Tablet-Browser, also Installation, Flugmodus und Statusanzeige. Neu dazu: das ⓘ und die vereinfachte Raumkarte. Zum Ansehen der Außendienst-Sicht ein Konto nur mit Rolle Außendienst anlegen (Benutzerverwaltung). Bitte einmal nach der Anleitung unten durchspielen.
 
 ## App auf dem Tablet installieren
 
