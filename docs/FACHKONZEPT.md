@@ -28,7 +28,7 @@ Vor-Ort-Entwurf ──(Fachprüfer: geprüft)──▶ fachlich geprüft ──(
 ```
 
 - Nur Fachprüfer ändern den Status.
-- **„wartet auf Fachprüfer“** (Festlegung 13.10.2026): Wird angezeigt statt „Vor-Ort-Entwurf“, solange ein Projekt mit Gebäudestandard „Altbau (nicht Effizienzhaus)“ mindestens einen Raum ohne W/m²-Wert hat. Der Status wird aus den Daten abgeleitet, nicht von Hand gesetzt, und gilt auch offline auf dem Tablet. So lange kann das Projekt nicht als geprüft markiert werden und ist damit für Angebote gesperrt. Das künftige Angebotsmodul prüft dafür `wartet_auf_fachpruefer`. Ein Projekt ohne Räume wartet noch nicht.
+- **„wartet auf Fachprüfer“** (Festlegung 13.10.2026): Wird angezeigt statt „Vor-Ort-Entwurf“, solange ein Projekt mit Gebäudestandard „Altbau (nicht Effizienzhaus)“ mindestens einen Raum ohne W/m²-Wert hat. Dasselbe gilt, solange über neue zentrale Fachvorgaben nicht entschieden ist (siehe „Fachvorgaben je Projekt eingefroren“). Beides zusammen ergibt `angebot_gesperrt`. Der Status wird aus den Daten abgeleitet, nicht von Hand gesetzt, und gilt auch offline auf dem Tablet. So lange kann das Projekt nicht als geprüft markiert werden und ist damit für Angebote gesperrt. Das künftige Angebotsmodul prüft dafür `angebot_gesperrt`. Ein Projekt ohne Räume wartet noch nicht.
 - **Fachlich geprüft:** Ändert danach jemand Projektdaten, fällt das Projekt automatisch auf „Vor-Ort-Entwurf“ zurück (die Prüfung gilt nur für den geprüften Stand).
 - **Freigegeben:** Projektdaten sind gesperrt. Zum Ändern setzt ein Fachprüfer das Projekt zurück auf „Vor-Ort-Entwurf“. Bei der Freigabe wird die Auswertung als unveränderliche, versionierte Berechnung gespeichert, damit spätere Änderungen an den Fachvorgaben das freigegebene Ergebnis nicht verändern.
 - Alle Benutzer sehen alle Projekte. Jede Änderung (anlegen, ändern, löschen, Status) wird mit Benutzer, Zeit und alten/neuen Werten protokolliert.
@@ -100,6 +100,12 @@ Festlegung 12.10.2026:
 - Beim **Anlegen** speichert das Projekt eine Kopie der gültigen Fachvorgaben: Einzelwerte, Raumtypen mit Kennwerten und Pauschalen. Es rechnet nur mit dieser Kopie, auch offline.
 - Ändern sich die zentralen Vorgaben, zeigt das Projekt einen Hinweis mit den **Unterschieden (alt/neu)** und der **Auswirkung auf die Heizlast**: Summe und betroffene Räume.
 - Die neuen Werte werden **nur per bewusstem Klick** übernommen („Neue Vorgaben übernehmen“). Die Übernahme wird mit allen Unterschieden und der Heizlast vorher/nachher protokolliert.
+- **Nur der Fachprüfer entscheidet** (Festlegung 13.10.2026):
+  - Unterschiedsliste und Knöpfe sieht nur die Rolle Fachprüfer. Der Server lehnt Übernehmen und Ablehnen anderer Rollen ab (403).
+  - Der Außendienst sieht stattdessen den Hinweis „Die Fachvorgaben wurden aktualisiert. Der Fachprüfer prüft dieses Projekt vor dem Angebot.“
+  - Der Fachprüfer kann übernehmen oder **bewusst ablehnen** („Ablehnen, bisherige Werte behalten“, Begründung optional). Beim Ablehnen rechnet das Projekt weiter mit seinem Stand. Projektdaten und Status bleiben unverändert, die Ablehnung wird protokolliert.
+  - Abgelehnt wird der jeweilige zentrale Stand. Ändern sich die zentralen Vorgaben danach erneut, ist die Entscheidung wieder offen. Eine reine Änderung der Quellenangabe zählt nicht. Später übernehmen ist weiterhin möglich.
+  - **Solange nicht übernommen oder abgelehnt ist** (`vorgaben_offen`), ist für das Projekt **kein Angebot möglich**. Das Projekt kann so lange nicht als geprüft markiert werden und zeigt im Entwurf „wartet auf Fachprüfer“. Offline gilt der Stand vom Auschecken.
 - Die Übernahme ist eine Änderung am Projekt:
   - Ein geprüftes Projekt fällt dadurch auf „Vor-Ort-Entwurf“ zurück.
   - Bei einem ausgecheckten Projekt geht sie erst nach dem Einchecken.

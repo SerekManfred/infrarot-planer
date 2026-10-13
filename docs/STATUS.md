@@ -8,7 +8,7 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 
 | Container | Erreichbar | Zustand |
 |---|---|---|
-| `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `a4d2c8e61f07` (Phase 1D) |
+| `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `5e8b1c90d4a7` (Vorgaben ablehnen, 13.10.2026) |
 | `infrarot-backend` (FastAPI + Rechenkern 0.4.1, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
 | `infrarot-frontend` (React-PWA, nginx) | `127.0.0.1:8090`, über Caddy | läuft |
 
@@ -32,6 +32,18 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
   - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
+
+## Neu: Entscheidung über neue Fachvorgaben (13.10.2026, zweite Rückmeldung)
+
+1. **Hilfetext „Klimadaten“:** „Auslegungs-Außentemperatur am Standort (Norm-Außentemperatur), ermittelt über die Postleitzahl. Nicht die tiefste je gemessene Temperatur. Nur für die Kontrollrechnung.“
+2. **„Neue Vorgaben übernehmen“ nur für Fachprüfer:**
+   - Unterschiedsliste und Knopf sieht nur die Rolle Fachprüfer.
+   - Der Außendienst sieht nur: „Die Fachvorgaben wurden aktualisiert. Der Fachprüfer prüft dieses Projekt vor dem Angebot.“
+   - Neu ist **„Ablehnen, bisherige Werte behalten“**, mit optionaler Begründung. Die Ablehnung wird protokolliert, Projektdaten und Status bleiben unverändert.
+   - Bis zur Übernahme oder Ablehnung ist für das Projekt **kein Angebot möglich** (`angebot_gesperrt`). Es lässt sich so lange nicht prüfen und zeigt „wartet auf Fachprüfer“.
+   - Ändern sich die zentralen Vorgaben nach einer Ablehnung erneut, ist die Entscheidung wieder offen.
+   - Der Server prüft die Rolle (403).
+   - Datenbank: Migration `5e8b1c90d4a7` mit zwei neuen Spalten am Projekt (abgelehnter Stand und Zeitpunkt).
 
 ## Neu nach dem ersten Praxistest (13.10.2026)
 
@@ -106,9 +118,10 @@ Funktionen aus Phase 1B (Rollen, Status, Protokoll, Fachvorgaben, Heizlastquelle
 | Bereich | Ergebnis |
 |---|---|
 | Rechenkern (Vitest) | 49 Tests, Typprüfung fehlerfrei; laufen bei jedem Backend-Build. 0.4.1 ändert nur den Hinweistext für Altbau |
-| Backend (pytest, mit echtem Rechenkern) | 67 Tests. Neu am 13.10.: W/m² nur durch Fachprüfer (Außendienst und reiner Admin 403, unveränderte Werte erlaubt), Altbau wartet auf Fachprüfer (ohne Räume nicht, Prüfen gesperrt, nach Festlegung prüfbar, neuer Raum wartet wieder), Neubau wartet nie. Aus Phase 1D: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
-| Frontend (Vitest) | 33 Tests. Neu am 13.10.: „wartet auf Fachprüfer“ offline aus dem lokalen Stand, Statusanzeige, Hinweise für den Außendienst, Beschriftung Altbau. Aus Phase 1C/1D, Offline-Logik: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
-| Migration | Phase 1D auf der echten Datenbank ausgeführt (vorher Sicherung), `alembic check`: Modell und Datenbank stimmen überein |
+| Backend (pytest, mit echtem Rechenkern) | 69 Tests. Neu am 13.10. (2. Rückmeldung): Übernehmen und Ablehnen nur Fachprüfer (403), offene Vorgaben sperren Angebot und Prüfen (409), Ablehnung protokolliert mit Begründung, Status bleibt, erneute zentrale Änderung öffnet wieder, reine Quellenänderung nicht, spätere Übernahme hebt Ablehnung auf, freigegeben nie offen. Neu am 13.10. (1. Rückmeldung): W/m² nur durch Fachprüfer (Außendienst und reiner Admin 403, unveränderte Werte erlaubt), Altbau wartet auf Fachprüfer (ohne Räume nicht, Prüfen gesperrt, nach Festlegung prüfbar, neuer Raum wartet wieder), Neubau wartet nie. Aus Phase 1D: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
+| Frontend (Vitest) | 34 Tests. Neu am 13.10.: offene Vorgaben vom Auschecken sperren das Angebot offline, Ablehnen offline erst nach dem Einchecken; „wartet auf Fachprüfer“ offline aus dem lokalen Stand, Statusanzeige, Hinweise für den Außendienst, Beschriftung Altbau. Aus Phase 1C/1D, Offline-Logik: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
+| Migration | `5e8b1c90d4a7` am 13.10.2026 auf der echten Datenbank ausgeführt (vorher Sicherung `infrarot_db_20261013_145403.dump`), `alembic check`: Modell und Datenbank stimmen überein. Ihre Projekte „Test1“ und „Test2“: keine offenen Vorgaben, Angebot möglich |
+| Ende-zu-Ende 13.10.2026 über HTTPS, Vorgaben ablehnen | Mit zwei temporären Konten 10 von 10 Prüfungen bestanden, Konten und Testprojekt danach entfernt. Zentrale Vorgaben wurden dabei nicht verändert, nur der eingefrorene Stand des Testprojekts. Geprüft: Vorgaben offen → Angebot gesperrt; Außendienst übernimmt/lehnt nicht ab (403); Prüfen gesperrt (409); Fachprüfer lehnt ab → rechnet weiter mit dem Projektstand (660 W), Angebot möglich, protokolliert mit Begründung; spätere Übernahme → 800 W |
 | Ende-zu-Ende 13.10.2026 über HTTPS | Mit zwei temporären Konten (Außendienst; Admin + Fachprüfer) 10 von 10 Prüfungen bestanden, Konten und Testprojekt danach entfernt: Altbau ohne Räume wartet nicht, mit Raum ohne W/m² schon; Text „Altbau (nicht Effizienzhaus)“ und Hinweis „vom Fachprüfer festgelegt“ (Rechenkern 0.4.1); Außendienst setzt W/m² nicht (403), ändert aber Maße; Prüfen gesperrt (409); Fachprüfer setzt 120 W/m² → 2 400 W; danach nicht mehr wartend und prüfbar |
 | Ende-zu-Ende Phase 1D über HTTPS | Mit einem temporären Konto geprüft, danach entfernt: Vorgaben-Stand beim Anlegen, 3,20 m hoher Raum → 800 W ohne Zuschlag mit Hinweis, „sonstiger Bestand“ ohne Raumpauschale ohne Ergebnis, mit 120 W/m² → 2 400 W, Außendienst darf nicht prüfen |
 | Caddy | Konfiguration vorab in einem Wegwerf-Container geprüft; Skript lief am 12.10.2026; Schulungsplattform danach weiter per HTTPS erreichbar; Caddy nicht neu gestartet |
