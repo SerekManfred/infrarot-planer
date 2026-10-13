@@ -3,6 +3,7 @@
   python -m app.cli admin-anlegen --email E --name N
   python -m app.cli benutzer-anlegen --email E --name N [--rollen aussendienst,fachpruefer,admin]
   python -m app.cli rollen-setzen --email E --rollen admin,fachpruefer
+  python -m app.cli passwort-setzen --email E
   python -m app.cli benutzer-deaktivieren --email E
   python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
@@ -12,6 +13,7 @@ Das Passwort wird verdeckt abgefragt oder mit --passwort-stdin von der Standarde
 import argparse
 import getpass
 import sys
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,7 +21,7 @@ from sqlalchemy.orm import Session
 from app import protokoll  # noqa: F401  (Änderungen über die Kommandozeile werden ebenfalls protokolliert)
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
-from app.models import ROLLEN, Benutzer
+from app.models import ROLLEN, Anmeldeversuch, Benutzer, Protokoll
 from app.schemas import ROLLEN_REIHENFOLGE
 from app.sicherheit import MIN_PASSWORT_LAENGE, passwort_hashen
 
@@ -67,6 +69,40 @@ def benutzer_anlegen(email: str, name: str, rollen: list[str], von_stdin: bool) 
         db.add(Benutzer(email=email, name=name, rollen=rollen, passwort_hash=passwort_hash))
         db.commit()
     print(f"Benutzer {email} ({', '.join(rollen)}) angelegt.")
+
+
+def passwort_setzen(db: Session, email: str, passwort: str) -> int:
+    """Setzt ein neues Passwort, meldet alle Sitzungen ab und hebt die Anmeldesperre des Kontos auf.
+
+    Die Sperre (app/routers/auth.py) zählt Fehlversuche ab der letzten erfolgreichen Anmeldung; ein Eintrag
+    „erfolgreich“ mit der Kennung „kommandozeile“ setzt den Zähler des Kontos zurück, ohne die Historie zu löschen.
+    Eine Sperre der IP-Adresse bleibt bestehen. Gibt die Zahl der Fehlversuche seit der letzten Anmeldung zurück.
+    """
+    email = email.strip().lower()
+    benutzer = db.scalars(select(Benutzer).where(func.lower(Benutzer.email) == email)).first()
+    if benutzer is None:
+        raise ValueError(f"Benutzer {email} nicht gefunden.")
+    passwort_hash = passwort_hashen(passwort)  # ValueError bei weniger als 12 Zeichen
+
+    jetzt = datetime.now(UTC)
+    letzter_erfolg = db.scalar(select(func.max(Anmeldeversuch.zeitpunkt)).where(
+        Anmeldeversuch.email == email, Anmeldeversuch.erfolgreich.is_(True)))
+    bedingung = [Anmeldeversuch.email == email, Anmeldeversuch.erfolgreich.is_(False)]
+    if letzter_erfolg is not None:
+        bedingung.append(Anmeldeversuch.zeitpunkt > letzter_erfolg)
+    fehlversuche = db.scalar(select(func.count()).where(*bedingung))
+
+    benutzer.passwort_hash = passwort_hash  # protokolliert als „passwort: geändert“ (app/protokoll.py)
+    benutzer.sitzungs_version += 1  # alle Geräte abmelden
+    db.add(Anmeldeversuch(zeitpunkt=jetzt, email=email, ip="kommandozeile", erfolgreich=True))
+    db.add(Protokoll(
+        zeitpunkt=jetzt, benutzer_id=None, projekt_id=None, objektart="Benutzer", objekt_id=benutzer.id,
+        aktion="sperre_aufgehoben",
+        aenderungen={"email": email, "anmeldesperre": "zurückgesetzt", "fehlversuche_vorher": fehlversuche,
+                     "ueber": "Kommandozeile passwort-setzen"},
+    ))
+    db.commit()
+    return fehlversuche
 
 
 def benutzer_deaktivieren(email: str) -> None:
@@ -121,6 +157,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--email", required=True)
     p.add_argument("--rollen", required=True, help="kommagetrennt, z. B. admin,fachpruefer")
 
+    p = befehle.add_parser("passwort-setzen", help="neues Passwort setzen und Anmeldesperre des Kontos aufheben")
+    p.add_argument("--email", required=True)
+    p.add_argument("--passwort-stdin", action="store_true", help="Passwort aus der ersten Zeile von stdin lesen")
+
     p = befehle.add_parser("benutzer-deaktivieren")
     p.add_argument("--email", required=True)
 
@@ -148,6 +188,14 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as fehler:
                 sys.exit(str(fehler))
         print(f"Rollen von {args.email.strip().lower()}: {', '.join(rollen)}")
+    elif args.befehl == "passwort-setzen":
+        with sitzungsfabrik()() as db:
+            try:
+                fehlversuche = passwort_setzen(db, args.email, _passwort(args.passwort_stdin))
+            except ValueError as fehler:
+                sys.exit(str(fehler))
+        print(f"Passwort für {args.email.strip().lower()} gesetzt, alle Sitzungen abgemeldet, "
+              f"Anmeldesperre aufgehoben ({fehlversuche} Fehlversuche seit der letzten Anmeldung).")
     elif args.befehl == "benutzer-deaktivieren":
         benutzer_deaktivieren(args.email)
     elif args.befehl == "email-aendern":

@@ -31,6 +31,10 @@ docker exec -it infrarot-backend python -m app.cli admin-anlegen --email NAME@FI
 # Weitere Benutzer (Rollen kombinierbar, kommagetrennt)
 docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … --name … --rollen aussendienst
 docker exec infrarot-backend python -m app.cli rollen-setzen --email … --rollen admin,fachpruefer
+
+# Passwort neu setzen (verdeckt, zweimal, mind. 12 Zeichen): meldet alle Sitzungen ab,
+# hebt die Anmeldesperre des Kontos auf und protokolliert beides
+docker exec -it infrarot-backend python -m app.cli passwort-setzen --email …
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
 docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
