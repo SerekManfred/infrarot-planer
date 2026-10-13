@@ -50,6 +50,10 @@ export interface Projekt {
   vorgaben_stand_am: string | null;
   /** Altbau mit Räumen ohne W/m²-Wert: wartet auf den Fachprüfer, gesperrt für Prüfung und Angebot (abgeleitet) */
   wartet_auf_fachpruefer: boolean;
+  /** neue zentrale Fachvorgaben, über die der Fachprüfer noch nicht entschieden hat (übernehmen oder ablehnen) */
+  vorgaben_offen: boolean;
+  /** kein Angebot möglich: wartet_auf_fachpruefer oder vorgaben_offen */
+  angebot_gesperrt: boolean;
   erstellt_am: string;
   geaendert_am: string;
 }
@@ -240,8 +244,12 @@ export interface VorgabenUnterschied {
 export interface ProjektVorgaben {
   stand_am: string | null;
   vorgaben: Fachvorgaben;
-  /** null = nicht geprüft (Projekt auf diesem Gerät ausgecheckt) */
+  /** null = nicht geprüft (Projekt auf diesem Gerät ausgecheckt); enthält auch bewusst abgelehnte Unterschiede */
   unterschiede: VorgabenUnterschied[] | null;
+  /** der Fachprüfer muss noch übernehmen oder ablehnen; bis dahin kein Angebot */
+  offen: boolean;
+  /** wann der Fachprüfer den aktuellen zentralen Stand bewusst abgelehnt hat */
+  abgelehnt_am: string | null;
   auswirkung: {
     summe_alt_w: number;
     summe_neu_w: number;

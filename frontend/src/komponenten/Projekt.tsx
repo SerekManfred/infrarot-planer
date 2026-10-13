@@ -13,7 +13,7 @@ import {
 } from '../api';
 import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
+import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
 import { GebaeudestandardHilfe, Hilfe, Meldung, Schalter, Textfeld } from './Felder';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
@@ -90,7 +90,7 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
             {projekt.nummer} · {projekt.bezeichnung}
           </h1>
           <span className={`status ${status_.klasse}`}>{status_.text}</span>
-          {projekt.wartet_auf_fachpruefer && <Hilfe begriff="wartet auf Fachprüfer" text={HILFE.wartet} />}
+          {projekt.angebot_gesperrt && <Hilfe begriff="wartet auf Fachprüfer" text={HILFE.wartet} />}
           {projekt.status === 'geprueft' && <small className="leise"> am {zeitpunkt(projekt.geprueft_am)}</small>}
           {projekt.status === 'freigegeben' && <small className="leise"> am {zeitpunkt(projekt.freigegeben_am)}</small>}
         </div>
@@ -100,8 +100,14 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
             {projekt.status === 'entwurf' && (
               <button
                 className="knopf"
-                disabled={projekt.wartet_auf_fachpruefer}
-                title={projekt.wartet_auf_fachpruefer ? 'Erst bei allen Räumen die W/m²-Pauschale festlegen' : ''}
+                disabled={projekt.angebot_gesperrt}
+                title={
+                  projekt.wartet_auf_fachpruefer
+                    ? 'Erst bei allen Räumen die W/m²-Pauschale festlegen'
+                    : projekt.vorgaben_offen
+                      ? 'Erst die neuen Fachvorgaben übernehmen oder ablehnen'
+                      : ''
+                }
                 onClick={() => status('geprueft')}
               >
                 Als fachlich geprüft markieren
@@ -131,8 +137,11 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
       <VorgabenStand
         pv={projektVorgaben}
         freigegeben={projekt.status === 'freigegeben'}
-        uebernehmbar={!gesperrt && !lokal}
+        fachpruefer={hatRolle(benutzer, 'fachpruefer')}
+        offenLautProjekt={projekt.vorgaben_offen}
+        entscheidbar={!gesperrt && !lokal}
         uebernehmen={() => aendern(() => api.post(`/projekte/${projektId}/vorgaben/uebernehmen`))}
+        ablehnen={(bemerkung) => aendern(() => api.post(`/projekte/${projektId}/vorgaben/ablehnen`, { bemerkung }))}
       />
 
       <div className="karte kopfdaten">
@@ -310,32 +319,48 @@ function wertText(w: number | string | null): string {
   return typeof w === 'number' ? zahl(w, w % 1 === 0 ? 0 : 2) : w;
 }
 
-/** Stand der eingefrorenen Fachvorgaben; bei zentralen Änderungen Unterschiede, Auswirkung und Übernahme per Klick */
+/**
+ * Stand der eingefrorenen Fachvorgaben; bei zentralen Änderungen Unterschiede, Auswirkung und Entscheidung per Klick.
+ * Unterschiede, Übernehmen und Ablehnen nur für Fachprüfer; der Außendienst sieht einen neutralen Hinweis
+ * (Festlegung 13.10.2026). Bis zur Entscheidung ist für das Projekt kein Angebot möglich.
+ */
 function VorgabenStand({
   pv,
   freigegeben,
-  uebernehmbar,
+  fachpruefer,
+  offenLautProjekt,
+  entscheidbar,
   uebernehmen,
+  ablehnen,
 }: {
   pv: ProjektVorgaben;
   freigegeben: boolean;
-  uebernehmbar: boolean;
+  fachpruefer: boolean;
+  /** offline (ohne Vergleich) gilt der Stand vom Auschecken */
+  offenLautProjekt: boolean;
+  entscheidbar: boolean;
   uebernehmen: () => Promise<void>;
+  ablehnen: (bemerkung: string) => Promise<void>;
 }) {
   const [offen, setOffen] = useState(false);
   const stand = `Fachvorgaben-Stand des Projekts: ${zeitpunkt(pv.stand_am)}`;
   const hilfe = <Hilfe begriff="Fachvorgaben-Stand" text={HILFE.vorgabenStand} />;
   if (freigegeben) return <p className="leise klein-text">{stand} (freigegeben, bleibt unverändert){hilfe}</p>;
+  if (!fachpruefer && (pv.offen || offenLautProjekt)) return <Meldung art="hinweis">{HINWEIS_VORGABEN_AKTUALISIERT}</Meldung>;
   if (pv.unterschiede === null) return <p className="leise klein-text">{stand} (Vergleich mit den zentralen Vorgaben erst nach dem Einchecken){hilfe}</p>;
-  if (pv.unterschiede.length === 0) return <p className="leise klein-text">{stand} – entspricht den zentralen Vorgaben{hilfe}</p>;
+  if (pv.unterschiede.length === 0 || !fachpruefer) return <p className="leise klein-text">{stand}{hilfe}</p>;
 
   const a = pv.auswirkung;
   const differenz = a ? a.summe_neu_w - a.summe_alt_w : 0;
   return (
-    <div className="karte vorgaben-aenderung">
+    <div className={`karte vorgaben-aenderung${pv.offen ? '' : ' abgelehnt'}`}>
       <div className="zeile">
         <div>
-          <strong>Die zentralen Fachvorgaben haben sich geändert.</strong>
+          <strong>
+            {pv.offen
+              ? 'Die zentralen Fachvorgaben haben sich geändert. Bis zur Entscheidung ist kein Angebot möglich.'
+              : `Neue zentrale Fachvorgaben am ${zeitpunkt(pv.abgelehnt_am)} bewusst abgelehnt.`}
+          </strong>
           <br />
           <small>
             {stand}. Das Projekt rechnet weiter mit diesem Stand, bis die neuen Werte übernommen werden.
@@ -392,18 +417,34 @@ function VorgabenStand({
           )}
         </>
       )}
-      {uebernehmbar ? (
-        <button
-          className="knopf"
-          onClick={() =>
-            window.confirm('Neue zentrale Fachvorgaben in dieses Projekt übernehmen? Die Heizlast wird neu berechnet; die Übernahme wird protokolliert.') &&
-            void uebernehmen()
-          }
-        >
-          Neue Vorgaben übernehmen
-        </button>
+      {entscheidbar ? (
+        <div className="knopfreihe">
+          <button
+            className={pv.offen ? 'knopf' : 'knopf-zweit'}
+            onClick={() =>
+              window.confirm('Neue zentrale Fachvorgaben in dieses Projekt übernehmen? Die Heizlast wird neu berechnet; die Übernahme wird protokolliert.') &&
+              void uebernehmen()
+            }
+          >
+            Neue Vorgaben übernehmen
+          </button>
+          {pv.offen && (
+            <button
+              className="knopf-zweit"
+              onClick={() => {
+                const bemerkung = window.prompt(
+                  'Neue Vorgaben für dieses Projekt ablehnen? Es rechnet weiter mit seinem bisherigen Stand, und ein Angebot ist wieder möglich.\n\nBegründung (optional, wird protokolliert):',
+                  '',
+                );
+                if (bemerkung !== null) void ablehnen(bemerkung.trim());
+              }}
+            >
+              Ablehnen, bisherige Werte behalten
+            </button>
+          )}
+        </div>
       ) : (
-        <small className="leise">Übernahme nicht möglich, solange das Projekt gesperrt oder auf einem Gerät ausgecheckt ist.</small>
+        <small className="leise">Entscheidung nicht möglich, solange das Projekt gesperrt oder auf einem Gerät ausgecheckt ist.</small>
       )}
     </div>
   );

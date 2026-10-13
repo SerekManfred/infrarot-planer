@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { GEBAEUDESTANDARDS, HILFE, hinweisFuerAussendienst, statusAnzeige } from '../src/texte';
 
 describe('statusAnzeige', () => {
-  it('Entwurf eines Altbaus ohne W/m²-Werte: „wartet auf Fachprüfer“', () => {
-    expect(statusAnzeige({ status: 'entwurf', wartet_auf_fachpruefer: true })).toEqual({ text: 'wartet auf Fachprüfer', klasse: 'status-wartet' });
-    expect(statusAnzeige({ status: 'entwurf', wartet_auf_fachpruefer: false })).toEqual({ text: 'Vor-Ort-Entwurf', klasse: 'status-entwurf' });
-    expect(statusAnzeige({ status: 'freigegeben', wartet_auf_fachpruefer: false }).text).toBe('freigegeben');
+  it('Entwurf mit Angebotssperre (Altbau ohne W/m² oder offene Fachvorgaben): „wartet auf Fachprüfer“', () => {
+    expect(statusAnzeige({ status: 'entwurf', angebot_gesperrt: true })).toEqual({ text: 'wartet auf Fachprüfer', klasse: 'status-wartet' });
+    expect(statusAnzeige({ status: 'entwurf', angebot_gesperrt: false })).toEqual({ text: 'Vor-Ort-Entwurf', klasse: 'status-entwurf' });
+    expect(statusAnzeige({ status: 'freigegeben', angebot_gesperrt: false }).text).toBe('freigegeben');
   });
 });
 

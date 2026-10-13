@@ -18,9 +18,9 @@ export const STATUS: Record<Projektstatus, string> = {
   freigegeben: 'freigegeben',
 };
 
-/** Angezeigter Status: „wartet auf Fachprüfer“ wird aus den Daten abgeleitet (Altbau, Raum ohne W/m²-Wert) */
-export function statusAnzeige(p: Pick<Projekt, 'status' | 'wartet_auf_fachpruefer'>): { text: string; klasse: string } {
-  if (p.status === 'entwurf' && p.wartet_auf_fachpruefer) return { text: 'wartet auf Fachprüfer', klasse: 'status-wartet' };
+/** Angezeigter Status: „wartet auf Fachprüfer“ wird abgeleitet (Altbau-Raum ohne W/m²-Wert oder offene neue Fachvorgaben) */
+export function statusAnzeige(p: Pick<Projekt, 'status' | 'angebot_gesperrt'>): { text: string; klasse: string } {
+  if (p.status === 'entwurf' && p.angebot_gesperrt) return { text: 'wartet auf Fachprüfer', klasse: 'status-wartet' };
   return { text: STATUS[p.status], klasse: `status-${p.status}` };
 }
 
@@ -34,6 +34,9 @@ export const HINWEIS_SONSTIGER_BESTAND =
   'Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.';
 
 export const PAUSCHALE_DURCH_FACHPRUEFER = 'Pauschale wird vom Fachprüfer festgelegt';
+
+/** Für den Außendienst statt Unterschiedsliste und Übernahme-Knopf (Festlegung 13.10.2026) */
+export const HINWEIS_VORGABEN_AKTUALISIERT = 'Die Fachvorgaben wurden aktualisiert. Der Fachprüfer prüft dieses Projekt vor dem Angebot.';
 
 /**
  * Hinweise des Rechenkerns für den Außendienst: Kontrollrechnung ausblenden, die fehlende Altbau-Pauschale steht schon
@@ -90,9 +93,11 @@ export const HILFE = {
   uWert: 'Wie viel Wärme ein Bauteil (Wand, Fenster, Dach) nach außen verliert. Je kleiner der Wert, desto besser gedämmt. Nur für die Kontrollrechnung.',
   waermebruecken:
     'Aufschlag auf alle U-Werte für Wärmeverluste an Ecken, Anschlüssen und Durchdringungen. Nur für die Kontrollrechnung.',
-  klimadaten: 'Tiefste Außentemperatur, mit der am Standort gerechnet wird; ermittelt über die Postleitzahl. Nur für die Kontrollrechnung.',
+  klimadaten:
+    'Auslegungs-Außentemperatur am Standort (Norm-Außentemperatur), ermittelt über die Postleitzahl. Nicht die tiefste je gemessene Temperatur. Nur für die Kontrollrechnung.',
   angrenzung: 'Woran das Bauteil auf der anderen Seite grenzt: Außenluft, Erdreich, einen beheizten oder unbeheizten Raum.',
-  wartet: 'Bei Altbau legt der Fachprüfer die W/m²-Werte fest. Bis dahin kann das Projekt nicht geprüft und nicht angeboten werden.',
+  wartet:
+    'Der Fachprüfer muss noch etwas festlegen: bei Altbau die W/m²-Werte, nach geänderten Fachvorgaben deren Übernahme. Bis dahin kann das Projekt nicht geprüft und nicht angeboten werden.',
   vorgabenStand:
     'Das Projekt rechnet mit den Fachvorgaben vom Tag des Anlegens. Spätere Änderungen gelten erst nach „Neue Vorgaben übernehmen“.',
   auschecken: 'Projekt auf dieses Gerät holen, damit es ohne Internet bearbeitet werden kann. Andere können es so lange nicht ändern.',

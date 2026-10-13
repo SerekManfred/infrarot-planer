@@ -134,6 +134,17 @@ describe('ausfuehren', () => {
     expect(v.vorgaben.werte.rueckfall_neubau_w_m2).toBe(45);
     expect(v.vorgaben.gebaeudestandards.neubau).toBe('Neubau');
     expect(() => ausfuehren(lp(), null, 'POST', '/projekte/5/vorgaben/uebernehmen', {}, zaehler())).toThrow(/Einchecken/);
+    expect(() => ausfuehren(lp(), null, 'POST', '/projekte/5/vorgaben/ablehnen', {}, zaehler())).toThrow(/Einchecken/);
+  });
+
+  it('offene Fachvorgaben vom Auschecken sperren das Angebot auch offline', () => {
+    const p = lp();
+    const lesen = () => ausfuehren(p, null, 'GET', '/projekte/5', undefined, zaehler())!.antwort as { angebot_gesperrt: boolean };
+    expect(lesen().angebot_gesperrt).toBe(false);
+    p.paket.vorgaben_offen = true;
+    expect(lesen().angebot_gesperrt).toBe(true);
+    const v = ausfuehren(p, null, 'GET', '/projekte/5/vorgaben', undefined, zaehler())!.antwort as { offen: boolean };
+    expect(v.offen).toBe(true);
   });
 
   it('ohne Fachvorgaben keine Auswertung, Statuswechsel nicht lokal, Protokoll ans Netz', () => {

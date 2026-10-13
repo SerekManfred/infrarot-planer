@@ -140,7 +140,7 @@ function flach(art: Art, knoten: Knoten): Record<string, unknown> {
     // GET /projekte/{id} liefert die Gebäude mit, aber ohne Geschosse
     return {
       ...rest,
-      wartet_auf_fachpruefer: wartetAufFachpruefer(knoten as unknown as ProjektPaket),
+      ...abgeleitet(knoten as unknown as ProjektPaket),
       objekte: (knoten.objekte as Knoten[]).map((o) => flach('objekte', o)),
     };
   }
@@ -175,6 +175,15 @@ export function wartetAufFachpruefer(paket: ProjektPaket): boolean {
       o.gebaeudestandard === 'sonstiger_bestand' &&
       o.geschosse.some((g) => g.raeume.some((r) => r.pauschale_w_m2 === null || r.pauschale_w_m2 === undefined)),
   );
+}
+
+/**
+ * Abgeleitete Kennzeichen wie im Backend. Ob neue zentrale Vorgaben offen sind, weiß nur der Server; offline gilt der
+ * Stand vom Auschecken (vorgaben_offen im Paket).
+ */
+export function abgeleitet(paket: ProjektPaket): Pick<ProjektPaket, 'wartet_auf_fachpruefer' | 'angebot_gesperrt'> {
+  const wartet = wartetAufFachpruefer(paket);
+  return { wartet_auf_fachpruefer: wartet, angebot_gesperrt: wartet || paket.vorgaben_offen };
 }
 
 /** Fachvorgaben, mit denen das Projekt rechnet: sein eingefrorener Stand (sonst der Schnappschuss des Geräts) */
@@ -271,11 +280,18 @@ export function ausfuehren(
     const fv = projektStand(lp.paket, vorgaben);
     if (!fv) throw new LokalFehler(503, 'Fachvorgaben sind auf diesem Gerät noch nicht gespeichert – bitte einmal online öffnen.');
     // Vergleich mit den zentralen Vorgaben macht der Server – erst nach dem Einchecken
-    const antwort: ProjektVorgaben = { stand_am: lp.paket.vorgaben_stand_am, vorgaben: fv, unterschiede: null, auswirkung: null };
+    const antwort: ProjektVorgaben = {
+      stand_am: lp.paket.vorgaben_stand_am,
+      vorgaben: fv,
+      unterschiede: null,
+      auswirkung: null,
+      offen: lp.paket.vorgaben_offen,
+      abgelehnt_am: null,
+    };
     return { antwort, eintrag: null };
   }
-  if (art === 'projekte' && unterpfad === 'vorgaben/uebernehmen') {
-    throw new LokalFehler(409, 'Neue Fachvorgaben können erst nach dem Einchecken übernommen werden.');
+  if (art === 'projekte' && (unterpfad === 'vorgaben/uebernehmen' || unterpfad === 'vorgaben/ablehnen')) {
+    throw new LokalFehler(409, 'Über neue Fachvorgaben wird erst nach dem Einchecken entschieden.');
   }
   if (art === 'projekte' && unterpfad === 'status') {
     throw new LokalFehler(409, 'Statuswechsel erst, nachdem das Projekt eingecheckt ist.');
@@ -347,6 +363,8 @@ export function neuesProjekt(
     ausgecheckt_am: jetzt,
     vorgaben_stand_am: vorgaben ? vorgaben.stand : null,
     wartet_auf_fachpruefer: false,
+    vorgaben_offen: false,
+    angebot_gesperrt: false,
     vorgaben_stand: vorgaben
       ? { werte: vorgaben.fachvorgaben.werte, raumtypen: vorgaben.fachvorgaben.raumtypen, pauschalen: vorgaben.fachvorgaben.pauschalen }
       : null,

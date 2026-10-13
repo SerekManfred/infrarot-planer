@@ -172,6 +172,8 @@ tr.inaktiv { color: var(--leise); }
 .vorgaben-aenderung .zeile { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
 .vorgaben-aenderung .tabelle { margin: 0.75rem 0; }
 .vorgaben-aenderung .knopf { margin-top: 0.5rem; }
+.vorgaben-aenderung.abgelehnt { border: 1px solid var(--rand); background: #fff; }
+.vorgaben-aenderung .knopfreihe .knopf-zweit { margin-top: 0.5rem; }
 .auswirkung { margin: 0.25rem 0 0.5rem; padding-left: 1.2rem; }
 .klein-text { font-size: 0.85rem; margin: 0 0 0.5rem; }
 
