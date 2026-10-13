@@ -78,7 +78,7 @@ def pauschale_setzen(daten: PauschaleSetzen, db: Session = Depends(get_db)):
     if daten.gebaeudestandard == "sonstiger_bestand":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Für „sonstiger Bestand“ gibt es keine Tabellenwerte – die Pauschale wird je Raum eingegeben.",
+            "Für „Altbau (nicht Effizienzhaus)“ gibt es keine Tabellenwerte – der Fachprüfer legt die Pauschale je Raum fest.",
         )
     eintrag = db.scalars(select(HeizlastPauschale).where(
         HeizlastPauschale.raumtyp_id == daten.raumtyp_id,

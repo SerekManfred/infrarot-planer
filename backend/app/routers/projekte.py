@@ -6,6 +6,8 @@ Zur Offline-Bearbeitung checkt ein Gerät ein Projekt aus; solange ist es für a
 Einchecken kann das Gerät selbst; ein Admin kann die Sperre lösen.
 Jedes Projekt rechnet mit seiner Kopie der Fachvorgaben (app/vorgabenstand.py); neue zentrale Werte werden
 nur auf Klick übernommen.
+Altbau-Projekte mit Räumen ohne W/m²-Wert „warten auf den Fachprüfer“ (Projekt.wartet_auf_fachpruefer): Sie können
+nicht als geprüft markiert werden und sind damit auch für Angebote gesperrt.
 """
 import secrets
 from datetime import UTC, datetime
@@ -86,6 +88,11 @@ def status_aendern(
     sperre_pruefen(db, projekt)
     if (projekt.status, daten.status) not in UEBERGAENGE:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Statuswechsel {projekt.status} → {daten.status} nicht erlaubt")
+    if daten.status != "entwurf" and projekt.wartet_auf_fachpruefer:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Altbau (nicht Effizienzhaus): Erst bei allen Räumen die W/m²-Pauschale festlegen, dann prüfen.",
+        )
     jetzt = datetime.now(UTC)
     # Ohne Zwischenspeichern, damit der Statuswechsel als ein Protokolleintrag erscheint
     with db.no_autoflush:

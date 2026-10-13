@@ -13,7 +13,7 @@ Heizlastquelle = Literal["A", "B", "C"]
 GEBAEUDESTANDARD_TEXT = {
     "neubau": "Neubau",
     "effizienzhaus_sanierung": "Effizienzhaus-Sanierung",
-    "sonstiger_bestand": "sonstiger Bestand",
+    "sonstiger_bestand": "Altbau (nicht Effizienzhaus)",
 }
 
 
@@ -111,6 +111,8 @@ class ProjektLesen(Lesbar):
     ausgecheckt_am: datetime | None
     # Stand der eingefrorenen Fachvorgaben (beim Anlegen bzw. bei der letzten Übernahme)
     vorgaben_stand_am: datetime | None
+    # Altbau mit Räumen ohne W/m²-Wert: wartet auf den Fachprüfer, gesperrt für Prüfung und Angebot
+    wartet_auf_fachpruefer: bool
     erstellt_am: datetime
     geaendert_am: datetime
 

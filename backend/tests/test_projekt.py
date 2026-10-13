@@ -94,6 +94,8 @@ def test_quelle_a_herkunft_vorgabe_projekt_raum(client, projekt, aussendienst, f
     raum = _raum(client, projekt, raumtyp_id=typ["id"])
     assert _auswertung(client, projekt)["raeume"][0]["werte"]["pauschale_w_m2"] == {"wert": 33, "herkunft": "vorgabe"}
 
+    # W/m² setzt nur der Fachprüfer
+    anmelden(client, fachpruefer.email)
     _patch(client, f"/api/objekte/{projekt['objekt']['id']}", {"pauschale_abweichungen": {str(typ["id"]): 36}})
     assert _auswertung(client, projekt)["raeume"][0]["werte"]["pauschale_w_m2"] == {"wert": 36, "herkunft": "projekt"}
 
@@ -121,22 +123,79 @@ def test_sonstiger_bestand_pauschale_je_raum_pflicht(client, aussendienst, fachp
     r = a["raeume"][0]
     assert r["phi_massgeblich_w"] is None
     assert r["werte"]["pauschale_w_m2"]["herkunft"] == "fehlt"
-    assert r["hinweise"] == ["Eingabe fehlt: Pauschale W/m² für diesen Raum (bei „sonstiger Bestand“ Pflicht)"]
+    assert r["hinweise"] == ["Eingabe fehlt: Pauschale W/m² für diesen Raum – wird bei „Altbau (nicht Effizienzhaus)“ vom Fachprüfer festgelegt"]
     assert a["vorgaben"]["rueckfall_w_m2"] == {"wert": None, "herkunft": "fehlt"}
 
+    anmelden(client, fachpruefer.email)
     _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 110})
     r = client.get(f"/api/objekte/{objekt_id}/auswertung").json()["raeume"][0]
     assert r["phi_massgeblich_w"] == pytest.approx(2200)
     assert r["hinweise"] == []
 
 
-def test_hohe_raeume_nur_hinweis_kein_zuschlag(client, projekt):
+# ── W/m² nur durch Fachprüfer, Altbau wartet auf Fachprüfer (Festlegung 13.10.2026) ──
+
+
+def test_pauschale_setzt_nur_fachpruefer(client, projekt, aussendienst, fachpruefer, admin):
+    raum = _raum(client, projekt)
+    objekt_url = f"/api/objekte/{projekt['objekt']['id']}"
+    for benutzer in (aussendienst, admin):
+        anmelden(client, benutzer.email)
+        antwort = client.patch(f"/api/raeume/{raum['id']}", json={"pauschale_w_m2": 50})
+        assert antwort.status_code == 403
+        assert "Fachprüfer" in antwort.json()["detail"]
+        assert client.patch(objekt_url, json={"pauschale_abweichungen": {"1": 50}}).status_code == 403
+        antwort = client.post(f"/api/geschosse/{projekt['geschoss']['id']}/raeume", json={"bezeichnung": "X", "pauschale_w_m2": 50})
+        assert antwort.status_code == 403
+    # andere Felder und unveränderte Werte bleiben erlaubt (z. B. wenn das Tablet den ganzen Datensatz schickt)
+    anmelden(client, aussendienst.email)
+    _patch(client, f"/api/raeume/{raum['id']}", {"laenge_m": 6, "pauschale_w_m2": None})
+    _patch(client, objekt_url, {"pauschale_abweichungen": {}})
+
+    anmelden(client, fachpruefer.email)
+    assert _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 50})["pauschale_w_m2"] == 50
+    assert _patch(client, objekt_url, {"pauschale_abweichungen": {"1": 44}})["pauschale_abweichungen"] == {"1": 44}
+
+
+def test_altbau_wartet_auf_fachpruefer(client, aussendienst, fachpruefer):
+    anmelden(client, aussendienst.email)
+    p = _post(client, "/api/projekte", {"nummer": "A-1", "bezeichnung": "Altbau", "gebaeudestandard": "sonstiger_bestand"})
+    assert p["wartet_auf_fachpruefer"] is False  # noch keine Räume
+    objekt_id = p["objekte"][0]["id"]
+    geschoss = _post(client, f"/api/objekte/{objekt_id}/geschosse", {"bezeichnung": "EG"})
+    raum = _post(client, f"/api/geschosse/{geschoss['id']}/raeume", {"bezeichnung": "Wohnen", "laenge_m": 4, "breite_m": 5})
+    assert client.get(f"/api/projekte/{p['id']}").json()["wartet_auf_fachpruefer"] is True
+    assert [x["wartet_auf_fachpruefer"] for x in client.get("/api/projekte").json()] == [True]
+
+    # Prüfen (und damit Freigabe und Angebot) erst, wenn der Fachprüfer die Werte gesetzt hat
+    anmelden(client, fachpruefer.email)
+    antwort = client.post(f"/api/projekte/{p['id']}/status", json={"status": "geprueft"})
+    assert antwort.status_code == 409
+    assert "W/m²" in antwort.json()["detail"]
+    _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 120})
+    assert client.get(f"/api/projekte/{p['id']}").json()["wartet_auf_fachpruefer"] is False
+    assert client.post(f"/api/projekte/{p['id']}/status", json={"status": "geprueft"}).status_code == 200
+
+    # neuer Raum ohne Wert: wartet wieder (und das Projekt fällt auf Entwurf zurück)
+    anmelden(client, aussendienst.email)
+    _post(client, f"/api/geschosse/{geschoss['id']}/raeume", {"bezeichnung": "Bad", "laenge_m": 2, "breite_m": 2})
+    p = client.get(f"/api/projekte/{p['id']}").json()
+    assert (p["status"], p["wartet_auf_fachpruefer"]) == ("entwurf", True)
+
+
+def test_neubau_wartet_nie(client, projekt):
+    _raum(client, projekt)
+    assert client.get(f"/api/projekte/{projekt['projekt']['id']}").json()["wartet_auf_fachpruefer"] is False
+
+
+def test_hohe_raeume_nur_hinweis_kein_zuschlag(client, projekt, fachpruefer):
     raum = _raum(client, projekt, hoehe_m=3.4)
     r = _auswertung(client, projekt)["raeume"][0]
     assert r["phi_a_w"] == pytest.approx(45 * 20)
     assert r["hinweise"] == ["Raumhöhe über 2,90 m – Pauschale prüfen und ggf. manuell anpassen."]
     assert "hoehenzuschlag_faktor" not in (r["pauschal"] or {})
-    # nach manueller Anpassung kein Hinweis mehr
+    # nach manueller Anpassung (durch den Fachprüfer) kein Hinweis mehr
+    anmelden(client, fachpruefer.email)
     _patch(client, f"/api/raeume/{raum['id']}", {"pauschale_w_m2": 50})
     r = _auswertung(client, projekt)["raeume"][0]
     assert r["phi_a_w"] == pytest.approx(50 * 20)

@@ -217,6 +217,18 @@ class Projekt(Zeitstempel, Base):
             return None
         return self.ausgecheckt_von.name if self.ausgecheckt_von else "gelöschter Benutzer"
 
+    @property
+    def wartet_auf_fachpruefer(self) -> bool:
+        """Altbau (nicht Effizienzhaus): Die W/m²-Pauschale legt je Raum der Fachprüfer fest (Festlegung 13.10.2026).
+        Solange bei einem Raum der Wert fehlt, wartet das Projekt auf den Fachprüfer und ist für Angebote gesperrt.
+        Abgeleitet, nicht gespeichert – gleiche Regel offline in frontend/src/offline/lokal.ts."""
+        return any(
+            raum.pauschale_w_m2 is None
+            for objekt in self.objekte if objekt.gebaeudestandard == "sonstiger_bestand"
+            for geschoss in objekt.geschosse
+            for raum in geschoss.raeume
+        )
+
 
 class Objekt(Zeitstempel, Base):
     """Gebäude bzw. Wohneinheit, für die gerechnet wird. Trägt auch die projektbezogenen Abweichungen von den Fachvorgaben."""
