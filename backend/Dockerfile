@@ -31,5 +31,6 @@ USER root
 COPY backend/requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY backend/tests ./tests
+COPY daten ./daten
 USER infrarot
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]

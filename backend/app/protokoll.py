@@ -10,14 +10,14 @@ from sqlalchemy import event, func, inspect, insert, update
 from sqlalchemy.orm import Session
 
 from app.models import (
-    BibBauteil, BibKlimadaten, BibRaumtyp, Bauteilflaeche, Benutzer, Berechnung, Fachvorgaben, Geschoss,
-    HeizlastPauschale, Objekt, Oeffnung, Projekt, Protokoll, Raum,
+    BibBauteil, BibKlimadaten, BibModul, BibRaumtyp, Bauteilflaeche, Benutzer, Berechnung, Fachvorgaben, Geschoss,
+    HeizlastPauschale, Objekt, Oeffnung, Platzierungsregel, Projekt, Protokoll, Raum,
 )
 from app.projektzugriff import projekt_id_von
 
 PROTOKOLLIERT = (
     Benutzer, Projekt, Objekt, Geschoss, Raum, Bauteilflaeche, Oeffnung, Berechnung,
-    BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten,
+    BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten, Platzierungsregel, BibModul,
 )
 # vorgaben_stand(_am), vorgaben_abgelehnt(_am): eigene, lesbare Einträge „vorgaben_uebernommen“ und
 # „vorgaben_abgelehnt“ (app/routers/projekte.py)
@@ -79,10 +79,15 @@ def _protokollieren(session: Session, _flush_kontext) -> None:
             if aktion == "geaendert" and not aenderungen:
                 continue
             identitaet = inspect(obj).identity
+            objekt_id = identitaet[0] if identitaet else None
+            if objekt_id is not None and not isinstance(objekt_id, int):
+                # Text-Schlüssel (Platzierungsregel): im Eintrag statt in objekt_id
+                aenderungen = {"schluessel": objekt_id, **aenderungen}
+                objekt_id = None
             projekt_id = projekt_id_von(session, obj)
             zeilen.append({
                 "zeitpunkt": jetzt, "benutzer_id": benutzer_id, "projekt_id": projekt_id,
-                "objektart": type(obj).__name__, "objekt_id": identitaet[0] if identitaet else None,
+                "objektart": type(obj).__name__, "objekt_id": objekt_id,
                 "aktion": aktion, "aenderungen": aenderungen,
             })
             if projekt_id is not None and not (aktion == "geloescht" and isinstance(obj, Projekt)):

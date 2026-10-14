@@ -7,6 +7,7 @@
   python -m app.cli benutzer-deaktivieren --email E
   python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
+  python -m app.cli excel-importieren [--probelauf] [--umbenennen ALT=NEU ...] < DATEI.xlsx
 
 Das Passwort wird verdeckt abgefragt oder mit --passwort-stdin von der Standardeingabe gelesen.
 """
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 from app import protokoll  # noqa: F401  (Änderungen über die Kommandozeile werden ebenfalls protokolliert)
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
+from app.excel_import import ImportFehler, importiere_excel
 from app.models import ROLLEN, Anmeldeversuch, Benutzer, Protokoll
 from app.schemas import ROLLEN_REIHENFOLGE
 from app.sicherheit import MIN_PASSWORT_LAENGE, passwort_hashen
@@ -141,6 +143,26 @@ def bibliothek_importieren(art: str, datei: str) -> None:
     print(f"{art}: {neu} neu, {aktualisiert} aktualisiert.")
 
 
+def excel_importieren(db: Session, inhalt: bytes, umbenennen: list[str], probelauf: bool) -> str:
+    """Importdatei des Auftraggebers (app/excel_import.py). Probelauf: Bericht zeigen, nichts speichern."""
+    paare = {}
+    for eintrag in umbenennen:
+        alt, _, neu = eintrag.partition("=")
+        if not alt.strip() or not neu.strip():
+            raise ValueError(f"--umbenennen erwartet ALT=NEU, nicht {eintrag!r}")
+        paare[alt.strip()] = neu.strip()
+    try:
+        bericht = importiere_excel(db, inhalt, paare)
+    except ImportFehler as fehler:
+        db.rollback()
+        raise ValueError("Nichts importiert. Fehler:\n  " + "\n  ".join(fehler.fehler)) from None
+    if probelauf:
+        db.rollback()
+        return "PROBELAUF – nichts gespeichert\n" + bericht.text()
+    db.commit()
+    return bericht.text()
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Verwaltung Infrarot-Planer")
     befehle = parser.add_subparsers(dest="befehl", required=True)
@@ -171,6 +193,11 @@ def main(argv: list[str] | None = None) -> None:
     p = befehle.add_parser("bibliothek-importieren")
     p.add_argument("art", choices=sorted(FORMATE))
     p.add_argument("datei")
+
+    p = befehle.add_parser("excel-importieren", help="Importdatei (Raumtypen, Platzierungsregeln, Modulkatalog) von stdin")
+    p.add_argument("--umbenennen", action="append", default=[], metavar="ALT=NEU",
+                   help="vorhandenen Raumtyp einem Namen in der Datei zuordnen (mehrfach möglich)")
+    p.add_argument("--probelauf", action="store_true", help="nur prüfen und Bericht zeigen, nichts speichern")
 
     args = parser.parse_args(argv)
     if args.befehl == "admin-anlegen":
@@ -205,6 +232,12 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as fehler:
                 sys.exit(str(fehler))
         print(f"E-Mail geändert: {args.alt.strip().lower()} → {args.neu.strip().lower()}")
+    elif args.befehl == "excel-importieren":
+        with sitzungsfabrik()() as db:
+            try:
+                print(excel_importieren(db, sys.stdin.buffer.read(), args.umbenennen, args.probelauf))
+            except ValueError as fehler:
+                sys.exit(str(fehler))
     else:
         bibliothek_importieren(args.art, args.datei)
 

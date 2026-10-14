@@ -1,8 +1,8 @@
 """Datenmodell.
 
 Hierarchie: Projekt → Objekt (Gebäude) → Geschoss → Raum → Bauteilfläche → Öffnung.
-Fachvorgaben (Pauschalen, Rückfallwerte, Höhenzuschlag, ΔU_WB, Raumtyp-Kennwerte) werden von Fachprüfern gepflegt;
-Bibliotheken (Bauteile, Klimadaten) per CSV-Import. Nichts wird mit erfundenen Werten vorbelegt.
+Fachvorgaben (Pauschalen, Rückfallwerte, Hinweis-Höhe, ΔU_WB, Raumtyp-Kennwerte, Platzierungsregeln) werden von
+Fachprüfern gepflegt; Bibliotheken (Bauteile, Klimadaten, Modulkatalog) per Import. Nichts wird mit erfundenen Werten vorbelegt.
 Berechnungen speichern Eingaben und Ergebnis unveränderlich und sind je Objekt fortlaufend versioniert.
 Jede Änderung landet im Protokoll (app/protokoll.py).
 """
@@ -127,6 +127,8 @@ class BibRaumtyp(Zeitstempel, Base):
     quelle: Mapped[str] = mapped_column(String(500), default="")
     bemerkung: Mapped[str] = mapped_column(Text, default="")
     reihenfolge: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Nur Orientierung für den Fachprüfer bei Altbau (nicht Effizienzhaus); wird nie automatisch verwendet
+    richtwert_altbau_w_m2: Mapped[float | None] = mapped_column(Float, comment="Richtwert W/m² Altbau, nur Anzeige")
 
 
 class HeizlastPauschale(Zeitstempel, Base):
@@ -163,6 +165,49 @@ class Fachvorgaben(Zeitstempel, Base):
     hoehe_hinweis_m: Mapped[float | None] = mapped_column(Float, comment="Raumhöhe in m, ab der ein Hinweis erscheint")
     delta_u_wb: Mapped[float | None] = mapped_column(Float, comment="W/(m²·K), für Quelle C")
     quelle: Mapped[str] = mapped_column(Text, default="")
+
+
+class Platzierungsregel(Zeitstempel, Base):
+    """Regel für die Platzierung der Deckenmodule (feste Liste in app/platzierungsregeln.py). Leer = „Vorgabe fehlt“."""
+
+    __tablename__ = "platzierungsregel"
+
+    schluessel: Mapped[str] = mapped_column(String(50), primary_key=True)
+    bezeichnung: Mapped[str] = mapped_column(String(200))
+    wert: Mapped[float | None] = mapped_column(Float, comment="Zahlenwert (cm, m, %)")
+    wert_text: Mapped[str] = mapped_column(String(200), default="", comment="ja/nein oder Text")
+    einheit: Mapped[str] = mapped_column(String(50), default="")
+    erlaeuterung: Mapped[str] = mapped_column(Text, default="")
+    quelle: Mapped[str] = mapped_column(String(500), default="")
+    reihenfolge: Mapped[int] = mapped_column(default=0)
+
+
+class BibModul(Zeitstempel, Base):
+    """Infrarot-Deckenmodul aus dem Modulkatalog. Fehlende Preise/Montagezeiten bleiben leer (nicht geschätzt)."""
+
+    __tablename__ = "bib_modul"
+    __table_args__ = (
+        CheckConstraint("leistung_w > 0", name="ck_bib_modul_leistung"),
+        CheckConstraint("laenge_mm > 0 AND breite_mm > 0", name="ck_bib_modul_masse"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    artikel_nr: Mapped[str] = mapped_column(String(50), unique=True)
+    bezeichnung: Mapped[str] = mapped_column(String(300))
+    leistung_w: Mapped[float] = mapped_column(Float)
+    laenge_mm: Mapped[float] = mapped_column(Float)
+    breite_mm: Mapped[float] = mapped_column(Float)
+    bauhoehe_mm: Mapped[float | None] = mapped_column(Float)
+    gewicht_kg: Mapped[float | None] = mapped_column(Float)
+    schutzart: Mapped[str] = mapped_column(String(10), default="", comment="z. B. IP44")
+    bad_geeignet: Mapped[bool] = mapped_column(default=False)
+    oberflaeche: Mapped[str] = mapped_column(String(300), default="")
+    ek_netto: Mapped[float | None] = mapped_column(Float, comment="€")
+    vk_netto: Mapped[float | None] = mapped_column(Float, comment="€")
+    montagezeit_min: Mapped[float | None] = mapped_column(Float)
+    quelle: Mapped[str] = mapped_column(String(500))
+    bemerkung: Mapped[str] = mapped_column(Text, default="")
+    aktiv: Mapped[bool] = mapped_column(default=True, comment="inaktive Module werden nicht mehr vorgeschlagen")
 
 
 class BibKlimadaten(Zeitstempel, Base):
@@ -315,6 +360,12 @@ class Raum(Zeitstempel, Base):
     pauschale_w_m2: Mapped[float | None] = mapped_column(Float, comment="überschreibt die Pauschale, W/m²")
     theta_int: Mapped[float | None] = mapped_column(Float, comment="überschreibt den Raumtyp, °C")
     luftwechsel: Mapped[float | None] = mapped_column(Float, comment="überschreibt den Raumtyp, 1/h")
+    # Draufsicht der Decke (Festlegung 14.10.2026), Maße in m ab der linken oberen Raumecke; Aufbau in app/schemas.py
+    sperrflaechen: Mapped[list] = mapped_column(JsonDaten, default=list, server_default="[]")
+    module: Mapped[list] = mapped_column(
+        JsonDaten, default=list, server_default="[]",
+        comment="platzierte Module mit Kopie der Katalogdaten, damit Katalogänderungen den Plan nicht verändern",
+    )
 
     geschoss: Mapped[Geschoss] = relationship(back_populates="raeume")
     raumtyp: Mapped[BibRaumtyp | None] = relationship()

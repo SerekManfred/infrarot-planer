@@ -7,16 +7,18 @@ from sqlalchemy.orm import Session, selectinload
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, vorgaben_pflege
 from app.auswertung import fachvorgaben_laden
 from app.db import get_db
-from app.models import BibRaumtyp, Fachvorgaben, HeizlastPauschale, Protokoll
+from app.models import BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Protokoll
 from app.routers.projekte import protokoll_lesen
 from app.schemas import (
     GEBAEUDESTANDARD_TEXT, FachvorgabenGesamt, FachvorgabenLesen, FachvorgabenWerte, PauschaleLesen,
-    PauschaleSetzen, ProtokollLesen, RaumtypAenderung, RaumtypLesen, RaumtypNeu,
+    PauschaleSetzen, ProtokollLesen, RaumtypAenderung, RaumtypLesen, RaumtypNeu, RegelAenderung, RegelLesen,
 )
 
 router = APIRouter(prefix="/fachvorgaben", tags=["Fachvorgaben"], dependencies=[Depends(aktueller_benutzer)])
 
-VORGABEN_OBJEKTARTEN = ("Fachvorgaben", "BibRaumtyp", "HeizlastPauschale", "BibBauteil", "BibKlimadaten")
+VORGABEN_OBJEKTARTEN = (
+    "Fachvorgaben", "BibRaumtyp", "HeizlastPauschale", "Platzierungsregel", "BibBauteil", "BibKlimadaten", "BibModul",
+)
 
 
 @router.get("", response_model=FachvorgabenGesamt)
@@ -28,8 +30,22 @@ def lesen(db: Session = Depends(get_db)):
         werte=FachvorgabenLesen.model_validate(werte),
         raumtypen=db.scalars(select(BibRaumtyp).order_by(BibRaumtyp.reihenfolge, BibRaumtyp.bezeichnung)).all(),
         pauschalen=db.scalars(select(HeizlastPauschale)).all(),
+        regeln=db.scalars(select(Platzierungsregel).order_by(Platzierungsregel.reihenfolge)).all(),
         gebaeudestandards=GEBAEUDESTANDARD_TEXT,
     )
+
+
+@router.patch("/regeln/{schluessel}", response_model=RegelLesen, dependencies=[Depends(vorgaben_pflege)])
+def regel_aendern(schluessel: str, daten: RegelAenderung, db: Session = Depends(get_db)):
+    """Wert und Quelle einer Platzierungsregel ändern (die Liste der Regeln ist fest)."""
+    regel = db.get(Platzierungsregel, schluessel)
+    if regel is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Platzierungsregel {schluessel} nicht gefunden")
+    for name, wert in daten.model_dump(exclude_unset=True).items():
+        setattr(regel, name, "" if wert is None and name != "wert" else wert)
+    db.commit()
+    db.refresh(regel)
+    return regel
 
 
 @router.put("/werte", response_model=FachvorgabenLesen, dependencies=[Depends(vorgaben_pflege)])

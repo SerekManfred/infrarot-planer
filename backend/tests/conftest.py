@@ -13,7 +13,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Benutzer, Fachvorgaben
+from app.models import Benutzer, Fachvorgaben, Platzierungsregel
+from app.platzierungsregeln import REGELN
 from app.sicherheit import passwort_hashen
 
 TEST_PASSWORT = "test-passwort-123"
@@ -31,6 +32,11 @@ def db():
             id=1, rueckfall_neubau_w_m2=45, rueckfall_effizienzhaus_sanierung_w_m2=75,
             hoehe_hinweis_m=2.9, delta_u_wb=0.05, quelle="TESTWERT",
         ))
+        # Wie nach der Migration: alle Platzierungsregeln ohne Wert („Vorgabe fehlt“)
+        sitzung.add_all(
+            Platzierungsregel(schluessel=r.schluessel, bezeichnung=r.bezeichnung, einheit=r.einheit, reihenfolge=i)
+            for i, r in enumerate(REGELN)
+        )
         sitzung.commit()
         yield sitzung
     engine.dispose()

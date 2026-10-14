@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.abhaengigkeiten import aktueller_benutzer, vorgaben_pflege
 from app.csv_import import importiere
 from app.db import get_db
-from app.models import BibBauteil, BibKlimadaten
-from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen
+from app.models import BibBauteil, BibKlimadaten, BibModul
+from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, ModulLesen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
 
@@ -27,6 +27,12 @@ def klimadaten(plz: str | None = None, db: Session = Depends(get_db)):
     if plz:
         abfrage = abfrage.where(BibKlimadaten.plz == plz)
     return db.scalars(abfrage.limit(500)).all()
+
+
+@router.get("/module", response_model=list[ModulLesen])
+def module(db: Session = Depends(get_db)):
+    """Modulkatalog (Deckenmodule), auch inaktive – die Oberfläche schlägt nur aktive vor."""
+    return db.scalars(select(BibModul).order_by(BibModul.leistung_w, BibModul.artikel_nr)).all()
 
 
 @router.post("/{art}/import", response_model=ImportBericht, dependencies=[Depends(vorgaben_pflege)])

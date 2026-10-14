@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.abhaengigkeiten import aktueller_benutzer
 from app.db import get_db
 from app.models import (
-    Bauteilflaeche, BibBauteil, BibKlimadaten, BibRaumtyp, Fachvorgaben, Geschoss, HeizlastPauschale, Objekt,
-    Projekt, Raum,
+    Bauteilflaeche, BibBauteil, BibKlimadaten, BibModul, BibRaumtyp, Fachvorgaben, Geschoss, HeizlastPauschale,
+    Objekt, Platzierungsregel, Projekt, Raum,
 )
 from app.routers.fachvorgaben import lesen as fachvorgaben_lesen
 from app.schemas import OfflineVorgaben, ProjektPaket
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/offline", tags=["Offline"], dependencies=[Depends(ak
 def vorgaben(db: Session = Depends(get_db)):
     # Stand = jüngste Änderung an Vorgaben oder Bibliotheken (zur Anzeige auf dem Gerät)
     zeiten = [
-        z for m in (Fachvorgaben, BibRaumtyp, HeizlastPauschale, BibBauteil, BibKlimadaten)
+        z for m in (Fachvorgaben, BibRaumtyp, HeizlastPauschale, Platzierungsregel, BibBauteil, BibKlimadaten, BibModul)
         if (z := db.scalar(select(func.max(m.geaendert_am)))) is not None
     ]
     stand = max((z if z.tzinfo else z.replace(tzinfo=UTC) for z in zeiten), default=datetime.now(UTC))
@@ -30,6 +30,7 @@ def vorgaben(db: Session = Depends(get_db)):
         fachvorgaben=fachvorgaben_lesen(db),
         bauteile=db.scalars(select(BibBauteil).order_by(BibBauteil.kategorie, BibBauteil.bezeichnung)).all(),
         klimadaten=db.scalars(select(BibKlimadaten).order_by(BibKlimadaten.plz, BibKlimadaten.ort)).all(),
+        module=db.scalars(select(BibModul).where(BibModul.aktiv).order_by(BibModul.leistung_w, BibModul.artikel_nr)).all(),
     )
 
 

@@ -14,11 +14,15 @@ und werden über ihre ID verwendet.
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BibRaumtyp, Fachvorgaben, HeizlastPauschale, Projekt
+from app.models import BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Projekt
 from app.schemas import GEBAEUDESTANDARD_TEXT
 
 WERTE = ("rueckfall_neubau_w_m2", "rueckfall_effizienzhaus_sanierung_w_m2", "hoehe_hinweis_m", "delta_u_wb", "quelle")
-RAUMTYP_FELDER = ("id", "bezeichnung", "theta_int", "luftwechsel", "reduktionsfaktor", "quelle", "bemerkung", "reihenfolge")
+RAUMTYP_FELDER = (
+    "id", "bezeichnung", "theta_int", "luftwechsel", "reduktionsfaktor", "quelle", "bemerkung", "reihenfolge",
+    "richtwert_altbau_w_m2",
+)
+REGEL_FELDER = ("schluessel", "bezeichnung", "wert", "wert_text", "einheit", "quelle")
 
 WERTE_TEXT = {
     "rueckfall_neubau_w_m2": "Rückfallwert Neubau (W/m²)",
@@ -46,6 +50,11 @@ def schnappschuss(db: Session) -> dict:
         "pauschalen": [
             {"raumtyp_id": p.raumtyp_id, "gebaeudestandard": p.gebaeudestandard, "w_m2": p.w_m2, "quelle": p.quelle}
             for p in db.scalars(select(HeizlastPauschale).order_by(HeizlastPauschale.raumtyp_id, HeizlastPauschale.gebaeudestandard))
+        ],
+        # Platzierungsregeln (Festlegung 14.10.2026): ebenfalls je Projekt eingefroren
+        "regeln": [
+            {n: getattr(r, n) for n in REGEL_FELDER}
+            for r in db.scalars(select(Platzierungsregel).order_by(Platzierungsregel.reihenfolge))
         ],
     }
 
@@ -104,4 +113,20 @@ def unterschiede(alt: dict, neu: dict) -> list[dict]:
             neu_eintrag(
                 "Pauschale", f"{namen.get(raumtyp, f'Raumtyp {raumtyp}')} / {GEBAEUDESTANDARD_TEXT[standard]} (W/m²)", a, n
             )
+
+    # Platzierungsregeln: ältere Projektstände haben noch keine (alles „neu“); Quellen zählen nicht
+    r_alt = {r["schluessel"]: r for r in alt.get("regeln", [])}
+    for r in neu.get("regeln", []):
+        vorher = r_alt.get(r["schluessel"])
+        a = _regelwert(vorher) if vorher else None
+        n = _regelwert(r)
+        if a != n:
+            neu_eintrag("Platzierungsregel", f"{r['bezeichnung']}" + (f" ({r['einheit']})" if r["einheit"] else ""), a, n)
     return ergebnis
+
+
+def _regelwert(regel: dict) -> float | str | None:
+    """Zahl oder Text einer Regel für den Vergleich; leer = None („Vorgabe fehlt“)."""
+    if regel.get("wert") is not None:
+        return regel["wert"]
+    return regel.get("wert_text") or None

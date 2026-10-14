@@ -216,6 +216,43 @@ class GeschossLesen(Lesbar):
 
 # ── Raum ────────────────────────────────────────────────────────────────────
 
+# Draufsicht der Decke (Festlegung 14.10.2026): Maße in m ab der linken oberen Raumecke; x entlang der Raumlänge,
+# y entlang der Raumbreite. IDs vergibt das Gerät (auch offline), daher Text.
+SperrflaecheTyp = Literal[
+    "sitzplatz", "bett", "hochschrank", "dachschraege", "dusche", "sonstiges", "leuchte", "rauchmelder"
+]
+
+
+class Sperrflaeche(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    typ: SperrflaecheTyp
+    # Rechteck: linke obere Ecke und Ausdehnung; Leuchte/Rauchmelder: Punkt (b = t = 0)
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+    b: float = Field(default=0, ge=0, le=100)
+    t: float = Field(default=0, ge=0, le=100)
+    # nur Dachschräge: Wand, an der der Streifen liegt
+    wand: Literal["oben", "unten", "links", "rechts"] | None = None
+    bezeichnung: str = Field(default="", max_length=100)
+
+
+class ModulPlatziert(BaseModel):
+    """Platziertes Modul mit Kopie der Katalogdaten (Stand bei der Auswahl)."""
+
+    id: str = Field(min_length=1, max_length=40)
+    modul_id: int | None = None
+    artikel_nr: str = Field(max_length=50)
+    bezeichnung: str = Field(max_length=300)
+    leistung_w: float = Field(gt=0)
+    laenge_m: float = Field(gt=0, le=10)
+    breite_m: float = Field(gt=0, le=10)
+    schutzart: str = Field(default="", max_length=10)
+    bad_geeignet: bool = False
+    # linke obere Ecke; gedreht = False: Modullänge entlang der Raumlänge (x)
+    x: float = Field(ge=-10, le=100)
+    y: float = Field(ge=-10, le=100)
+    gedreht: bool = False
+
 
 class RaumNeu(BaseModel):
     bezeichnung: str = Field(min_length=1, max_length=200)
@@ -230,6 +267,8 @@ class RaumNeu(BaseModel):
     pauschale_w_m2: float | None = Field(default=None, ge=0)
     theta_int: float | None = None
     luftwechsel: float | None = Field(default=None, ge=0)
+    sperrflaechen: list[Sperrflaeche] = Field(default_factory=list, max_length=100)
+    module: list[ModulPlatziert] = Field(default_factory=list, max_length=60)
 
 
 class RaumAenderung(RaumNeu):
@@ -252,6 +291,8 @@ class RaumLesen(Lesbar):
     pauschale_w_m2: float | None
     theta_int: float | None
     luftwechsel: float | None
+    sperrflaechen: list[dict]
+    module: list[dict]
 
 
 # ── Bauteilfläche ───────────────────────────────────────────────────────────
@@ -337,6 +378,7 @@ class RaumtypNeu(BaseModel):
     quelle: str = ""
     bemerkung: str = ""
     reihenfolge: int = 0
+    richtwert_altbau_w_m2: float | None = Field(default=None, ge=0, le=500)
 
 
 class RaumtypAenderung(RaumtypNeu):
@@ -353,6 +395,44 @@ class RaumtypLesen(Lesbar):
     quelle: str
     bemerkung: str
     reihenfolge: int
+    richtwert_altbau_w_m2: float | None
+
+
+class RegelLesen(Lesbar):
+    schluessel: str
+    bezeichnung: str
+    wert: float | None
+    wert_text: str
+    einheit: str
+    erlaeuterung: str
+    quelle: str
+    reihenfolge: int
+
+
+class RegelAenderung(BaseModel):
+    wert: float | None = Field(default=None, ge=0, le=1000)
+    wert_text: str | None = Field(default=None, max_length=200)
+    quelle: str | None = Field(default=None, max_length=500)
+
+
+class ModulLesen(Lesbar):
+    id: int
+    artikel_nr: str
+    bezeichnung: str
+    leistung_w: float
+    laenge_mm: float
+    breite_mm: float
+    bauhoehe_mm: float | None
+    gewicht_kg: float | None
+    schutzart: str
+    bad_geeignet: bool
+    oberflaeche: str
+    ek_netto: float | None
+    vk_netto: float | None
+    montagezeit_min: float | None
+    quelle: str
+    bemerkung: str
+    aktiv: bool
 
 
 class KlimadatenLesen(Lesbar):
@@ -401,6 +481,7 @@ class FachvorgabenGesamt(BaseModel):
     werte: FachvorgabenLesen
     raumtypen: list[RaumtypLesen]
     pauschalen: list[PauschaleLesen]
+    regeln: list[RegelLesen]
     gebaeudestandards: dict[str, str]
 
 
@@ -460,13 +541,15 @@ class OfflineVorgaben(BaseModel):
     fachvorgaben: FachvorgabenGesamt
     bauteile: list[BauteilLesen]
     klimadaten: list[KlimadatenLesen]
+    # Modulkatalog (nur aktive Module) für Modulauswahl und Platzierung ohne Netz
+    module: list[ModulLesen] = []
 
 
 # ── Eingefrorene Fachvorgaben je Projekt ────────────────────────────────────
 
 
 class VorgabenUnterschied(BaseModel):
-    bereich: Literal["Einzelwert", "Raumtyp", "Pauschale"]
+    bereich: Literal["Einzelwert", "Raumtyp", "Pauschale", "Platzierungsregel"]
     bezeichnung: str
     alt: float | str | None
     neu: float | str | None
