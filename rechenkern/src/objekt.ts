@@ -12,6 +12,7 @@
 
 import { berechneAuswertung, type AuswertungEingabe, type AuswertungRaumEingabe, type AuswertungRaumErgebnis, type Heizlastquelle } from './auswertung';
 import type { PauschalEingabe } from './pauschal';
+import { raumModulplanung, regelnAufloesen, type PlatziertesModul, type RaumModulplanung, type Regel, type Sperrflaeche } from './platzierung';
 import type { Angrenzung, BauteilflaecheEingabe, OeffnungEingabe, RaumEingabe } from './typen';
 
 export type Gebaeudestandard = 'neubau' | 'effizienzhaus_sanierung' | 'sonstiger_bestand';
@@ -68,6 +69,9 @@ export interface PlanungRaum {
   theta_int: number | null;
   luftwechsel: number | null;
   flaechen: PlanungFlaeche[];
+  /** Draufsicht der Decke (Festlegung 14.10.2026); fehlt bei älteren Eingaben */
+  sperrflaechen?: Sperrflaeche[];
+  module?: PlatziertesModul[];
 }
 
 export interface PlanungGeschoss {
@@ -111,6 +115,8 @@ export interface ObjektPlanung {
   raumtypen: PlanungRaumtyp[];
   /** nur U-Werte der Bauteilbibliothek werden gebraucht */
   bauteile: { id: number; u_wert: number }[];
+  /** Platzierungsregeln im Stand des Projekts; fehlen sie, gilt jede Regel als „Vorgabe fehlt“ */
+  regeln?: Regel[];
   /** in der Reihenfolge der Anzeige */
   geschosse: PlanungGeschoss[];
 }
@@ -129,6 +135,13 @@ export interface ObjektRaumAuswertung extends Omit<AuswertungRaumErgebnis, 'id' 
   quelle: Heizlastquelle;
   werte: { pauschale_w_m2: Wert; theta_int: Wert; luftwechsel: Wert };
   hinweise: string[];
+  /** Module, Thermostate, Regelprüfung und Leistungswarnungen des Raums */
+  modulplanung: RaumModulplanung;
+}
+
+/** Raumtyp „Bad“: nur badgeeignete Module, Hinweis Schutzbereiche (Festlegung 14.10.2026) */
+export function istBad(raumtyp: string | null | undefined): boolean {
+  return !!raumtyp && /^bad/i.test(raumtyp.trim());
 }
 
 export interface ObjektAuswertung {
@@ -137,7 +150,14 @@ export interface ObjektAuswertung {
   hinweise: string[];
   vorgaben: Record<'rueckfall_w_m2' | 'hoehe_hinweis_m' | 'delta_u_wb' | 'theta_e', Wert>;
   raeume: ObjektRaumAuswertung[];
-  summe: { phi_massgeblich_w: number; raeume_mit_ergebnis: number; raeume_ohne_ergebnis: number };
+  summe: {
+    phi_massgeblich_w: number;
+    raeume_mit_ergebnis: number;
+    raeume_ohne_ergebnis: number;
+    module: number;
+    installiert_w: number;
+    thermostate: number;
+  };
 }
 
 function wert(w: number | null | undefined, herkunft: Herkunft): Wert {
@@ -245,7 +265,7 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
   const hinweisHoehe = objektWerte.hoehe_hinweis_m.wert;
   const objektHinweise = sonstigerBestand ? [HINWEIS_SONSTIGER_BESTAND] : [];
 
-  const infos: Omit<ObjektRaumAuswertung, keyof Omit<AuswertungRaumErgebnis, 'id' | 'bezeichnung' | 'quelle' | 'fehler'>>[] = [];
+  const infos: Omit<ObjektRaumAuswertung, keyof Omit<AuswertungRaumErgebnis, 'id' | 'bezeichnung' | 'quelle' | 'fehler'> | 'modulplanung'>[] = [];
   const raeumeEingabe: AuswertungRaumEingabe[] = [];
   for (const geschoss of planung.geschosse) {
     for (const raum of geschoss.raeume) {
@@ -325,9 +345,19 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
     raeume: raeumeEingabe,
   };
   const ergebnis = berechneAuswertung(eingabe);
+  const regeln = regelnAufloesen(planung.regeln);
+  const planungsRaeume = planung.geschosse.flatMap((g) => g.raeume);
   const raeume = infos.map((info, i): ObjektRaumAuswertung => {
     const { id: _id, bezeichnung: _b, quelle: _q, fehler, ...rest } = ergebnis.raeume[i];
-    return { ...info, ...rest, hinweise: [...info.hinweise, ...fehler] };
+    const pr = planungsRaeume[i];
+    const modulplanung = raumModulplanung(
+      { laenge_m: pr.laenge_m ?? 0, breite_m: pr.breite_m ?? 0, hoehe_m: pr.hoehe_m, ist_bad: istBad(info.raumtyp) },
+      pr.sperrflaechen ?? [],
+      pr.module ?? [],
+      regeln,
+      rest.phi_massgeblich_w,
+    );
+    return { ...info, ...rest, hinweise: [...info.hinweise, ...fehler], modulplanung };
   });
 
   return {
@@ -338,7 +368,12 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
       hinweise: objektHinweise,
       vorgaben: objektWerte,
       raeume,
-      summe: ergebnis.summe,
+      summe: {
+        ...ergebnis.summe,
+        module: raeume.reduce((s, x) => s + x.modulplanung.anzahl, 0),
+        installiert_w: raeume.reduce((s, x) => s + x.modulplanung.installiert_w, 0),
+        thermostate: raeume.reduce((s, x) => s + x.modulplanung.thermostate, 0),
+      },
     },
   };
 }

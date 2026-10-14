@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   berechneObjekt,
   HINWEIS_SONSTIGER_BESTAND,
+  istBad,
   PFLICHT_PAUSCHALE_SONSTIGER_BESTAND,
   verarbeiteJson,
   type ObjektPlanung,
@@ -59,6 +60,45 @@ function planung(raeume: PlanungRaum[], teil: Partial<ObjektPlanung['objekt']> =
   };
 }
 
+describe('berechneObjekt – Module je Raum (Raumliste)', () => {
+  const regeln = [
+    { schluessel: 'abstand_wand_cm', bezeichnung: 'TEST Wand', wert: 50, wert_text: '' },
+    { schluessel: 'abstand_modul_cm', bezeichnung: 'TEST Modul', wert: 40, wert_text: '' },
+    { schluessel: 'leistungsreserve_prozent', bezeichnung: 'TEST Reserve', wert: 10, wert_text: '' },
+    { schluessel: 'ueberdimensionierung_prozent', bezeichnung: 'TEST Über', wert: 20, wert_text: '' },
+    { schluessel: 'mindesthoehe_m', bezeichnung: 'TEST Höhe', wert: 2, wert_text: '' },
+    { schluessel: 'thermostat_je_raum', bezeichnung: 'TEST Thermostat', wert: null, wert_text: 'ja' },
+  ];
+  const modul = {
+    id: 'a', modul_id: 1, artikel_nr: 'T-1', bezeichnung: 'TESTMODUL', leistung_w: 750, laenge_m: 0.9, breite_m: 0.7,
+    schutzart: 'IP44', bad_geeignet: true, x: 1.5, y: 2.0, gedreht: false,
+  };
+
+  it('20 m² · 33 W/m² = 660 W → benötigt 726 W; ein Modul 750 W, ein Thermostat, regelkonform', () => {
+    const { auswertung } = berechneObjekt({ ...planung([raum({ module: [modul] })]), regeln });
+    const m = auswertung.raeume[0].modulplanung;
+    expect(m.benoetigt_w).toBeCloseTo(726);
+    expect(m).toMatchObject({ installiert_w: 750, anzahl: 1, thermostate: 1, module_mit_verstoss: 0, hinweise: [] });
+    expect(m.typen).toEqual([{ artikel_nr: 'T-1', bezeichnung: 'TESTMODUL', leistung_w: 750, anzahl: 1 }]);
+    expect(auswertung.summe).toMatchObject({ module: 1, installiert_w: 750, thermostate: 1 });
+  });
+
+  it('ohne Regeln im Projektstand: jede Regel „Vorgabe fehlt“, nichts geschätzt', () => {
+    const { auswertung } = berechneObjekt(planung([raum({ module: [modul] })]));
+    const m = auswertung.raeume[0].modulplanung;
+    expect(m.benoetigt_w).toBeNull();
+    expect(m.thermostate).toBe(0);
+    expect(m.hinweise.some((h) => h.startsWith('Vorgabe fehlt'))).toBe(true);
+  });
+
+  it('Raumtyp Bad erkannt', () => {
+    expect(istBad('Bad')).toBe(true);
+    expect(istBad('Badezimmer')).toBe(true);
+    expect(istBad('WC')).toBe(false);
+    expect(istBad(null)).toBe(false);
+  });
+});
+
 describe('berechneObjekt – Quelle A und Herkunft', () => {
   it('Pauschale aus der Matrix: 20 m² · 33 W/m² = 660 W', () => {
     const { auswertung } = berechneObjekt(planung([raum()]));
@@ -67,7 +107,9 @@ describe('berechneObjekt – Quelle A und Herkunft', () => {
     expect(r.phi_massgeblich_w).toBe(660);
     expect(r.hinweise).toEqual([]);
     expect(r).toMatchObject({ raum_id: 1, geschoss_id: 3, geschoss: 'EG', raumtyp: 'TESTWOHNEN', quelle: 'A' });
-    expect(auswertung.summe).toEqual({ phi_massgeblich_w: 660, raeume_mit_ergebnis: 1, raeume_ohne_ergebnis: 0 });
+    expect(auswertung.summe).toEqual({
+      phi_massgeblich_w: 660, raeume_mit_ergebnis: 1, raeume_ohne_ergebnis: 0, module: 0, installiert_w: 0, thermostate: 0,
+    });
   });
 
   it('Reihenfolge: Raum vor Projekt vor Vorgabe vor Rückfallwert', () => {
