@@ -14,7 +14,7 @@ from app.schemas import GEBAEUDESTANDARD_TEXT
 from app.vorgabenstand import schnappschuss
 RAUM_FELDER = (
     "id", "bezeichnung", "raumtyp_id", "laenge_m", "breite_m", "flaeche_m2", "hoehe_m", "volumen_m3",
-    "heizlastquelle", "hottgenroth_w", "pauschale_w_m2", "theta_int", "luftwechsel",
+    "heizlastquelle", "hottgenroth_w", "pauschale_w_m2", "theta_int", "luftwechsel", "sperrflaechen", "module",
 )
 FLAECHE_FELDER = (
     "id", "bezeichnung", "bauteil_id", "u_wert", "flaeche_brutto_m2", "angrenzung", "angrenzender_raumtyp_id",
@@ -64,6 +64,8 @@ def objekt_planung(db: Session, objekt: Objekt, stand: dict | None = None) -> di
             for t in stand["raumtypen"]
         ],
         "bauteile": [{"id": b.id, "u_wert": b.u_wert} for b in db.scalars(select(BibBauteil).order_by(BibBauteil.id))],
+        # Platzierungsregeln im Stand des Projekts (ältere Stände ohne Regeln: alles „Vorgabe fehlt“)
+        "regeln": stand.get("regeln", []),
         "geschosse": [
             {
                 "id": g.id, "bezeichnung": g.bezeichnung,
