@@ -1,6 +1,6 @@
 # Status
 
-Stand: 13.10.2026, Phase 1 Teil D plus Rückmeldung aus dem ersten Praxistest (Bedienung durch den Außendienst)
+Stand: 14.10.2026, Phase 1 Teil D: Modulkatalog, Sperrflächen und Modulplatzierung
 
 Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst der MEH, Fachvorgaben und Prüfung durch die Energieberatung Serek. Fachregeln: `docs/FACHKONZEPT.md`. Betrieb und HTTPS: `docs/BETRIEB.md`.
 
@@ -8,8 +8,8 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 
 | Container | Erreichbar | Zustand |
 |---|---|---|
-| `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `5e8b1c90d4a7` (Vorgaben ablehnen, 13.10.2026) |
-| `infrarot-backend` (FastAPI + Rechenkern 0.4.1, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
+| `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `8d3f6a21c5e9` (Modulplatzierung, 14.10.2026) |
+| `infrarot-backend` (FastAPI + Rechenkern 0.5.0, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
 | `infrarot-frontend` (React-PWA, nginx) | `127.0.0.1:8090`, über Caddy | läuft |
 
 **Öffentlich:** https://ir-planer.mybase-test.de
@@ -22,16 +22,37 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 - Sicherung des Caddyfile: `/opt/schulung/Caddyfile.bak-2026-10-12`. Rückweg: `sudo bash betrieb/caddy_einrichten.sh rueckbau`.
 - Die Infrarot-Ports bleiben nur an 127.0.0.1 gebunden.
 
-**Daten (13.10.2026):** ein Konto, serek.manfred@googlemail.com, mit den Rollen **Admin + Fachprüfer**.
-- Nach Fehlversuchen und Anmeldesperre am 13.10.2026 wurde das Passwort per `passwort-setzen` neu gesetzt (Sperre aufgehoben, protokolliert, `backend/README.md`). Seitdem klappt die Anmeldung.
-- Zwei Testprojekte des Auftraggebers: „Test1“ (Entwurf, mit dem Tablet ausgecheckt und wieder eingecheckt) und „Test2“ (fachlich geprüft).
-- Raumtypen: Wohnraum, Küche, Bad, Flur, Technik, Abstell, Schlafen, Kind. Pauschalen Neubau vom Auftraggeber eingetragen: Bad 60, Flur 30, Technik 20, Schlafen 30 W/m². Alle übrigen Raumtypen und alles bei „Effizienzhaus-Sanierung“ nutzen die Rückfallwerte.
+**Daten (14.10.2026):** ein Konto, serek.manfred@googlemail.com, mit den Rollen **Admin + Fachprüfer**.
+- Zwei Testprojekte des Auftraggebers: „Test1“ (Entwurf) und „Test2“ (fachlich geprüft). Durch den Import haben beide **offene neue Fachvorgaben**; bitte je Projekt übernehmen oder ablehnen.
+- Importiert am 14.10.2026 aus `daten/IR-Planer_Importdaten_geprueft.xlsx` (vorher Sicherung `infrarot_db_20261014_151658.dump`):
+  - 13 Raumtypen: 12 aus der Datei, „Technik“ unverändert. 4 umbenannt, damit Projekte ihre Raumtypen behalten: Wohnraum → Wohnen, Kind → Kinderzimmer, Flur → Flur/Diele, Abstell → Abstellraum.
+  - 25 Pauschalen: 24 aus der Datei mit Quelle „Erfahrungswert Serek, Stand 14.10.2026“, dazu Technik / Neubau 20 W/m² vom 13.10.
+  - Altbau-Richtwert 150 W/m² je Raumtyp, nur als Orientierung für den Fachprüfer.
+  - 16 von 18 Platzierungsregeln belegt. Es fehlen die Abstände zu Dusche/Wanne und zu sonstigen Sperrflächen.
+  - 21 Deckenmodule, ohne Preise und Montagezeit.
 - Fachvorgaben:
-  - Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; „Altbau (nicht Effizienzhaus)“ bewusst ohne Rückfallwert (Pauschale je Raum durch den Fachprüfer)
-  - Hinweis „Pauschale prüfen“ ab Raumhöhe 2,80 m (kein Zuschlag)
+  - Rückfallwerte: Neubau 40 W/m², Effizienzhaus-Sanierung 70 W/m²; Altbau ohne Rückfallwert (Pauschale je Raum durch den Fachprüfer)
+  - Hinweis „Pauschale prüfen“ ab Raumhöhe **2,65 m** (vorher 2,80 m)
   - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
+
+## Neu: Modulkatalog, Sperrflächen und Modulplatzierung (14.10.2026)
+
+Regeln im Detail: `docs/FACHKONZEPT.md`, Abschnitt „Modulplanung“.
+
+1. **Import** der Importdatei. Übersicht siehe „Daten“ oben.
+2. **Deckenplan je Raum** (Raumkarte → „Deckenplan: Sperrflächen und Module“, für alle Rollen):
+   - maßstäbliche Draufsicht; Sperrflächen per Finger einzeichnen, verschieben, Größe ändern (Eckpunkt), löschen;
+   - gestrichelt: Wandabstand und Mindestabstände der Sperrflächen.
+3. **„Module vorschlagen“:** möglichst wenige Module, regelkonform und gleichmäßig verteilt; Warnungen zur Leistung; im Bad nur badgeeignete Module mit Hinweis zur Elektrofachkraft. Ohne Lösung erscheint eine klare Meldung mit Vorschlag.
+4. **Manuell:** Module verschieben, drehen, tauschen, hinzufügen, löschen. Verstöße live rot, mit Begründung.
+5. **Thermostat** je Raum mit Modulen, in der Raumkarte und in der Raumliste.
+6. **Offline:** Der Katalog liegt im Geräte-Schnappschuss, die Regeln im eingefrorenen Projektstand. Gespeichert wird beim Loslassen über die Warteschlange.
+7. **Reiter „Raumliste“:** Module (Typ, Anzahl), installierte Leistung, Thermostate und Prüfergebnis je Raum, mit Summen.
+8. **Fachvorgaben-Seite:** Platzierungsregeln pflegbar (Wert, Quelle), Modulkatalog zur Ansicht, Altbau-Richtwert je Raumtyp.
+
+Noch nicht gebaut: Angebot und PDF-Platzierungsplan (Teil E).
 
 ## Neu: Entscheidung über neue Fachvorgaben (13.10.2026, zweite Rückmeldung)
 
@@ -117,17 +138,18 @@ Funktionen aus Phase 1B (Rollen, Status, Protokoll, Fachvorgaben, Heizlastquelle
 
 | Bereich | Ergebnis |
 |---|---|
-| Rechenkern (Vitest) | 49 Tests, Typprüfung fehlerfrei; laufen bei jedem Backend-Build. 0.4.1 ändert nur den Hinweistext für Altbau |
-| Backend (pytest, mit echtem Rechenkern) | 69 Tests. Neu am 13.10. (2. Rückmeldung): Übernehmen und Ablehnen nur Fachprüfer (403), offene Vorgaben sperren Angebot und Prüfen (409), Ablehnung protokolliert mit Begründung, Status bleibt, erneute zentrale Änderung öffnet wieder, reine Quellenänderung nicht, spätere Übernahme hebt Ablehnung auf, freigegeben nie offen. Neu am 13.10. (1. Rückmeldung): W/m² nur durch Fachprüfer (Außendienst und reiner Admin 403, unveränderte Werte erlaubt), Altbau wartet auf Fachprüfer (ohne Räume nicht, Prüfen gesperrt, nach Festlegung prüfbar, neuer Raum wartet wieder), Neubau wartet nie. Aus Phase 1D: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
-| Frontend (Vitest) | 34 Tests. Neu am 13.10.: offene Vorgaben vom Auschecken sperren das Angebot offline, Ablehnen offline erst nach dem Einchecken; „wartet auf Fachprüfer“ offline aus dem lokalen Stand, Statusanzeige, Hinweise für den Außendienst, Beschriftung Altbau. Aus Phase 1C/1D, Offline-Logik: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
-| Migration | `5e8b1c90d4a7` am 13.10.2026 auf der echten Datenbank ausgeführt (vorher Sicherung `infrarot_db_20261013_145403.dump`), `alembic check`: Modell und Datenbank stimmen überein. Ihre Projekte „Test1“ und „Test2“: keine offenen Vorgaben, Angebot möglich |
+| Rechenkern (Vitest) | 69 Tests, Typprüfung fehlerfrei; laufen bei jedem Backend-Build. Neu in 0.5.0 (20 Tests): Beispielräume klein (2,5 × 2 m → 1 × 350 W), groß (8 × 6 m → 3 Module gleichmäßig, Warnung Überdimensionierung), Bad (nur badgeeignet ab IP44, Hinweis), viele Sperrflächen (nie über Sitzplatz/Bett, alle Abstände), ohne gültige Lösung (Meldung mit größter möglicher Leistung), kein Modul passt, quer liegender Raum, fehlende Regeln, Mindesthöhe; Regelprüfung im Klartext; Leistung; Raumliste je Raum |
+| Backend (pytest, mit echtem Rechenkern) | 79 Tests. Neu am 14.10.: Import der echten Importdatei (Umbenennen, Regeln, Katalog, erneuter Import), Probelauf, alles oder nichts bei Fehlern, Regeln pflegen (nur Fachprüfer/Admin, protokolliert), Regeln im Projekt eingefroren, Katalog und Offline-Schnappschuss, Sperrflächen/Module speichern, prüfen und auswerten. Vom 13.10.: Neu am 13.10. (2. Rückmeldung): Übernehmen und Ablehnen nur Fachprüfer (403), offene Vorgaben sperren Angebot und Prüfen (409), Ablehnung protokolliert mit Begründung, Status bleibt, erneute zentrale Änderung öffnet wieder, reine Quellenänderung nicht, spätere Übernahme hebt Ablehnung auf, freigegeben nie offen. Neu am 13.10. (1. Rückmeldung): W/m² nur durch Fachprüfer (Außendienst und reiner Admin 403, unveränderte Werte erlaubt), Altbau wartet auf Fachprüfer (ohne Räume nicht, Prüfen gesperrt, nach Festlegung prüfbar, neuer Raum wartet wieder), Neubau wartet nie. Aus Phase 1D: eingefrorene Vorgaben (Unterschiede, Auswirkung, Übernahme mit Protokoll, Freigabe unverändert, Sperre, Rücksetzung auf Entwurf), kombinierte Rollen (Admin + Fachprüfer gibt frei, nur Admin nicht), Rollen in Verwaltung und Kommandozeile, „sonstiger Bestand“, Hinweis-Höhe |
+| Frontend (Vitest) | 35 Tests. Neu am 14.10.: Deckenplan offline speichern und mit eingefrorenen Regeln prüfen. Vom 13.10.: offene Vorgaben vom Auschecken sperren das Angebot offline, Ablehnen offline erst nach dem Einchecken; „wartet auf Fachprüfer“ offline aus dem lokalen Stand, Statusanzeige, Hinweise für den Außendienst, Beschriftung Altbau. Aus Phase 1C/1D, Offline-Logik: Rechnen mit dem eingefrorenen Projektstand, Hinweis statt Zuschlag, Übernahme erst nach dem Einchecken. Laufen bei jedem Frontend-Build; `tsc` und `vite build` fehlerfrei |
+| Migration | `8d3f6a21c5e9` am 14.10.2026 ausgeführt (vorher Sicherung `infrarot_db_20261014_151658.dump`), `alembic check` sauber. `5e8b1c90d4a7` am 13.10.2026 auf der echten Datenbank ausgeführt (vorher Sicherung `infrarot_db_20261013_145403.dump`), `alembic check`: Modell und Datenbank stimmen überein. Ihre Projekte „Test1“ und „Test2“: keine offenen Vorgaben, Angebot möglich |
+| Browser 14.10.2026 (Chromium headless, Tablet 1024 px und Handy 390 px) | Mit temporärem Außendienst-Konto, danach Konto und Projekt entfernt: Sitzplatz und Leuchte eingezeichnet, Vorschlag 1 × CL-930 (930 W für benötigt 880 W), Modul per Zeiger auf den Sitzplatz gezogen → rot mit „liegt über einem Sitzplatz – über Sitzplätzen und Betten unzulässig“ und „liegt über einer Leuchte“, Raumliste mit Summen, Fachvorgaben nicht im Menü, Handy ohne horizontalen Bildlauf, keine Konsolenfehler |
 | Ende-zu-Ende 13.10.2026 über HTTPS, Vorgaben ablehnen | Mit zwei temporären Konten 10 von 10 Prüfungen bestanden, Konten und Testprojekt danach entfernt. Zentrale Vorgaben wurden dabei nicht verändert, nur der eingefrorene Stand des Testprojekts. Geprüft: Vorgaben offen → Angebot gesperrt; Außendienst übernimmt/lehnt nicht ab (403); Prüfen gesperrt (409); Fachprüfer lehnt ab → rechnet weiter mit dem Projektstand (660 W), Angebot möglich, protokolliert mit Begründung; spätere Übernahme → 800 W |
 | Ende-zu-Ende 13.10.2026 über HTTPS | Mit zwei temporären Konten (Außendienst; Admin + Fachprüfer) 10 von 10 Prüfungen bestanden, Konten und Testprojekt danach entfernt: Altbau ohne Räume wartet nicht, mit Raum ohne W/m² schon; Text „Altbau (nicht Effizienzhaus)“ und Hinweis „vom Fachprüfer festgelegt“ (Rechenkern 0.4.1); Außendienst setzt W/m² nicht (403), ändert aber Maße; Prüfen gesperrt (409); Fachprüfer setzt 120 W/m² → 2 400 W; danach nicht mehr wartend und prüfbar |
 | Ende-zu-Ende Phase 1D über HTTPS | Mit einem temporären Konto geprüft, danach entfernt: Vorgaben-Stand beim Anlegen, 3,20 m hoher Raum → 800 W ohne Zuschlag mit Hinweis, „sonstiger Bestand“ ohne Raumpauschale ohne Ergebnis, mit 120 W/m² → 2 400 W, Außendienst darf nicht prüfen |
 | Caddy | Konfiguration vorab in einem Wegwerf-Container geprüft; Skript lief am 12.10.2026; Schulungsplattform danach weiter per HTTPS erreichbar; Caddy nicht neu gestartet |
 | Ende-zu-Ende Phase 1C über https://ir-planer.mybase-test.de | Mit zwei temporären Konten (Außendienst, Fachprüfer) 16 Prüfungen bestanden, Testkonten und Testdaten danach entfernt. Geprüft wurde: Cookie-Flags, Auschecken, Projektpaket, Schnappschuss, 423 ohne Token, Bearbeiten mit Token, Auswertung (Rechenkern 0.3.0, 4 × 5 m → 800 W mit Rückfallwert), Sperranzeige, 423 für den Fachprüfer bei Änderung, Status, fremdem Token und Einchecken, Einchecken durch das Gerät, 409 für das alte Token, danach Status möglich, Protokoll |
 
-**Nicht automatisiert geprüft:** die Bedienung im echten Tablet-Browser, also Installation, Flugmodus und Statusanzeige. Neu dazu: das ⓘ und die vereinfachte Raumkarte. Zum Ansehen der Außendienst-Sicht ein Konto nur mit Rolle Außendienst anlegen (Benutzerverwaltung). Bitte einmal nach der Anleitung unten durchspielen.
+**Nicht automatisiert geprüft:** die Bedienung im echten Tablet-Browser, also Installation, Flugmodus und Statusanzeige. Neu dazu: das ⓘ, die vereinfachte Raumkarte und das Ziehen im Deckenplan mit dem Finger (getestet nur mit Mauszeiger im Headless-Browser). Zum Ansehen der Außendienst-Sicht ein Konto nur mit Rolle Außendienst anlegen (Benutzerverwaltung). Bitte einmal nach der Anleitung unten durchspielen.
 
 ## App auf dem Tablet installieren
 
@@ -149,15 +171,13 @@ Hinweise:
 ## Offen
 
 **Fachliche Zulieferung (von Ihnen):**
-- Raumtypen mit Pauschalen je Gebäudestandard (Neubau, Effizienzhaus-Sanierung). Bis dahin gelten 40 / 70 W/m².
-  - Nach dem Einpflegen erscheinen die neuen Werte in bestehenden Projekten als Unterschied und werden dort per Klick übernommen.
-- Niedrige Priorität, nur für Quelle C: Klimadaten (DIN/TS 12831-1) und Pauschal-U-Werte als CSV, θint, Luftwechsel und Reduktionsfaktoren je Raumtyp.
+- Mindestabstand zu **Dusche/Wanne** und zu **sonstigen Sperrflächen** (Fachvorgaben → Platzierungsregeln). Bis dahin prüft die App dort nur, dass kein Modul darüber liegt.
+- **EK/VK-Preise und Montagezeiten** der 21 Module (für Teil E). Maße vor dem Produktivstart gegen die Herstellerdatenblätter prüfen (Prüfprotokoll der Importdatei).
+- Raumtyp „Technik“ steht nicht in der Importdatei: behalten, umbenennen oder löschen?
+- Der allgemeine Quellentext der zentralen Werte lautet noch „Festlegung Auftraggeber 10.10.2026: … Grenzhöhe Höhenzuschlag 2,80 m …“. Er ist veraltet: Es gibt keinen Höhenzuschlag mehr, die Hinweis-Höhe beträgt jetzt 2,65 m. Bitte anpassen. Die Pauschalen tragen seit dem Import ihre eigene Quelle aus der Datei.
+- Niedrige Priorität, nur für Quelle C: Klimadaten (DIN/TS 12831-1), Pauschal-U-Werte, Reduktionsfaktoren je Raumtyp.
 
-**Quellenangaben der Fachvorgaben (bitte prüfen):**
-- Der allgemeine Quellentext lautet noch „Festlegung Auftraggeber 10.10.2026: … Grenzhöhe Höhenzuschlag 2,80 m …“. Seit dem 12.10.2026 gibt es keinen Höhenzuschlag mehr, nur noch die Hinweis-Höhe. Den Text bitte unter Fachvorgaben anpassen; die App ändert ihn nicht selbst.
-- Pauschalen je Raumtyp übernehmen beim Speichern diesen allgemeinen Quellentext, ein eigenes Quellenfeld je Pauschale gibt es nicht (`frontend/src/komponenten/Fachvorgaben.tsx`). Die vier Neubau-Pauschalen vom 13.10.2026 tragen deshalb den Text vom 10.10.2026. Das lässt sich auf Wunsch um ein eigenes Quellenfeld je Pauschale erweitern.
-
-**Als Nächstes geplant:** Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan.
+**Als Nächstes geplant (Teil E):** Angebot und PDF-Platzierungsplan.
 
 **Später:** Hottgenroth-Import, Grundriss-Import per KI, Raumliste als PDF/Excel, Word-Bericht im CI.
 

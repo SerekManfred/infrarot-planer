@@ -60,7 +60,7 @@ export function Raumliste({ objekt, stand }: { objekt: Objekt; stand: number }) 
                     {m.anzahl === 0
                       ? 'noch nicht geplant'
                       : m.module_mit_verstoss > 0
-                        ? `${m.module_mit_verstoss} Regelverstoß/-verstöße`
+                        ? `${m.module_mit_verstoss} Modul${m.module_mit_verstoss === 1 ? '' : 'e'} mit Regelverstoß`
                         : warnungen.length > 0
                           ? warnungen.join('; ')
                           : 'in Ordnung'}

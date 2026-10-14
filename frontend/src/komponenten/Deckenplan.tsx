@@ -108,7 +108,11 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   if (L <= 0 || B <= 0) return <p className="leise">Für den Deckenplan zuerst Länge und Breite des Raums eingeben.</p>;
 
   const speichernSperr = (neu: Sperrflaeche[]) => aendern(() => api.patch(`/raeume/${raum.id}`, { sperrflaechen: neu }));
-  const speichernModule = (neu: PlatziertesModul[]) => aendern(() => api.patch(`/raeume/${raum.id}`, { module: neu }));
+  const speichernModule = (neu: PlatziertesModul[], vorschlagMeldung = false) => {
+    // Meldung eines Vorschlags gilt nur, bis von Hand geändert wird
+    if (!vorschlagMeldung) setMeldung(null);
+    return aendern(() => api.patch(`/raeume/${raum.id}`, { module: neu }));
+  };
 
   function punkt(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const m = svg.current!.getScreenCTM()!.inverse();
@@ -206,7 +210,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
       v.hinweise.length > 0 ? { text: v.hinweise.join(' · '), art: 'warnung' } : { text: `Vorschlag: ${v.module.length} × ${v.module[0].artikel_nr}`, art: 'hinweis' },
     );
     setAuswahl(null);
-    void speichernModule(v.module);
+    void speichernModule(v.module, true);
   }
 
   const gewaehltesModul = auswahl?.art === 'modul' ? module.find((m) => m.id === auswahl.id) : undefined;

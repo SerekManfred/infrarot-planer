@@ -36,6 +36,10 @@ docker exec infrarot-backend python -m app.cli rollen-setzen --email … --rolle
 # hebt die Anmeldesperre des Kontos auf und protokolliert beides
 docker exec -it infrarot-backend python -m app.cli passwort-setzen --email …
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
+
+# Importdatei des Auftraggebers (Raumtypen, Platzierungsregeln, Modulkatalog); erst Probelauf, vorher sichern
+docker exec -i infrarot-backend python -m app.cli excel-importieren --probelauf < daten/IR-Planer_Importdaten_geprueft.xlsx
+docker exec -i infrarot-backend python -m app.cli excel-importieren [--umbenennen ALT=NEU …] < daten/IR-Planer_Importdaten_geprueft.xlsx
 docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
 # Tests

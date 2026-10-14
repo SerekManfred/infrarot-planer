@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D mit Rückmeldung aus dem ersten Praxistest (13.10.2026)
+Stand: Phase 1 Teil D, Modulkatalog, Sperrflächen und Modulplatzierung (14.10.2026)
 
 ## Zweck und Beteiligte
 
@@ -136,6 +136,45 @@ Vor Ort gibt es oft kein Netz. Deshalb arbeitet die App auf dem Tablet auch offl
   - Meldet sich auf dem Gerät ein anderer Benutzer an, während noch Offline-Daten vorhanden sind, fragt die App, ob diese gelöscht werden sollen.
 - Ohne Netz zeigt die Projektliste den zuletzt geladenen Stand. Bearbeiten lassen sich dann nur ausgecheckte Projekte.
 
+## Modulplanung: Katalog, Sperrflächen, Platzierung (Festlegung 14.10.2026)
+
+Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern (`rechenkern/src/platzierung.ts`). Server, Tablet (offline) und Raumliste nutzen denselben Code.
+
+### Daten
+
+- **Importdatei** `daten/IR-Planer_Importdaten_geprueft.xlsx`, eingelesen mit `python -m app.cli excel-importieren` (`backend/README.md`). Alles oder nichts, Probelauf möglich. Leere Zellen bleiben leer.
+- **Raumtypen:** W/m² je Raumtyp für Neubau und Effizienzhaus-Sanierung, Raumtemperatur, Luftwechsel und Quelle. Die Altbau-Spalte wird als **Richtwert für den Fachprüfer** gespeichert. Sie ist nur ein Platzhalter im Pauschalenfeld und wird nie automatisch gerechnet.
+- **Platzierungsregeln:** feste Liste (`backend/app/platzierungsregeln.py`), gepflegt werden Wert und Quelle. Nur Fachprüfer und Admins dürfen ändern. Die Regeln werden je Projekt eingefroren wie die übrigen Fachvorgaben; Änderungen erscheinen als Unterschied „Platzierungsregel“. „Maximale Raumhöhe ohne Rückfrage“ ist die zentrale Hinweis-Höhe (2,65 m seit 14.10.2026).
+- **Modulkatalog:** 21 Deckenmodule. Preise und Montagezeit sind leer, bis sie geliefert werden. Module, die nicht mehr in der Datei stehen, werden inaktiv und nicht mehr vorgeschlagen. Platzierte Module speichern eine Kopie ihrer Katalogdaten, damit spätere Katalogänderungen einen Plan nicht verändern.
+
+### Sperrflächen
+
+Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichnet: Ursprung linke obere Ecke, x entlang der Länge, Raster 5 cm.
+
+- **Rechtecke:** Sitzplatz, Bett, Hochschrank, Dusche/Wanne, Sonstiges, dazu die Dachschräge als Streifen entlang einer Wand.
+- **Punkte:** Leuchte/Spot und Rauchmelder.
+- **Mindestabstand** je Typ aus der Regeltabelle, gemessen als kürzeste Entfernung zwischen den Kanten.
+- **Sitzplatz und Bett:** Über ihnen ist ein Modul **immer unzulässig**.
+- **Fehlender Abstand:** Für Dusche/Wanne und Sonstiges fehlt die Regel (14.10.2026). Dort wird nur geprüft, dass kein Modul darüber liegt, mit dem Hinweis „Vorgabe fehlt“.
+
+### Modulauswahl
+
+- **Benötigte Leistung** = Raumheizlast × (1 + Leistungsreserve).
+- **Vorschlag:** möglichst wenige gleiche Module, die zusammen mindestens die benötigte Leistung bringen und regelkonform in die freie Deckenfläche passen. Bei gleicher Anzahl gewinnt die kleinste ausreichende Leistung, dann die kleinere Modulfläche. Höchstens 12 Module je Raum.
+- **Warnung**, wenn die installierte Leistung die benötigte unterschreitet oder um mehr als die maximale Überdimensionierung übersteigt.
+- **Bad** (Raumtyp beginnt mit „Bad“): nur Module „Bad geeignet“ und mindestens IP44. Dazu der Hinweis „Schutzbereiche nach DIN VDE 0100-701 durch Elektrofachkraft prüfen“.
+- **Ohne gültige Lösung** erscheint eine Meldung mit der größten möglichen Leistung, z. B. „höchstens 1 080 W (2 × …)“, und dem Vorschlag „kleinere oder mehr Module wählen, Sperrflächen prüfen“.
+- **Keine automatische Planung**, wenn eine nötige Regel fehlt (Wand- oder Modulabstand, Leistungsreserve) oder der Raum niedriger als die Mindestraumhöhe ist.
+
+### Platzierung und Regelprüfung
+
+- **Zulässig** ist eine Position nur, wenn alle Mindestabstände eingehalten sind: zur Wand, zu anderen Modulen, Leuchten, Rauchmeldern und Sperrflächen. Mit Sperrflächen ist die Bewegungsfläche automatisch bevorzugt; bei gleicher Lage gewinnt die Position mit mehr Abstand zu Möbeln.
+- **Ausrichtung:** Die Längsseite des Moduls liegt parallel zur langen Raumseite. Nur wenn das nicht passt, wird quer gelegt, mit Hinweis.
+- **Verteilung:** Mehrere Module werden in einem Raster über die freie Fläche gleichmäßig verteilt.
+- **Manuelle Korrektur:** verschieben, drehen, tauschen, hinzufügen, löschen. Die Regelprüfung läuft live; Verstöße werden rot markiert und im Klartext begründet, z. B. „Abstand zur Wand 32 cm (mind. 50 cm)“.
+- **Thermostat:** eins je Raum mit Modulen (Regel „Thermostat je Raum“).
+- **Raumliste** (Reiter im Projekt): je Raum Heizlast, benötigte Leistung, Module (Typ × Anzahl), installierte Leistung, Thermostat und Prüfergebnis, dazu die Summen.
+
 ## Noch nicht Bestandteil
 
-Modulkatalog, Sperrflächen, Platzierung, Angebot, Platzierungsplan, Grundriss-Import per KI, Hottgenroth-Import.
+Angebot und PDF-Platzierungsplan (Teil E), nicht rechteckige Räume, Grundriss-Import per KI, Hottgenroth-Import.
