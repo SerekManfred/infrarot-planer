@@ -192,6 +192,7 @@ export class OfflineDienst {
     if (!this.vorgaben) return undefined;
     if (weg === '/fachvorgaben') return this.vorgaben.fachvorgaben;
     if (weg === '/bibliotheken/bauteile') return this.vorgaben.bauteile;
+    if (weg === '/bibliotheken/module') return this.vorgaben.module ?? [];
     if (weg === '/bibliotheken/klimadaten') {
       const plz = new URLSearchParams(abfrage ?? '').get('plz');
       return plz ? this.vorgaben.klimadaten.filter((k: Klimadaten) => k.plz === plz) : this.vorgaben.klimadaten;

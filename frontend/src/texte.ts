@@ -101,6 +101,16 @@ export const HILFE = {
   vorgabenStand:
     'Das Projekt rechnet mit den Fachvorgaben vom Tag des Anlegens. Spätere Änderungen gelten erst nach „Neue Vorgaben übernehmen“.',
   auschecken: 'Projekt auf dieses Gerät holen, damit es ohne Internet bearbeitet werden kann. Andere können es so lange nicht ändern.',
+  sperrflaeche:
+    'Stelle an der Decke, an die kein Modul darf, z. B. über Sitzplatz, Bett oder Hochschrank, an Dachschrägen, Leuchten und Rauchmeldern. Der gestrichelte Rand zeigt den Mindestabstand.',
+  modulvorschlag:
+    'Die App wählt möglichst wenige Module, die zusammen die benötigte Leistung bringen und mit allen Mindestabständen an die Decke passen. Danach lassen sie sich von Hand verschieben, drehen oder tauschen.',
+  benoetigteLeistung: 'Heizlast des Raums plus Leistungsreserve. So viel Leistung sollen die Module zusammen mindestens haben.',
+  installierteLeistung: 'Summe der Leistung aller Module im Raum.',
+  thermostat: 'Jeder Raum mit Modulen bekommt ein eigenes Thermostat zur Regelung.',
+  raumliste: 'Übersicht aller Räume mit Heizlast, Modulen, installierter Leistung und Thermostaten. Rot: Regelverstöße im Deckenplan.',
+  richtwertAltbau: 'Orientierungswert des Fachprüfers für Altbau. Er wird nicht automatisch verwendet; die Pauschale je Raum legt der Fachprüfer fest.',
+  regeln: 'Mindestabstände und Vorgaben für das Platzieren der Deckenmodule. Leere Werte = „Vorgabe fehlt“; dann prüft bzw. plant die App das nicht.',
 } as const;
 
 /** Erklärung je Gebäudestandard (für das ⓘ an der Auswahl) */

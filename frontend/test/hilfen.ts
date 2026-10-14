@@ -12,7 +12,7 @@ export function vorgaben(): OfflineVorgaben {
         delta_u_wb: 0.05,
         quelle: 'TESTWERT',
       },
-      raumtypen: [{ id: 10, bezeichnung: 'TESTWOHNEN', theta_int: 20, luftwechsel: 0.5, reduktionsfaktor: null, quelle: '', bemerkung: '', reihenfolge: 0 }],
+      raumtypen: [{ id: 10, bezeichnung: 'TESTWOHNEN', theta_int: 20, luftwechsel: 0.5, reduktionsfaktor: null, quelle: '', bemerkung: '', reihenfolge: 0, richtwert_altbau_w_m2: null }],
       pauschalen: [{ raumtyp_id: 10, gebaeudestandard: 'neubau', w_m2: 33, quelle: 'TESTWERT' }],
       gebaeudestandards: { neubau: 'Neubau', effizienzhaus_sanierung: 'Effizienzhaus-Sanierung', sonstiger_bestand: 'sonstiger Bestand' },
     },
@@ -70,7 +70,7 @@ export function paket(): ProjektPaket {
               {
                 id: 5000, geschoss_id: 500, bezeichnung: 'Wohnen', raumtyp_id: 10, laenge_m: 4, breite_m: 5, flaeche_m2: 20,
                 hoehe_m: 2.5, volumen_m3: null, heizlastquelle: 'A', hottgenroth_w: null, pauschale_w_m2: null,
-                theta_int: null, luftwechsel: null, flaechen: [],
+                theta_int: null, luftwechsel: null, flaechen: [], sperrflaechen: [], module: [],
               },
             ],
           },

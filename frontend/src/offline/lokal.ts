@@ -73,6 +73,7 @@ const NEU: Record<Exclude<Art, 'projekte'>, Record<string, unknown>> = {
   raeume: {
     raumtyp_id: null, laenge_m: null, breite_m: null, flaeche_m2: null, hoehe_m: null, volumen_m3: null,
     heizlastquelle: 'A', hottgenroth_w: null, pauschale_w_m2: null, theta_int: null, luftwechsel: null,
+    sperrflaechen: [], module: [],
   },
   flaechen: {
     bezeichnung: '', bauteil_id: null, u_wert: null, orientierung: '', angrenzung: 'aussen',
@@ -218,6 +219,8 @@ export function planungAus(objekt: ObjektPaket, fv: Fachvorgaben, vorgaben: Offl
       id: t.id, bezeichnung: t.bezeichnung, theta_int: t.theta_int, luftwechsel: t.luftwechsel, reduktionsfaktor: t.reduktionsfaktor,
     })),
     bauteile: (vorgaben?.bauteile ?? []).map((b) => ({ id: b.id, u_wert: b.u_wert })),
+    // Platzierungsregeln im Stand des Projekts
+    regeln: fv.regeln ?? [],
     geschosse: (sortiert('geschosse', objekt.geschosse as unknown as Knoten[]) as unknown as ObjektPaket['geschosse']).map((g) => ({
       id: g.id,
       bezeichnung: g.bezeichnung,
@@ -366,7 +369,12 @@ export function neuesProjekt(
     vorgaben_offen: false,
     angebot_gesperrt: false,
     vorgaben_stand: vorgaben
-      ? { werte: vorgaben.fachvorgaben.werte, raumtypen: vorgaben.fachvorgaben.raumtypen, pauschalen: vorgaben.fachvorgaben.pauschalen }
+      ? {
+          werte: vorgaben.fachvorgaben.werte,
+          raumtypen: vorgaben.fachvorgaben.raumtypen,
+          pauschalen: vorgaben.fachvorgaben.pauschalen,
+          regeln: vorgaben.fachvorgaben.regeln ?? [],
+        }
       : null,
     erstellt_am: jetzt,
     geaendert_am: jetzt,

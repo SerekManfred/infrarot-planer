@@ -18,9 +18,10 @@ import { GebaeudestandardHilfe, Hilfe, Meldung, Schalter, Textfeld } from './Fel
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
 import { Raeume } from './Raeume';
+import { Raumliste } from './Raumliste';
 
-type Reiter = 'raeume' | 'vorgaben' | 'protokoll';
-const REITER: Record<Reiter, string> = { raeume: 'Räume', vorgaben: 'Projektvorgaben', protokoll: 'Protokoll' };
+type Reiter = 'raeume' | 'raumliste' | 'vorgaben' | 'protokoll';
+const REITER: Record<Reiter, string> = { raeume: 'Räume', raumliste: 'Raumliste', vorgaben: 'Projektvorgaben', protokoll: 'Protokoll' };
 
 export function ProjektSeite({ projektId, benutzer }: { projektId: number; benutzer: Benutzer }) {
   const [projekt, setProjekt] = useState<ProjektDetail | null>(null);
@@ -195,6 +196,7 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
       {reiter === 'raeume' && (
         <Raeume objekt={objekt} vorgaben={vorgaben} benutzer={benutzer} gesperrt={gesperrt} aendern={aendern} stand={stand} />
       )}
+      {reiter === 'raumliste' && <Raumliste objekt={objekt} stand={stand} />}
       {reiter === 'vorgaben' && fach && (
         <Projektvorgaben
           objekt={objekt}

@@ -1,6 +1,16 @@
 // Zentrale Fachvorgaben: nur für Fachprüfer und Admins sichtbar und von ihnen gepflegt (der Außendienst sieht die Seite nicht).
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, hatRolle, type Benutzer, type Fachvorgaben, type FachvorgabenWerte, type Gebaeudestandard, type Raumtyp } from '../api';
+import {
+  api,
+  hatRolle,
+  type Benutzer,
+  type Fachvorgaben,
+  type FachvorgabenWerte,
+  type Gebaeudestandard,
+  type KatalogModulDaten,
+  type Platzierungsregel,
+  type Raumtyp,
+} from '../api';
 import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, zahl, zeitpunkt } from '../texte';
 import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 import { Protokoll } from './Protokoll';
@@ -111,7 +121,11 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
                 {standards.map((gs) => (
                   <th key={gs}>
                     {GEBAEUDESTANDARDS[gs]}
-                    <Hilfe begriff={GEBAEUDESTANDARDS[gs]} text={HILFE_GEBAEUDESTANDARD[gs]} />
+                    {gs === 'sonstiger_bestand' && ' – Richtwert, je Raum'}
+                    <Hilfe
+                      begriff={GEBAEUDESTANDARDS[gs]}
+                      text={gs === 'sonstiger_bestand' ? `${HILFE_GEBAEUDESTANDARD[gs]} ${HILFE.richtwertAltbau}` : HILFE_GEBAEUDESTANDARD[gs]}
+                    />
                   </th>
                 ))}
                 <th>
@@ -143,6 +157,9 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
         {darf && <NeuerRaumtyp aendern={aendern} />}
       </div>
 
+      <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} aendern={aendern} />
+      <Modulkatalog stand={stand} />
+
       {darf && <CsvImport />}
 
       <div className="karte">
@@ -172,9 +189,10 @@ function RaumtypZeile({
       </td>
       {(Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[]).map((gs) => {
         if (gs === 'sonstiger_bestand') {
+          // kein Tabellenwert: nur Richtwert als Orientierung für den Fachprüfer (Pauschale je Raum)
           return (
-            <td key={gs} className="leise">
-              je Raum
+            <td key={gs}>
+              <Zahlfeld wert={typ.richtwert_altbau_w_m2} platzhalter="Richtwert" gesperrt={!darf} onSpeichern={setzen('richtwert_altbau_w_m2')} />
             </td>
           );
         }
@@ -274,6 +292,137 @@ function CsvImport() {
       </form>
       {bericht && <Meldung art="hinweis">{bericht}</Meldung>}
       {fehler && <Meldung>{fehler}</Meldung>}
+    </div>
+  );
+}
+
+function RegelnKarte({
+  regeln,
+  darf,
+  aendern,
+}: {
+  regeln: Platzierungsregel[];
+  darf: boolean;
+  aendern: (a: () => Promise<unknown>) => Promise<void>;
+}) {
+  const setzen = (schluessel: string, feld: 'wert' | 'wert_text' | 'quelle') => (wert: unknown) =>
+    aendern(() => api.patch(`/fachvorgaben/regeln/${schluessel}`, { [feld]: wert }));
+  return (
+    <div className="karte">
+      <h2>
+        Platzierungsregeln (Deckenmodule)
+        <Hilfe begriff="Platzierungsregeln" text={HILFE.regeln} />
+      </h2>
+      <p className="leise">
+        Projekte rechnen mit ihrem eingefrorenen Stand; geänderte Regeln erscheinen dort als Unterschied. Die Hinweis-Raumhöhe steht oben bei
+        den zentralen Werten.
+      </p>
+      <div className="tabelle-rahmen">
+        <table className="tabelle vorgaben">
+          <thead>
+            <tr>
+              <th>Regel</th>
+              <th>Wert</th>
+              <th>Einheit</th>
+              <th>
+                {BEGRIFF.quelle}
+                <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {regeln.map((r) => (
+              <tr key={r.schluessel}>
+                <td>
+                  {r.bezeichnung}
+                  {r.erlaeuterung && <Hilfe begriff={r.bezeichnung} text={r.erlaeuterung} />}
+                </td>
+                <td>
+                  {r.einheit === 'ja/nein' || r.einheit === 'Text' || r.einheit === 'min. Schutzart' ? (
+                    <Textfeld wert={r.wert_text} platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'wert_text')} />
+                  ) : (
+                    <Zahlfeld wert={r.wert} platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'wert')} />
+                  )}
+                </td>
+                <td>{r.einheit}</td>
+                <td>
+                  <Textfeld wert={r.quelle} gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'quelle')} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Modulkatalog({ stand }: { stand: number }) {
+  const [module, setModule] = useState<KatalogModulDaten[] | null>(null);
+  useEffect(() => {
+    api.get<KatalogModulDaten[]>('/bibliotheken/module').then(setModule).catch(() => setModule([]));
+  }, [stand]);
+  const preis = (w: number | null) => (w === null ? <span className="leise">fehlt</span> : `${zahl(w)} €`);
+  return (
+    <div className="karte">
+      <h2>Modulkatalog (Deckenmodule)</h2>
+      <p className="leise">
+        Import über die Importdatei (Kommandozeile <code>excel-importieren</code>). Fehlende Preise und Montagezeiten bleiben leer und werden nicht
+        geschätzt.
+      </p>
+      {module === null ? (
+        <p>Wird geladen …</p>
+      ) : module.length === 0 ? (
+        <p className="leise">Noch keine Module importiert.</p>
+      ) : (
+        <div className="tabelle-rahmen">
+          <table className="tabelle">
+            <thead>
+              <tr>
+                <th>Artikel-Nr.</th>
+                <th>Bezeichnung</th>
+                <th className="zahl">Leistung</th>
+                <th className="zahl">Maße (mm)</th>
+                <th>Schutzart</th>
+                <th>Bad</th>
+                <th className="zahl">EK netto</th>
+                <th className="zahl">VK netto</th>
+                <th className="zahl">Montage</th>
+                <th>{BEGRIFF.quelle}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {module.map((m) => (
+                <tr key={m.id} className={m.aktiv ? '' : 'leise'}>
+                  <td>{m.artikel_nr}</td>
+                  <td>
+                    {m.bezeichnung}
+                    {!m.aktiv && ' (inaktiv)'}
+                  </td>
+                  <td className="zahl">{zahl(m.leistung_w, 0)} W</td>
+                  <td className="zahl">
+                    {zahl(m.laenge_mm, 0)} × {zahl(m.breite_mm, 0)}
+                  </td>
+                  <td>{m.schutzart}</td>
+                  <td>{m.bad_geeignet ? 'ja' : 'nein'}</td>
+                  <td className="zahl">{preis(m.ek_netto)}</td>
+                  <td className="zahl">{preis(m.vk_netto)}</td>
+                  <td className="zahl">{m.montagezeit_min === null ? <span className="leise">fehlt</span> : `${zahl(m.montagezeit_min, 0)} min`}</td>
+                  <td>
+                    {/^https:\/\//.test(m.quelle) ? (
+                      <a href={m.quelle} target="_blank" rel="noopener noreferrer">
+                        Produktseite
+                      </a>
+                    ) : (
+                      m.quelle
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

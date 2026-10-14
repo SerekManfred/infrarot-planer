@@ -97,6 +97,33 @@ describe('ausfuehren', () => {
     expect(a.raeume[0].werte.pauschale_w_m2.herkunft).toBe('vorgabe');
   });
 
+  it('Deckenplan offline: Sperrflächen und Module speichern, Regelprüfung mit den eingefrorenen Regeln', () => {
+    const p = lp();
+    // Regeln im Projektstand (TESTWERTE)
+    p.paket.vorgaben_stand!.regeln = [
+      { schluessel: 'abstand_wand_cm', bezeichnung: 'TEST Wand', wert: 50, wert_text: '', einheit: 'cm', erlaeuterung: '', quelle: 'TESTWERT', reihenfolge: 0 },
+      { schluessel: 'abstand_sitzplatz_cm', bezeichnung: 'TEST Sitz', wert: 30, wert_text: '', einheit: 'cm', erlaeuterung: '', quelle: 'TESTWERT', reihenfolge: 1 },
+      { schluessel: 'thermostat_je_raum', bezeichnung: 'TEST Thermostat', wert: null, wert_text: 'ja', einheit: 'ja/nein', erlaeuterung: '', quelle: 'TESTWERT', reihenfolge: 2 },
+    ];
+    const modul = {
+      id: 'm1', modul_id: 1, artikel_nr: 'T-1', bezeichnung: 'TESTMODUL', leistung_w: 750, laenge_m: 0.9, breite_m: 0.7,
+      schutzart: 'IP44', bad_geeignet: true, x: 0.2, y: 2.0, gedreht: false,
+    };
+    const e = ausfuehren(p, vorgaben(), 'PATCH', '/raeume/5000', {
+      sperrflaechen: [{ id: 's1', typ: 'sitzplatz', x: 2, y: 2, b: 1.5, t: 1 }],
+      module: [modul],
+    }, zaehler())!;
+    expect(e.eintrag).toMatchObject({ methode: 'PATCH', pfad: '/raeume/5000' });
+    const a = ausfuehren(p, vorgaben(), 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort as {
+      raeume: { modulplanung: { installiert_w: number; thermostate: number; verstoesse: Record<string, string[]> } }[];
+      summe: { module: number };
+    };
+    expect(a.raeume[0].modulplanung.installiert_w).toBe(750);
+    expect(a.raeume[0].modulplanung.thermostate).toBe(1);
+    expect(a.raeume[0].modulplanung.verstoesse.m1).toEqual(['Abstand zur Wand 20 cm (mind. 50 cm)']);
+    expect(a.summe.module).toBe(1);
+  });
+
   it('Klimadaten aus dem Schnappschuss für die Gegenprobe', () => {
     const p = lp();
     ausfuehren(p, null, 'PATCH', '/objekte/50', { klimadaten_id: 1 }, zaehler());

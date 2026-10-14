@@ -29,6 +29,7 @@ import {
   zahl,
 } from '../texte';
 import { Bauteile } from './Bauteile';
+import { Deckenplan } from './Deckenplan';
 import { Hilfe, Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
@@ -186,12 +187,15 @@ function RaumKarte({
   stand: number;
 }) {
   const [details, setDetails] = useState(false);
+  const [plan, setPlan] = useState(false);
   const altbau = objekt.gebaeudestandard === 'sonstiger_bestand';
   // Außendienst: vereinfachte Karte; W/m² setzt nur der Fachprüfer (Festlegung 13.10.2026, Server prüft ebenso)
   const fach = fachansicht(benutzer);
   const pauschaleGesperrt = gesperrt || !hatRolle(benutzer, 'fachpruefer');
   const speichern = (feld: keyof Raum) => (wert: unknown) => aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert }));
   const pauschale = ergebnis?.werte.pauschale_w_m2.wert ?? null;
+  // Altbau: Orientierungswert des Raumtyps für den Fachprüfer (nur Platzhalter, nie automatisch verwendet)
+  const richtwert = vorgaben.raumtypen.find((t) => t.id === raum.raumtyp_id)?.richtwert_altbau_w_m2 ?? null;
 
   return (
     <article className="karte raum">
@@ -243,7 +247,14 @@ function RaumKarte({
           <label>
             Pauschale (Pflicht)
             <Hilfe begriff={GEBAEUDESTANDARDS.sonstiger_bestand} text={HILFE.altbau} />
-            <Zahlfeld wert={raum.pauschale_w_m2} einheit="W/m²" pflicht gesperrt={false} onSpeichern={speichern('pauschale_w_m2')} />
+            <Zahlfeld
+              wert={raum.pauschale_w_m2}
+              einheit="W/m²"
+              pflicht
+              platzhalter={richtwert !== null ? `Richtwert ${zahl(richtwert, 0)}` : undefined}
+              gesperrt={false}
+              onSpeichern={speichern('pauschale_w_m2')}
+            />
           </label>
         ) : (
           (altbau || !fach) && (
@@ -276,6 +287,12 @@ function RaumKarte({
       )}
 
       {ergebnis && (fach ? <Ergebnis e={ergebnis} /> : <ErgebnisEinfach e={ergebnis} />)}
+      {ergebnis && <Modulzeile e={ergebnis} />}
+
+      <button className="aufklapper" onClick={() => setPlan(!plan)} aria-expanded={plan}>
+        {plan ? '▾' : '▸'} Deckenplan: Sperrflächen und Module
+      </button>
+      {plan && <Deckenplan raum={raum} ergebnis={ergebnis} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} />}
 
       {fach && (
         <button className="aufklapper" onClick={() => setDetails(!details)} aria-expanded={details}>
@@ -394,6 +411,30 @@ function ErgebnisEinfach({ e }: { e: AuswertungRaum }) {
         <strong>{watt(e.phi_massgeblich_w)}</strong>
       </div>
       <Hinweise liste={e.hinweise.map(hinweisFuerAussendienst).filter((h): h is string => h !== null)} />
+    </div>
+  );
+}
+
+/** Module und Thermostat des Raums auf einen Blick (Raumübersicht) */
+function Modulzeile({ e }: { e: AuswertungRaum }) {
+  const m = e.modulplanung;
+  if (!m) return null;
+  return (
+    <div className="modulzeile">
+      <span>
+        Module: {m.anzahl === 0 ? 'noch keine' : m.typen.map((t) => `${t.anzahl} × ${t.artikel_nr}`).join(', ')}
+      </span>
+      {m.anzahl > 0 && (
+        <span>
+          installiert {watt(m.installiert_w)}
+          {m.benoetigt_w !== null && ` / benötigt ${watt(m.benoetigt_w)}`}
+        </span>
+      )}
+      <span>
+        Thermostat: {m.thermostate}
+        <Hilfe begriff="Thermostat" text={HILFE.thermostat} />
+      </span>
+      {m.module_mit_verstoss > 0 && <span className="verstoss-text">{m.module_mit_verstoss} Modul(e) mit Regelverstoß</span>}
     </div>
   );
 }

@@ -235,3 +235,36 @@ tr.inaktiv { color: var(--leise); }
 .status-wartet { background: var(--warnung-hell); color: var(--warnung); }
 .hilfe-absatz { display: block; margin-top: 0.4rem; }
 .fehlt-text { color: var(--warnung); font-size: 0.95rem; font-weight: 600; }
+
+/* ── Deckenplan (Draufsicht) ── */
+.deckenplan { margin-top: 0.5rem; }
+.plan-rahmen { background: var(--grau); border-radius: 8px; padding: 0.5rem; }
+.plan { display: block; width: 100%; max-height: 65vh; touch-action: none; user-select: none; -webkit-user-select: none; }
+.plan-raum { fill: #fff; stroke: var(--text); vector-effect: non-scaling-stroke; }
+.plan-wandabstand { fill: none; stroke: var(--leise); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.plan text { fill: var(--text); pointer-events: none; }
+.plan-sperr rect:not(.plan-halo), .plan-modul rect { stroke-width: 1.5px; vector-effect: non-scaling-stroke; cursor: grab; }
+.plan-sperr rect:not(.plan-halo) { fill: rgba(93, 104, 120, 0.25); stroke: var(--leise); }
+.plan-sitzplatz rect:not(.plan-halo), .plan-bett rect:not(.plan-halo) { fill: rgba(180, 35, 24, 0.18); stroke: var(--fehler); }
+.plan-dachschraege rect:not(.plan-halo) { fill: rgba(138, 90, 0, 0.18); stroke: var(--warnung); }
+.plan-dusche rect:not(.plan-halo) { fill: rgba(31, 58, 110, 0.15); stroke: var(--blau); }
+.plan-halo { fill: none; stroke: var(--leise); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.plan-tippflaeche { fill: transparent; cursor: grab; }
+.plan-punkt-kern { fill: var(--warnung); stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.plan-rauchmelder .plan-punkt-kern { fill: var(--fehler); }
+.plan-modul rect { fill: rgba(31, 58, 110, 0.75); stroke: var(--blau); }
+.plan-modul text { fill: #fff; font-weight: 700; }
+.plan-modul.verstoss rect { fill: rgba(180, 35, 24, 0.8); stroke: var(--fehler); }
+.gewaehlt rect:not(.plan-halo), .gewaehlt .plan-punkt-kern { stroke: var(--orange); stroke-width: 3px; }
+.plan-griff { fill: var(--orange); stroke: #fff; stroke-width: 2px; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
+.auswahl-leiste { align-items: center; background: var(--orange-hell); border-radius: 8px; padding: 0.5rem; margin-top: 0.5rem; }
+.auswahl-leiste select { width: auto; margin: 0; }
+.werkzeuge { margin-top: 0.75rem; }
+.werkzeuge .knopfreihe { margin-bottom: 0.5rem; }
+.werkzeuge select { width: auto; margin: 0; }
+.verstoesse { margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--fehler); font-weight: 500; }
+.plan-ergebnis { margin-top: 0.5rem; padding: 0.6rem 0.8rem; background: var(--grau); border-radius: 8px; }
+.modulzeile { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.92rem; margin-top: 0.5rem; }
+.modulzeile .verstoss-text { color: var(--fehler); font-weight: 600; }
+.tabelle td.zahl, .tabelle th.zahl { text-align: right; white-space: nowrap; }
+.tabelle tr.verstoss td { background: var(--fehler-hell); }

@@ -1,6 +1,9 @@
 // Zugriff auf die Backend-API. Die Sitzung liegt im HttpOnly-Cookie; das Frontend sieht kein Token.
 // Typen der API-Daten; Schlüssel wie im Backend (snake_case).
+import type { PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche } from '@infrarot/rechenkern';
 import { anfrage } from './offline/daten';
+
+export type { PlatziertesModul, Sperrflaeche };
 
 export { ApiFehler } from './netz';
 
@@ -98,6 +101,9 @@ export interface Raum {
   pauschale_w_m2: number | null;
   theta_int: number | null;
   luftwechsel: number | null;
+  /** Draufsicht der Decke (m ab linker oberer Raumecke) */
+  sperrflaechen: Sperrflaeche[];
+  module: PlatziertesModul[];
 }
 
 export interface Flaeche {
@@ -134,6 +140,37 @@ export interface Raumtyp {
   quelle: string;
   bemerkung: string;
   reihenfolge: number;
+  /** Orientierung für den Fachprüfer bei Altbau, wird nie automatisch verwendet */
+  richtwert_altbau_w_m2: number | null;
+}
+
+/** Platzierungsregel (feste Liste, gepflegt werden Wert und Quelle) */
+export interface Platzierungsregel extends Regel {
+  einheit: string;
+  erlaeuterung: string;
+  quelle: string;
+  reihenfolge: number;
+}
+
+/** Modul aus dem Modulkatalog */
+export interface KatalogModulDaten {
+  id: number;
+  artikel_nr: string;
+  bezeichnung: string;
+  leistung_w: number;
+  laenge_mm: number;
+  breite_mm: number;
+  bauhoehe_mm: number | null;
+  gewicht_kg: number | null;
+  schutzart: string;
+  bad_geeignet: boolean;
+  oberflaeche: string;
+  ek_netto: number | null;
+  vk_netto: number | null;
+  montagezeit_min: number | null;
+  quelle: string;
+  bemerkung: string;
+  aktiv: boolean;
 }
 
 export interface Bauteil {
@@ -175,6 +212,8 @@ export interface Fachvorgaben {
   werte: FachvorgabenWerte;
   raumtypen: Raumtyp[];
   pauschalen: Pauschale[];
+  /** fehlt in Projektständen vor dem 14.10.2026 */
+  regeln?: Platzierungsregel[];
   gebaeudestandards: Record<Gebaeudestandard, string>;
 }
 
@@ -200,6 +239,8 @@ export interface AuswertungRaum {
   phi_massgeblich_w: number | null;
   abweichung_c: number | null;
   pauschal: { flaeche_m2: number; pauschale_w_m2: number; phi_w: number } | null;
+  /** Module, Thermostate, Regelprüfung und Leistungswarnungen */
+  modulplanung: RaumModulplanung;
 }
 
 export interface Auswertung {
@@ -211,7 +252,14 @@ export interface Auswertung {
     Wert
   >;
   raeume: AuswertungRaum[];
-  summe: { phi_massgeblich_w: number; raeume_mit_ergebnis: number; raeume_ohne_ergebnis: number };
+  summe: {
+    phi_massgeblich_w: number;
+    raeume_mit_ergebnis: number;
+    raeume_ohne_ergebnis: number;
+    module: number;
+    installiert_w: number;
+    thermostate: number;
+  };
 }
 
 // Vollständiger Projektstand für den Offline-Speicher (GET /offline/projekte/{id})
@@ -234,7 +282,7 @@ export interface ProjektPaket extends Projekt {
 }
 
 export interface VorgabenUnterschied {
-  bereich: 'Einzelwert' | 'Raumtyp' | 'Pauschale';
+  bereich: 'Einzelwert' | 'Raumtyp' | 'Pauschale' | 'Platzierungsregel';
   bezeichnung: string;
   alt: number | string | null;
   neu: number | string | null;
@@ -263,6 +311,8 @@ export interface OfflineVorgaben {
   fachvorgaben: Fachvorgaben;
   bauteile: Bauteil[];
   klimadaten: Klimadaten[];
+  /** aktive Module des Katalogs (fehlt in Schnappschüssen vor dem 14.10.2026) */
+  module?: KatalogModulDaten[];
 }
 
 export interface ProtokollEintrag {
