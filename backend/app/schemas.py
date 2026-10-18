@@ -560,6 +560,8 @@ class RaumAuswirkung(BaseModel):
     bezeichnung: str
     alt_w: float | None
     neu_w: float | None
+    # Regelverstöße, die mit den neuen Vorgaben hinzukommen
+    neue_verstoesse: int = 0
 
 
 class VorgabenAuswirkung(BaseModel):
@@ -567,7 +569,47 @@ class VorgabenAuswirkung(BaseModel):
 
     summe_alt_w: float
     summe_neu_w: float
+    # nur Räume, bei denen sich Heizlast, Modulauswahl/Leistung oder Regelprüfung ändert
     raeume: list[RaumAuswirkung]
+    neue_verstoesse: int = 0
+
+
+class AbgleichProjekt(VorgabenAuswirkung):
+    """Projekt in der Sammelansicht bzw. in der Vorschau einer Fachvorgaben-Änderung."""
+
+    projekt_id: int
+    nummer: str
+    bezeichnung: str
+    status: Projektstatus
+    ausgecheckt: bool
+    unterschiede: int = 0
+
+
+class VorschauAnfrage(BaseModel):
+    """Geplante Änderung an den Fachvorgaben, deren Auswirkung vor dem Speichern gezeigt wird."""
+
+    art: Literal["werte", "raumtyp_neu", "raumtyp_aendern", "raumtyp_loeschen", "pauschale", "regel"]
+    # Raumtyp-ID bzw. Schlüssel der Regel
+    ziel: int | str | None = None
+    daten: dict = Field(default_factory=dict)
+
+
+class VorschauErgebnis(BaseModel):
+    betroffen: list[AbgleichProjekt]
+    # Zahl der geprüften (nicht freigegebenen) Projekte
+    geprueft: int
+
+
+class SammelEntscheidung(BaseModel):
+    aktion: Literal["uebernehmen", "ablehnen"]
+    projekt_ids: list[int] = Field(min_length=1, max_length=500)
+    bemerkung: str = Field(default="", max_length=500)
+
+
+class SammelErgebnis(BaseModel):
+    projekt_id: int
+    ok: bool
+    meldung: str = ""
 
 
 class ProjektVorgaben(BaseModel):

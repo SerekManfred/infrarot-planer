@@ -8,6 +8,12 @@
   python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
   python -m app.cli excel-importieren [--probelauf] [--umbenennen ALT=NEU ...] < DATEI.xlsx
+  python -m app.cli regel-setzen --schluessel S [--wert W | --text T] --quelle Q
+  python -m app.cli vorgaben-quelle-setzen --text T
+  python -m app.cli vorgaben-abgleichen
+  python -m app.cli vorgaben-uebernehmen --projekt NUMMER
+
+Änderungen an Fachvorgaben gleichen danach die Projekte ab (app/vorgabenabgleich.py).
 
 Das Passwort wird verdeckt abgefragt oder mit --passwort-stdin von der Standardeingabe gelesen.
 """
@@ -23,7 +29,8 @@ from app import protokoll  # noqa: F401  (Änderungen über die Kommandozeile we
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
 from app.excel_import import ImportFehler, importiere_excel
-from app.models import ROLLEN, Anmeldeversuch, Benutzer, Protokoll
+from app.vorgabenabgleich import abgleichen
+from app.models import ROLLEN, Anmeldeversuch, Benutzer, Fachvorgaben, Platzierungsregel, Projekt, Protokoll
 from app.schemas import ROLLEN_REIHENFOLGE
 from app.sicherheit import MIN_PASSWORT_LAENGE, passwort_hashen
 
@@ -137,6 +144,8 @@ def bibliothek_importieren(art: str, datei: str) -> None:
         text = f.read()
     with sitzungsfabrik()() as db:
         neu, aktualisiert, fehler = importiere(db, art, text)
+        if not fehler and art == "raumtypen":
+            abgleichen(db, None)
     if fehler:
         print("Nichts importiert. Fehler:", *fehler, sep="\n  ", file=sys.stderr)
         sys.exit(1)
@@ -160,7 +169,53 @@ def excel_importieren(db: Session, inhalt: bytes, umbenennen: list[str], probela
         db.rollback()
         return "PROBELAUF – nichts gespeichert\n" + bericht.text()
     db.commit()
-    return bericht.text()
+    return bericht.text() + "\n" + abgleich_text(abgleichen(db, None))
+
+
+def abgleich_text(ergebnis: dict) -> str:
+    return (f"Projekte abgeglichen: {len(ergebnis['still'])} ohne Auswirkung übernommen, "
+            f"{len(ergebnis['betroffen'])} warten auf den Fachprüfer")
+
+
+def regel_setzen(db: Session, schluessel: str, wert: float | None, text: str | None, quelle: str) -> str:
+    """Wert und Quelle einer Platzierungsregel setzen (protokolliert), danach Projekte abgleichen."""
+    regel = db.get(Platzierungsregel, schluessel)
+    if regel is None:
+        raise ValueError(f"Platzierungsregel {schluessel} gibt es nicht.")
+    if not quelle.strip():
+        raise ValueError("Quelle ist Pflicht.")
+    if wert is not None:
+        regel.wert = wert
+    if text is not None:
+        regel.wert_text = text
+    regel.quelle = quelle.strip()
+    db.commit()
+    wert_text = f"{regel.wert:g}" if regel.wert is not None else regel.wert_text
+    return f"{regel.bezeichnung}: {wert_text} {regel.einheit}\n" + abgleich_text(abgleichen(db, None))
+
+
+def vorgaben_quelle_setzen(db: Session, text: str) -> str:
+    vorgaben = db.get(Fachvorgaben, 1)
+    vorgaben.quelle = text.strip()
+    db.commit()
+    return "Quelle der zentralen Werte gesetzt.\n" + abgleich_text(abgleichen(db, None))
+
+
+def vorgaben_uebernehmen_cli(db: Session, nummer: str) -> str:
+    """Neue zentrale Vorgaben in ein Projekt übernehmen, wie der Klick des Fachprüfers (protokolliert, ohne Benutzer)."""
+    from app.routers.projekte import vorgaben_uebernehmen
+
+    projekt = db.scalars(select(Projekt).where(Projekt.nummer == nummer)).first()
+    if projekt is None:
+        raise ValueError(f"Projekt {nummer} nicht gefunden.")
+    try:
+        ergebnis = vorgaben_uebernehmen(projekt.id, db, Benutzer(id=None, name="Kommandozeile"))
+    except Exception as fehler:  # HTTPException (gesperrt, freigegeben) als Meldung
+        db.rollback()
+        raise ValueError(getattr(fehler, "detail", str(fehler))) from None
+    db.refresh(projekt)
+    return f"Projekt {nummer}: Vorgaben-Stand {ergebnis.stand_am:%d.%m.%Y %H:%M}, Status {projekt.status}"
+
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -199,6 +254,17 @@ def main(argv: list[str] | None = None) -> None:
                    help="vorhandenen Raumtyp einem Namen in der Datei zuordnen (mehrfach möglich)")
     p.add_argument("--probelauf", action="store_true", help="nur prüfen und Bericht zeigen, nichts speichern")
 
+    p = befehle.add_parser("regel-setzen", help="Wert und Quelle einer Platzierungsregel setzen")
+    p.add_argument("--schluessel", required=True)
+    p.add_argument("--wert", type=float)
+    p.add_argument("--text")
+    p.add_argument("--quelle", required=True)
+    p = befehle.add_parser("vorgaben-quelle-setzen", help="Quellentext der zentralen Werte setzen")
+    p.add_argument("--text", required=True)
+    befehle.add_parser("vorgaben-abgleichen", help="Projekte mit den zentralen Vorgaben abgleichen")
+    p = befehle.add_parser("vorgaben-uebernehmen", help="neue zentrale Vorgaben in ein Projekt übernehmen")
+    p.add_argument("--projekt", required=True, help="Projektnummer")
+
     args = parser.parse_args(argv)
     if args.befehl == "admin-anlegen":
         benutzer_anlegen(args.email, args.name, ["admin"], args.passwort_stdin)
@@ -236,6 +302,19 @@ def main(argv: list[str] | None = None) -> None:
         with sitzungsfabrik()() as db:
             try:
                 print(excel_importieren(db, sys.stdin.buffer.read(), args.umbenennen, args.probelauf))
+            except ValueError as fehler:
+                sys.exit(str(fehler))
+    elif args.befehl in ("regel-setzen", "vorgaben-quelle-setzen", "vorgaben-abgleichen", "vorgaben-uebernehmen"):
+        with sitzungsfabrik()() as db:
+            try:
+                if args.befehl == "regel-setzen":
+                    print(regel_setzen(db, args.schluessel, args.wert, args.text, args.quelle))
+                elif args.befehl == "vorgaben-quelle-setzen":
+                    print(vorgaben_quelle_setzen(db, args.text))
+                elif args.befehl == "vorgaben-abgleichen":
+                    print(abgleich_text(abgleichen(db, None)))
+                else:
+                    print(vorgaben_uebernehmen_cli(db, args.projekt))
             except ValueError as fehler:
                 sys.exit(str(fehler))
     else:

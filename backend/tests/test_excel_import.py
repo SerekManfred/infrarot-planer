@@ -114,14 +114,33 @@ def test_regeln_lesen_und_pflegen(client, aussendienst, fachpruefer):
 
 
 def test_regeln_im_projekt_eingefroren(client, aussendienst, fachpruefer):
+    """Regeln sind eingefroren; eine neue Regel sperrt nur, wenn sie im Projekt etwas ändert (18.10.2026)."""
+    modul = {"id": "m1", "artikel_nr": "T-1", "bezeichnung": "TESTMODUL", "leistung_w": 500, "laenge_m": 1.0,
+             "breite_m": 0.5, "x": 0.2, "y": 2.0}
     anmelden(client, aussendienst.email)
-    p = client.post("/api/projekte", json={"nummer": "R-1", "bezeichnung": "R", "gebaeudestandard": "neubau"}).json()
+    projekte = []
+    for nummer, module in (("R-1", [modul]), ("R-2", [])):
+        p = client.post("/api/projekte", json={"nummer": nummer, "bezeichnung": "R", "gebaeudestandard": "neubau"}).json()
+        g = client.post(f"/api/objekte/{p['objekte'][0]['id']}/geschosse", json={"bezeichnung": "EG"}).json()
+        client.post(f"/api/geschosse/{g['id']}/raeume", json={"bezeichnung": "Raum", "laenge_m": 4, "breite_m": 5, "module": module})
+        projekte.append(p["id"])
+
     anmelden(client, fachpruefer.email)
+    vorschau = client.post("/api/fachvorgaben/vorschau", json={"art": "regel", "ziel": "abstand_wand_cm", "daten": {"wert": 50}}).json()
+    assert [b["nummer"] for b in vorschau["betroffen"]] == ["R-1"] and vorschau["geprueft"] == 2
+    assert vorschau["betroffen"][0]["neue_verstoesse"] == 1
+
     client.patch("/api/fachvorgaben/regeln/abstand_wand_cm", json={"wert": 50})
-    v = client.get(f"/api/projekte/{p['id']}/vorgaben").json()
-    assert v["vorgaben"]["regeln"][0]["wert"] is None  # Projekt rechnet mit seinem Stand
+    # R-1: Modul 20 cm vor der Wand → neuer Regelverstoß → wartet; rechnet bis zur Entscheidung mit seinem Stand
+    v = client.get(f"/api/projekte/{projekte[0]}/vorgaben").json()
+    assert v["offen"] is True and v["vorgaben"]["regeln"][0]["wert"] is None
     assert {"bereich": "Platzierungsregel", "bezeichnung": "Mindestabstand Modul – Wand (cm)", "alt": None, "neu": 50} in v["unterschiede"]
-    v = client.post(f"/api/projekte/{p['id']}/vorgaben/uebernehmen").json()
+    assert v["auswirkung"]["neue_verstoesse"] == 1
+    # R-2 ohne Module: still übernommen
+    v2 = client.get(f"/api/projekte/{projekte[1]}/vorgaben").json()
+    assert v2["unterschiede"] == [] and v2["vorgaben"]["regeln"][0]["wert"] == 50
+
+    v = client.post(f"/api/projekte/{projekte[0]}/vorgaben/uebernehmen").json()
     assert v["vorgaben"]["regeln"][0]["wert"] == 50
 
 

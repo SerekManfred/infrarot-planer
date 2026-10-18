@@ -10,6 +10,7 @@ from app.csv_import import importiere
 from app.db import get_db
 from app.models import BibBauteil, BibKlimadaten, BibModul
 from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, ModulLesen
+from app.vorgabenabgleich import abgleichen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
 
@@ -49,4 +50,6 @@ async def csv_importieren(
     neu, aktualisiert, fehler = importiere(db, art, text)
     if fehler:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, {"meldung": "Nichts importiert", "fehler": fehler})
+    if art == "raumtypen":  # Raumtypen gehören zu den Fachvorgaben der Projekte
+        abgleichen(db, db.info.get("benutzer_id"))
     return ImportBericht(neu=neu, aktualisiert=aktualisiert, fehler=[])

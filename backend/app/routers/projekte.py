@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_admin, nur_fachpruefer
 from app.auswertung import objekt_auswerten
+from app.vorgabenabgleich import vergleich
 from app.vorgabenstand import mit_texten, offene_unterschiede, projekt_stand, schnappschuss, unterschiede
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
@@ -169,21 +170,13 @@ def einchecken(projekt_id: int, db: Session = Depends(get_db), benutzer: Benutze
 
 
 def _auswirkung(db: Session, projekt: Projekt, neu: dict) -> dict:
-    """Heizlast mit dem Projektstand (alt) und mit den aktuellen zentralen Vorgaben (neu)."""
-    summe_alt = summe_neu = 0.0
-    raeume = []
-    for objekt in projekt.objekte:
-        alt_a = objekt_auswerten(db, objekt)[1]
-        neu_a = objekt_auswerten(db, objekt, neu)[1]
-        summe_alt += alt_a["summe"]["phi_massgeblich_w"]
-        summe_neu += neu_a["summe"]["phi_massgeblich_w"]
-        for ra, rn in zip(alt_a["raeume"], neu_a["raeume"], strict=True):
-            if ra["phi_massgeblich_w"] != rn["phi_massgeblich_w"]:
-                raeume.append({
-                    "raum_id": ra["raum_id"], "bezeichnung": f"{ra['geschoss']} · {ra['bezeichnung']}",
-                    "alt_w": ra["phi_massgeblich_w"], "neu_w": rn["phi_massgeblich_w"],
-                })
-    return {"summe_alt_w": summe_alt, "summe_neu_w": summe_neu, "raeume": raeume}
+    """Auswirkung der aktuellen zentralen Vorgaben gegenüber dem Projektstand (app/vorgabenabgleich.py)."""
+    stand = projekt_stand(db, projekt)
+    ergebnis = vergleich(db, projekt, stand, neu)
+    if ergebnis is not None:
+        return ergebnis
+    summe = sum(objekt_auswerten(db, o, stand)[1]["summe"]["phi_massgeblich_w"] for o in projekt.objekte)
+    return {"summe_alt_w": summe, "summe_neu_w": summe, "raeume": [], "neue_verstoesse": 0}
 
 
 @router.get("/{projekt_id}/vorgaben", response_model=ProjektVorgaben)

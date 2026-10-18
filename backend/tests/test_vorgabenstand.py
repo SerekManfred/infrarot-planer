@@ -65,19 +65,29 @@ def test_uebernahme_per_klick_protokolliert(client, projekt, aussendienst, fachp
     assert eintrag["aenderungen"]["unterschiede"][0]["neu"] == 50
 
 
-def test_neuer_raumtyp_und_pauschale_als_unterschied(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+def test_neuer_raumtyp_ohne_auswirkung_still_uebernommen(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+    """Verfeinerte Sperre (18.10.2026): Ein neuer Raumtyp, der im Projekt nicht vorkommt, sperrt nicht."""
+    _raum(client, projekt)
+    pid = projekt["projekt"]["id"]
     anmelden(client, fachpruefer.email)
+    client.post(f"/api/projekte/{pid}/status", json={"status": "geprueft"})
     typ = client.post("/api/fachvorgaben/raumtypen", json={"bezeichnung": "TESTBAD", "theta_int": 24}).json()
     client.put("/api/fachvorgaben/pauschalen", json={"raumtyp_id": typ["id"], "gebaeudestandard": "neubau", "w_m2": 60})
     anmelden(client, aussendienst.email)
     v = _vorgaben(client, projekt)
-    assert {"bereich": "Raumtyp", "bezeichnung": "TESTBAD", "alt": None, "neu": "neu"} in v["unterschiede"]
-    assert {"bereich": "Pauschale", "bezeichnung": "TESTBAD / Neubau (W/m²)", "alt": None, "neu": 60} in v["unterschiede"]
-    # Raumtypen im Projekt erst nach Übernahme
-    assert v["vorgaben"]["raumtypen"] == []
-    anmelden(client, fachpruefer.email)
-    v = client.post(f"/api/projekte/{projekt['projekt']['id']}/vorgaben/uebernehmen").json()
-    assert [t["bezeichnung"] for t in v["vorgaben"]["raumtypen"]] == ["TESTBAD"]
+    assert v["unterschiede"] == [] and v["offen"] is False
+    assert [t["bezeichnung"] for t in v["vorgaben"]["raumtypen"]] == ["TESTBAD"]  # sofort auswählbar
+    p = client.get(f"/api/projekte/{pid}").json()
+    assert (p["status"], p["vorgaben_offen"]) == ("geprueft", False)  # Prüfung bleibt gültig
+    eintraege = [e for e in client.get(f"/api/projekte/{pid}/protokoll").json() if e["aktion"] == "vorgaben_uebernommen"]
+    assert eintraege and eintraege[0]["aenderungen"]["automatisch"] is True
+    assert eintraege[0]["benutzer_name"] == fachpruefer.name
+
+
+def test_quellenaenderung_sperrt_nicht(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+    _raum(client, projekt)
+    _werte_setzen(client, fachpruefer, quelle="TESTQUELLE NEU")
+    assert client.get(f"/api/projekte/{projekt['projekt']['id']}").json()["vorgaben_offen"] is False
 
 
 def test_freigegebene_projekte_bleiben_unveraendert(client, projekt, aussendienst, fachpruefer):  # noqa: F811
@@ -95,6 +105,7 @@ def test_freigegebene_projekte_bleiben_unveraendert(client, projekt, aussendiens
 
 
 def test_uebernahme_setzt_geprueft_zurueck_und_respektiert_sperre(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+    _raum(client, projekt)
     pid = projekt["projekt"]["id"]
     anmelden(client, fachpruefer.email)
     client.post(f"/api/projekte/{pid}/status", json={"status": "geprueft"})
@@ -198,3 +209,89 @@ def test_admin_und_fachpruefer_kombiniert(client, db, projekt):  # noqa: F811
     assert client.post(f"/api/projekte/{pid}/status", json={"status": "freigegeben"}).status_code == 200
     # und darf weiter Benutzer verwalten
     assert client.get("/api/benutzer").status_code == 200
+
+
+# ── Verfeinerte Sperre: Sammelansicht, Vorschau, Ablehnung (Festlegung 18.10.2026) ──
+
+
+def _zwei_projekte(client, aussendienst):
+    """P-A mit Raum ohne Raumtyp (Rückfallwert), P-B ohne Räume."""
+    anmelden(client, aussendienst.email)
+    ids = []
+    for nummer in ("P-A", "P-B"):
+        p = client.post("/api/projekte", json={"nummer": nummer, "bezeichnung": nummer, "gebaeudestandard": "neubau"}).json()
+        if nummer == "P-A":
+            g = client.post(f"/api/objekte/{p['objekte'][0]['id']}/geschosse", json={"bezeichnung": "EG"}).json()
+            client.post(f"/api/geschosse/{g['id']}/raeume", json={"bezeichnung": "Raum", "laenge_m": 4, "breite_m": 5})
+        ids.append(p["id"])
+    return ids
+
+
+def test_vorschau_zeigt_betroffene_ohne_zu_speichern(client, aussendienst, fachpruefer):
+    pa, _pb = _zwei_projekte(client, aussendienst)
+    anmelden(client, fachpruefer.email)
+    werte = client.get("/api/fachvorgaben").json()["werte"]
+    werte.pop("geaendert_am")
+    v = client.post("/api/fachvorgaben/vorschau", json={"art": "werte", "daten": werte | {"rueckfall_neubau_w_m2": 50}}).json()
+    assert v["geprueft"] == 2
+    assert [(b["nummer"], b["summe_alt_w"], b["summe_neu_w"]) for b in v["betroffen"]] == [("P-A", 900, 1000)]
+    assert client.get("/api/fachvorgaben").json()["werte"]["rueckfall_neubau_w_m2"] == 45  # nichts gespeichert
+    # reine Quellenänderung betrifft niemanden
+    v = client.post("/api/fachvorgaben/vorschau", json={"art": "werte", "daten": werte | {"quelle": "NEU"}}).json()
+    assert v["betroffen"] == []
+    # Außendienst darf nicht
+    anmelden(client, aussendienst.email)
+    assert client.post("/api/fachvorgaben/vorschau", json={"art": "werte", "daten": werte}).status_code == 403
+
+
+def test_sammelansicht_und_sammelentscheidung(client, aussendienst, fachpruefer):
+    pa, pb = _zwei_projekte(client, aussendienst)
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
+    # nur P-A ist betroffen, P-B hat still übernommen
+    liste = client.get("/api/fachvorgaben/abgleich").json()
+    assert [(x["nummer"], x["summe_alt_w"], x["summe_neu_w"], x["neue_verstoesse"]) for x in liste] == [("P-A", 900, 1000, 0)]
+    assert liste[0]["raeume"][0]["bezeichnung"] == "EG · Raum" and liste[0]["unterschiede"] == 1
+    assert client.get(f"/api/projekte/{pb}").json()["vorgaben_offen"] is False
+
+    ergebnis = client.post("/api/fachvorgaben/abgleich", json={"aktion": "ablehnen", "projekt_ids": [pa, 99999], "bemerkung": "TEST"}).json()
+    assert ergebnis[0] == {"projekt_id": pa, "ok": True, "meldung": ""}
+    assert ergebnis[1]["ok"] is False and "nicht gefunden" in ergebnis[1]["meldung"]
+    assert client.get("/api/fachvorgaben/abgleich").json() == []
+    eintrag = next(e for e in client.get(f"/api/projekte/{pa}/protokoll").json() if e["aktion"] == "vorgaben_abgelehnt")
+    assert eintrag["aenderungen"]["bemerkung"] == "TEST"
+
+    # neue zentrale Änderung ohne Auswirkung auf P-A: Ablehnung gilt weiter, keine Sperre
+    anmelden(client, fachpruefer.email)
+    client.post("/api/fachvorgaben/raumtypen", json={"bezeichnung": "TESTNEU"})
+    assert client.get(f"/api/projekte/{pa}").json()["vorgaben_offen"] is False
+    # Änderung mit Auswirkung: wieder offen, Übernahme per Sammelaktion
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=55)
+    assert client.get(f"/api/projekte/{pa}").json()["vorgaben_offen"] is True
+    ergebnis = client.post("/api/fachvorgaben/abgleich", json={"aktion": "uebernehmen", "projekt_ids": [pa]}).json()
+    assert ergebnis == [{"projekt_id": pa, "ok": True, "meldung": ""}]
+    assert _auswertung(client, {"objekt": client.get(f"/api/projekte/{pa}").json()["objekte"][0]})["summe"]["phi_massgeblich_w"] == pytest.approx(1100)
+
+    anmelden(client, aussendienst.email)
+    assert client.get("/api/fachvorgaben/abgleich").status_code == 403
+    assert client.post("/api/fachvorgaben/abgleich", json={"aktion": "uebernehmen", "projekt_ids": [pa]}).status_code == 403
+
+
+def test_sammelentscheidung_meldet_gesperrte_projekte(client, aussendienst, fachpruefer):
+    pa, _pb = _zwei_projekte(client, aussendienst)
+    client.post(f"/api/projekte/{pa}/auschecken", json={"geraet": "Tablet 1"})
+    _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
+    ergebnis = client.post("/api/fachvorgaben/abgleich", json={"aktion": "uebernehmen", "projekt_ids": [pa]}).json()
+    assert ergebnis[0]["ok"] is False and "ausgecheckt" in ergebnis[0]["meldung"]
+
+
+def test_cli_regel_setzen_und_uebernehmen(db, client, aussendienst):
+    from app.cli import regel_setzen, vorgaben_uebernehmen_cli
+
+    pa, pb = _zwei_projekte(client, aussendienst)
+    text = regel_setzen(db, "abstand_dusche_cm", 30, None, "TESTQUELLE")
+    assert "Mindestabstand zu Dusche/Wanne: 30 cm" in text and "2 ohne Auswirkung übernommen" in text
+    with pytest.raises(ValueError):
+        regel_setzen(db, "gibtsnicht", 1, None, "Q")
+    with pytest.raises(ValueError):
+        regel_setzen(db, "abstand_dusche_cm", 30, None, " ")
+    assert "Status entwurf" in vorgaben_uebernehmen_cli(db, "P-A")
