@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D, Modulkatalog, Sperrflächen und Modulplatzierung (14.10.2026)
+Stand: Phase 1 Teil D mit verfeinerter Sperre bei geänderten Fachvorgaben (18.10.2026)
 
 ## Zweck und Beteiligte
 
@@ -109,8 +109,21 @@ Festlegung 12.10.2026:
 - Die Übernahme ist eine Änderung am Projekt:
   - Ein geprüftes Projekt fällt dadurch auf „Vor-Ort-Entwurf“ zurück.
   - Bei einem ausgecheckten Projekt geht sie erst nach dem Einchecken.
+- **Verfeinerte Sperre** (Festlegung 18.10.2026, `backend/app/vorgabenabgleich.py`):
+  - Nach jeder zentralen Änderung gleicht der Server alle nicht freigegebenen Projekte ab. Das gilt für Oberfläche, CSV-/Excel-Import und Kommandozeile.
+  - Ein Projekt wartet nur, wenn sich für einen seiner Räume etwas ändert:
+    - Heizlast (maßgeblich, aus der Pauschale A oder aus der Gegenprobe C),
+    - benötigte Leistung (Grundlage der Modulauswahl),
+    - Leistungswarnungen,
+    - Thermostate,
+    - Regelverstöße.
+  - **Ohne Auswirkung übernimmt das Projekt still.** Dazu gehören neue Raumtypen, die im Projekt nicht vorkommen, Text- und Quellenänderungen und Werte, die das Projekt nicht nutzt. Das wird protokolliert („automatisch“, mit Grund); der Status bleibt, auch „fachlich geprüft“.
+  - Wurde ein Stand bewusst abgelehnt und kommt danach eine Änderung ohne Auswirkung hinzu, gilt die Ablehnung weiter (protokolliert).
+  - Ausgecheckte Projekte werden ebenfalls abgeglichen, denn bei einer stillen Übernahme ändern sich ihre Ergebnisse nicht.
+- **Vorschau vor dem Speichern:** Auf der Seite Fachvorgaben zeigt jede Änderung vorab „Diese Änderung betrifft x Projekte“, mit Heizlast vorher/nachher und neuen Regelverstößen. Gemessen wird die Wirkung genau dieser Änderung; gespeichert wird erst nach Bestätigung. Betrifft sie kein Projekt, wird ohne Rückfrage gespeichert.
+- **Sammelansicht „Vorgaben-Abgleich“** (nur Fachprüfer): alle wartenden Projekte mit Heizlast vorher/nachher, Zahl neuer Regelverstöße und betroffenen Räumen. Nach Mehrfachauswahl „Für ausgewählte übernehmen“ oder „Für ausgewählte ablehnen“, jeweils je Projekt protokolliert wie die Einzelentscheidung. Gesperrte (ausgecheckte) Projekte werden mit Begründung gemeldet und übersprungen.
 - **Freigegebene Projekte bleiben unverändert**. Ihnen wird keine Übernahme angeboten.
-- Neue Raumtypen stehen in einem bestehenden Projekt erst nach der Übernahme zur Auswahl.
+- Neue Raumtypen stehen in einem bestehenden Projekt nach der (meist stillen) Übernahme zur Auswahl.
 - Nicht eingefroren werden die Bibliotheken (Bauteile mit U-Werten, Klimadaten). Sie sind Nachschlagewerke mit Quellenangabe und werden über ihre Kennung verwendet.
 
 ## Offline-Betrieb
@@ -155,7 +168,7 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 - **Punkte:** Leuchte/Spot und Rauchmelder.
 - **Mindestabstand** je Typ aus der Regeltabelle, gemessen als kürzeste Entfernung zwischen den Kanten.
 - **Sitzplatz und Bett:** Über ihnen ist ein Modul **immer unzulässig**.
-- **Fehlender Abstand:** Für Dusche/Wanne und Sonstiges fehlt die Regel (14.10.2026). Dort wird nur geprüft, dass kein Modul darüber liegt, mit dem Hinweis „Vorgabe fehlt“.
+- **Fehlender Abstand:** Fehlt die Abstandsregel eines Typs, wird nur geprüft, dass kein Modul darüber liegt, mit dem Hinweis „Vorgabe fehlt“. Seit dem 18.10.2026 sind alle Abstände belegt (Dusche/Wanne und Sonstiges je 30 cm).
 
 ### Modulauswahl
 

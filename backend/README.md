@@ -40,6 +40,12 @@ docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
 # Importdatei des Auftraggebers (Raumtypen, Platzierungsregeln, Modulkatalog); erst Probelauf, vorher sichern
 docker exec -i infrarot-backend python -m app.cli excel-importieren --probelauf < daten/IR-Planer_Importdaten_geprueft.xlsx
 docker exec -i infrarot-backend python -m app.cli excel-importieren [--umbenennen ALT=NEU …] < daten/IR-Planer_Importdaten_geprueft.xlsx
+
+# Fachvorgaben über die Kommandozeile (protokolliert, danach Abgleich der Projekte: ohne Auswirkung still übernommen)
+docker exec infrarot-backend python -m app.cli regel-setzen --schluessel abstand_dusche_cm --wert 30 --quelle "…"
+docker exec infrarot-backend python -m app.cli vorgaben-quelle-setzen --text "…"
+docker exec infrarot-backend python -m app.cli vorgaben-abgleichen
+docker exec infrarot-backend python -m app.cli vorgaben-uebernehmen --projekt NUMMER
 docker exec infrarot-backend python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
 
 # Tests
