@@ -30,7 +30,7 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 - Ergänzt am 18.10.2026 (vorher Sicherung `infrarot_db_20261018_103834.dump`):
   - Mindestabstand zu Dusche/Wanne und zu sonstigen Sperrflächen je 30 cm, Quelle „Erfahrungswert Serek, Stand 18.10.2026“. Damit sind alle 18 Regeln belegt.
   - Quellentext der zentralen Werte korrigiert (ohne Höhenzuschlag, Hinweis-Raumhöhe 2,65 m).
-  - Raumtyp „Technik“ bleibt. Er hat weiterhin den Neubau-Wert 20 W/m² vom 13.10.2026 (siehe „Offen“).
+  - Raumtyp „Technik“ bleibt, mit der Neubau-Pauschale 20 W/m², Quelle „Erfahrungswert Serek, Stand 18.10.2026“ (Entscheidung Auftraggeber 18.10.2026). Effizienzhaus-Sanierung ohne Tabellenwert, dort gilt der Rückfallwert.
 - Importiert am 14.10.2026 aus `daten/IR-Planer_Importdaten_geprueft.xlsx` (vorher Sicherung `infrarot_db_20261014_151658.dump`):
   - 13 Raumtypen: 12 aus der Datei, „Technik“ unverändert. 4 umbenannt, damit Projekte ihre Raumtypen behalten: Wohnraum → Wohnen, Kind → Kinderzimmer, Flur → Flur/Diele, Abstell → Abstellraum.
   - 25 Pauschalen: 24 aus der Datei mit Quelle „Erfahrungswert Serek, Stand 14.10.2026“, dazu Technik / Neubau 20 W/m² vom 13.10.
@@ -191,7 +191,6 @@ Hinweise:
 
 **Fachliche Zulieferung (von Ihnen):**
 - **EK/VK-Preise und Montagezeiten** der 21 Module (für Teil E). Maße vor dem Produktivstart gegen die Herstellerdatenblätter prüfen (Prüfprotokoll der Importdatei).
-- Raumtyp „Technik“ ist behalten. Er hat aber noch die Neubau-Pauschale **20 W/m²**, die am 13.10.2026 in der App eingetragen wurde. Soll sie entfernt werden, damit wie gewünscht der Rückfallwert 40 W/m² gilt? Das betrifft einen Raum in einem der Testprojekte.
 - Niedrige Priorität, nur für Quelle C: Klimadaten (DIN/TS 12831-1), Pauschal-U-Werte, Reduktionsfaktoren je Raumtyp.
 
 **Als Nächstes geplant (Teil E):** Angebot und PDF-Platzierungsplan.
