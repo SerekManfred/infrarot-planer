@@ -10,8 +10,10 @@ import {
   type KatalogModulDaten,
   type Platzierungsregel,
   type Raumtyp,
+  type VorschauAnfrage,
+  type VorschauErgebnis,
 } from '../api';
-import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, zahl, zeitpunkt } from '../texte';
+import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, watt, zahl, zeitpunkt } from '../texte';
 import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 import { Protokoll } from './Protokoll';
 
@@ -26,6 +28,44 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
   }, []);
   useEffect(laden, [laden]);
 
+  const [hinweis, setHinweis] = useState('');
+
+  /**
+   * Vor dem Speichern zeigen, welche Projekte die Änderung betrifft (Festlegung 18.10.2026). Betroffene Projekte
+   * warten danach auf die Entscheidung des Fachprüfers; alle anderen übernehmen still.
+   */
+  async function mitVorschau(anfrage: VorschauAnfrage, aktion: () => Promise<unknown>) {
+    setFehler('');
+    setHinweis('');
+    let vorschau: VorschauErgebnis;
+    try {
+      vorschau = await api.post<VorschauErgebnis>('/fachvorgaben/vorschau', anfrage);
+    } catch (e) {
+      setFehler((e as Error).message);
+      return;
+    }
+    const n = vorschau.betroffen.length;
+    if (n > 0) {
+      const zeilen = vorschau.betroffen.slice(0, 15).map(
+        (b) =>
+          `• ${b.nummer} ${b.bezeichnung}: ${watt(b.summe_alt_w)} → ${watt(b.summe_neu_w)}` +
+          (b.neue_verstoesse > 0 ? `, ${b.neue_verstoesse} neue(r) Regelverstoß/-verstöße` : '') +
+          (b.raeume.length > 0 ? ` (${b.raeume.length} Raum/Räume)` : ''),
+      );
+      if (n > 15) zeilen.push(`… und ${n - 15} weitere`);
+      const text =
+        `Diese Änderung betrifft ${n} ${n === 1 ? 'Projekt' : 'Projekte'}:\n\n${zeilen.join('\n')}\n\n` +
+        'Diese Projekte warten danach auf Ihre Entscheidung (Vorgaben-Abgleich). Alle anderen übernehmen die Änderung still.\n\nSpeichern?';
+      if (!window.confirm(text)) return;
+    }
+    await aendern(aktion);
+    setHinweis(
+      n > 0
+        ? `Gespeichert. ${n} ${n === 1 ? 'Projekt wartet' : 'Projekte warten'} auf Ihre Entscheidung – siehe „Vorgaben-Abgleich“.`
+        : `Gespeichert. Die Änderung betrifft keines der ${vorschau.geprueft} offenen Projekte; sie haben sie still übernommen.`,
+    );
+  }
+
   async function aendern(aktion: () => Promise<unknown>) {
     setFehler('');
     try {
@@ -39,11 +79,11 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
 
   if (!vorgaben) return fehler ? <Meldung>{fehler}</Meldung> : <p>Wird geladen …</p>;
   const w = vorgaben.werte;
-  const werteSetzen = (feld: keyof FachvorgabenWerte) => (wert: unknown) =>
-    aendern(() => {
-      const { geaendert_am: _, ...rest } = w;
-      return api.put('/fachvorgaben/werte', { ...rest, [feld]: wert });
-    });
+  const werteSetzen = (feld: keyof FachvorgabenWerte) => (wert: unknown) => {
+    const { geaendert_am: _, ...rest } = w;
+    const daten = { ...rest, [feld]: wert };
+    return mitVorschau({ art: 'werte', daten }, () => api.put('/fachvorgaben/werte', daten));
+  };
   const standards = Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[];
   // Altbau („sonstiger Bestand“): keine Rückfall- und Tabellenwerte, Pauschale je Raum durch den Fachprüfer (Festlegungen 12./13.10.2026)
   const mitRueckfall = standards.filter((gs): gs is Exclude<Gebaeudestandard, 'sonstiger_bestand'> => gs !== 'sonstiger_bestand');
@@ -57,6 +97,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
         Bestehende Projekte rechnen mit ihrem eingefrorenen Stand; dort erscheinen Änderungen als Unterschied und werden nur per Klick übernommen.
       </Meldung>
       {fehler && <Meldung>{fehler}</Meldung>}
+      {hinweis && <Meldung art="hinweis">{hinweis}</Meldung>}
 
       <div className="karte">
         <h2>Zentrale Werte</h2>
@@ -149,7 +190,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
             </thead>
             <tbody>
               {vorgaben.raumtypen.map((t) => (
-                <RaumtypZeile key={t.id} typ={t} vorgaben={vorgaben} darf={darf} aendern={aendern} />
+                <RaumtypZeile key={t.id} typ={t} vorgaben={vorgaben} darf={darf} pruefen={mitVorschau} />
               ))}
             </tbody>
           </table>
@@ -157,7 +198,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
         {darf && <NeuerRaumtyp aendern={aendern} />}
       </div>
 
-      <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} aendern={aendern} />
+      <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} pruefen={mitVorschau} />
       <Modulkatalog stand={stand} />
 
       {darf && <CsvImport />}
@@ -170,18 +211,23 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
   );
 }
 
+type Pruefen = (anfrage: VorschauAnfrage, aktion: () => Promise<unknown>) => Promise<void>;
+
 function RaumtypZeile({
   typ,
   vorgaben,
   darf,
-  aendern,
+  pruefen,
 }: {
   typ: Raumtyp;
   vorgaben: Fachvorgaben;
   darf: boolean;
-  aendern: (a: () => Promise<unknown>) => Promise<void>;
+  pruefen: Pruefen;
 }) {
-  const setzen = (feld: keyof Raumtyp) => (wert: unknown) => aendern(() => api.patch(`/fachvorgaben/raumtypen/${typ.id}`, { [feld]: wert }));
+  const setzen = (feld: keyof Raumtyp) => (wert: unknown) =>
+    pruefen({ art: 'raumtyp_aendern', ziel: typ.id, daten: { [feld]: wert } }, () =>
+      api.patch(`/fachvorgaben/raumtypen/${typ.id}`, { [feld]: wert }),
+    );
   return (
     <tr>
       <td>
@@ -196,7 +242,8 @@ function RaumtypZeile({
             </td>
           );
         }
-        const wert = vorgaben.pauschalen.find((p) => p.raumtyp_id === typ.id && p.gebaeudestandard === gs)?.w_m2 ?? null;
+        const bestehend = vorgaben.pauschalen.find((p) => p.raumtyp_id === typ.id && p.gebaeudestandard === gs);
+        const wert = bestehend?.w_m2 ?? null;
         const rueckfall = vorgaben.werte[`rueckfall_${gs}_w_m2` as const];
         return (
           <td key={gs}>
@@ -204,9 +251,11 @@ function RaumtypZeile({
               wert={wert}
               platzhalter={rueckfall === null ? 'fehlt' : `(${zahl(rueckfall, 0)})`}
               gesperrt={!darf}
-              onSpeichern={(w) =>
-                aendern(() => api.put('/fachvorgaben/pauschalen', { raumtyp_id: typ.id, gebaeudestandard: gs, w_m2: w, quelle: vorgaben.werte.quelle }))
-              }
+              onSpeichern={(w) => {
+                // eigene Quelle der Pauschale behalten (seit dem Import je Pauschale), sonst die allgemeine
+                const daten = { raumtyp_id: typ.id, gebaeudestandard: gs, w_m2: w, quelle: bestehend?.quelle || vorgaben.werte.quelle };
+                return pruefen({ art: 'pauschale', daten }, () => api.put('/fachvorgaben/pauschalen', daten));
+              }}
             />
           </td>
         );
@@ -227,7 +276,10 @@ function RaumtypZeile({
         <td>
           <button
             className="knopf-leise klein"
-            onClick={() => window.confirm(`Raumtyp „${typ.bezeichnung}“ löschen?`) && aendern(() => api.loeschen(`/fachvorgaben/raumtypen/${typ.id}`))}
+            onClick={() =>
+              window.confirm(`Raumtyp „${typ.bezeichnung}“ löschen?`) &&
+              pruefen({ art: 'raumtyp_loeschen', ziel: typ.id }, () => api.loeschen(`/fachvorgaben/raumtypen/${typ.id}`))
+            }
           >
             Löschen
           </button>
@@ -299,14 +351,16 @@ function CsvImport() {
 function RegelnKarte({
   regeln,
   darf,
-  aendern,
+  pruefen,
 }: {
   regeln: Platzierungsregel[];
   darf: boolean;
-  aendern: (a: () => Promise<unknown>) => Promise<void>;
+  pruefen: Pruefen;
 }) {
   const setzen = (schluessel: string, feld: 'wert' | 'wert_text' | 'quelle') => (wert: unknown) =>
-    aendern(() => api.patch(`/fachvorgaben/regeln/${schluessel}`, { [feld]: wert }));
+    pruefen({ art: 'regel', ziel: schluessel, daten: { [feld]: wert } }, () =>
+      api.patch(`/fachvorgaben/regeln/${schluessel}`, { [feld]: wert }),
+    );
   return (
     <div className="karte">
       <h2>

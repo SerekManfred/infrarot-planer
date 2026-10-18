@@ -412,6 +412,7 @@ function VorgabenStand({
                 {a.raeume.map((r) => (
                   <li key={r.raum_id}>
                     {r.bezeichnung}: {watt(r.alt_w)} → <strong>{watt(r.neu_w)}</strong>
+                    {r.neue_verstoesse > 0 && <span className="verstoss-text"> · {r.neue_verstoesse} neue(r) Regelverstoß/-verstöße</span>}
                   </li>
                 ))}
               </ul>

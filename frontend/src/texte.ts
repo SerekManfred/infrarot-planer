@@ -110,6 +110,8 @@ export const HILFE = {
   thermostat: 'Jeder Raum mit Modulen bekommt ein eigenes Thermostat zur Regelung.',
   raumliste: 'Übersicht aller Räume mit Heizlast, Modulen, installierter Leistung und Thermostaten. Rot: Regelverstöße im Deckenplan.',
   richtwertAltbau: 'Orientierungswert des Fachprüfers für Altbau. Er wird nicht automatisch verwendet; die Pauschale je Raum legt der Fachprüfer fest.',
+  abgleich:
+    'Ändern sich zentrale Fachvorgaben, wartet ein Projekt nur, wenn sich dadurch seine Heizlast, die Modulauswahl oder die Regelprüfung ändert. Hier entscheiden Sie für ein oder mehrere Projekte: übernehmen oder bisherige Werte behalten.',
   regeln: 'Mindestabstände und Vorgaben für das Platzieren der Deckenmodule. Leere Werte = „Vorgabe fehlt“; dann prüft bzw. plant die App das nicht.',
 } as const;
 

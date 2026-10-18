@@ -298,11 +298,37 @@ export interface ProjektVorgaben {
   offen: boolean;
   /** wann der Fachprüfer den aktuellen zentralen Stand bewusst abgelehnt hat */
   abgelehnt_am: string | null;
-  auswirkung: {
-    summe_alt_w: number;
-    summe_neu_w: number;
-    raeume: { raum_id: number; bezeichnung: string; alt_w: number | null; neu_w: number | null }[];
-  } | null;
+  auswirkung: VorgabenAuswirkung | null;
+}
+
+/** Auswirkung neuer Fachvorgaben auf ein Projekt (nur Räume mit geänderter Heizlast, Leistung oder Regelprüfung) */
+export interface VorgabenAuswirkung {
+  summe_alt_w: number;
+  summe_neu_w: number;
+  raeume: { raum_id: number; bezeichnung: string; alt_w: number | null; neu_w: number | null; neue_verstoesse: number }[];
+  neue_verstoesse: number;
+}
+
+/** Projekt in der Sammelansicht bzw. in der Vorschau einer Fachvorgaben-Änderung */
+export interface AbgleichProjekt extends VorgabenAuswirkung {
+  projekt_id: number;
+  nummer: string;
+  bezeichnung: string;
+  status: Projektstatus;
+  ausgecheckt: boolean;
+  unterschiede: number;
+}
+
+/** Geplante Fachvorgaben-Änderung für POST /fachvorgaben/vorschau */
+export interface VorschauAnfrage {
+  art: 'werte' | 'raumtyp_neu' | 'raumtyp_aendern' | 'raumtyp_loeschen' | 'pauschale' | 'regel';
+  ziel?: number | string;
+  daten?: Record<string, unknown>;
+}
+
+export interface VorschauErgebnis {
+  betroffen: AbgleichProjekt[];
+  geprueft: number;
 }
 
 /** Schnappschuss für das Rechnen ohne Netz (GET /offline/vorgaben) */
