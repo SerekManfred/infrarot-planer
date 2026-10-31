@@ -188,6 +188,14 @@ describe('ausfuehren', () => {
     expect(v.offen).toBe(true);
   });
 
+  it('offene Moduldaten vom Auschecken sperren das Angebot auch offline', () => {
+    const p = lp();
+    const lesen = () => ausfuehren(p, null, 'GET', '/projekte/5', undefined, zaehler())!.antwort as { angebot_gesperrt: boolean };
+    expect(lesen().angebot_gesperrt).toBe(false);
+    p.paket.module_offen = true;
+    expect(lesen().angebot_gesperrt).toBe(true);
+  });
+
   it('ohne Fachvorgaben keine Auswertung, Statuswechsel nicht lokal, Protokoll ans Netz', () => {
     const ohneStand = lp();
     ohneStand.paket.vorgaben_stand = null;

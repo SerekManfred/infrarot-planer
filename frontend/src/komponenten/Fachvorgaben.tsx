@@ -7,7 +7,6 @@ import {
   type Fachvorgaben,
   type FachvorgabenWerte,
   type Gebaeudestandard,
-  type KatalogModulDaten,
   type Platzierungsregel,
   type Raumtyp,
   type VorschauAnfrage,
@@ -199,7 +198,13 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       </div>
 
       <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} pruefen={mitVorschau} />
-      <Modulkatalog stand={stand} />
+      <div className="karte">
+        <h2>Modulkatalog</h2>
+        <p>
+          Gepflegt wird der Katalog auf der eigenen Seite <a href="#/module">Modulkatalog</a> (anlegen, jedes Feld ändern, deaktivieren, Export
+          als Excel).
+        </p>
+      </div>
 
       {darf && <CsvImport />}
 
@@ -407,76 +412,6 @@ function RegelnKarte({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function Modulkatalog({ stand }: { stand: number }) {
-  const [module, setModule] = useState<KatalogModulDaten[] | null>(null);
-  useEffect(() => {
-    api.get<KatalogModulDaten[]>('/bibliotheken/module').then(setModule).catch(() => setModule([]));
-  }, [stand]);
-  const preis = (w: number | null) => (w === null ? <span className="leise">fehlt</span> : `${zahl(w)} €`);
-  return (
-    <div className="karte">
-      <h2>Modulkatalog (Deckenmodule)</h2>
-      <p className="leise">
-        Import über die Importdatei (Kommandozeile <code>excel-importieren</code>). Fehlende Preise und Montagezeiten bleiben leer und werden nicht
-        geschätzt.
-      </p>
-      {module === null ? (
-        <p>Wird geladen …</p>
-      ) : module.length === 0 ? (
-        <p className="leise">Noch keine Module importiert.</p>
-      ) : (
-        <div className="tabelle-rahmen">
-          <table className="tabelle">
-            <thead>
-              <tr>
-                <th>Artikel-Nr.</th>
-                <th>Bezeichnung</th>
-                <th className="zahl">Leistung</th>
-                <th className="zahl">Maße (mm)</th>
-                <th>Schutzart</th>
-                <th>Bad</th>
-                <th className="zahl">EK netto</th>
-                <th className="zahl">VK netto</th>
-                <th className="zahl">Montage</th>
-                <th>{BEGRIFF.quelle}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {module.map((m) => (
-                <tr key={m.id} className={m.aktiv ? '' : 'leise'}>
-                  <td>{m.artikel_nr}</td>
-                  <td>
-                    {m.bezeichnung}
-                    {!m.aktiv && ' (inaktiv)'}
-                  </td>
-                  <td className="zahl">{zahl(m.leistung_w, 0)} W</td>
-                  <td className="zahl">
-                    {zahl(m.laenge_mm, 0)} × {zahl(m.breite_mm, 0)}
-                  </td>
-                  <td>{m.schutzart}</td>
-                  <td>{m.bad_geeignet ? 'ja' : 'nein'}</td>
-                  <td className="zahl">{preis(m.ek_netto)}</td>
-                  <td className="zahl">{preis(m.vk_netto)}</td>
-                  <td className="zahl">{m.montagezeit_min === null ? <span className="leise">fehlt</span> : `${zahl(m.montagezeit_min, 0)} min`}</td>
-                  <td>
-                    {/^https:\/\//.test(m.quelle) ? (
-                      <a href={m.quelle} target="_blank" rel="noopener noreferrer">
-                        Produktseite
-                      </a>
-                    ) : (
-                      m.quelle
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }

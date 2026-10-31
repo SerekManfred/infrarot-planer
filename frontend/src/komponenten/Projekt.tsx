@@ -9,11 +9,12 @@ import {
   type Objekt,
   type ProjektDetail,
   type Projektstatus,
+  type ModulAbgleich,
   type ProjektVorgaben,
 } from '../api';
 import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
+import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, HINWEIS_MODULE_AKTUALISIERT, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
 import { GebaeudestandardHilfe, Hilfe, Meldung, Schalter, Textfeld } from './Felder';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
@@ -143,6 +144,16 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
         entscheidbar={!gesperrt && !lokal}
         uebernehmen={() => aendern(() => api.post(`/projekte/${projektId}/vorgaben/uebernehmen`))}
         ablehnen={(bemerkung) => aendern(() => api.post(`/projekte/${projektId}/vorgaben/ablehnen`, { bemerkung }))}
+      />
+      <ModulStand
+        projektId={projektId}
+        stand={stand}
+        offenLautProjekt={projekt.module_offen}
+        freigegeben={projekt.status === 'freigegeben'}
+        fachpruefer={hatRolle(benutzer, 'fachpruefer')}
+        entscheidbar={!gesperrt && !lokal}
+        uebernehmen={() => aendern(() => api.post(`/projekte/${projektId}/module/uebernehmen`))}
+        ablehnen={(bemerkung) => aendern(() => api.post(`/projekte/${projektId}/module/ablehnen`, { bemerkung }))}
       />
 
       <div className="karte kopfdaten">
@@ -500,6 +511,134 @@ function Zustaendig({
         angelegt von {projekt.ersteller_name ?? '–'}
         {projekt.zugewiesen_an_name && `, zugewiesen an ${projekt.zugewiesen_an_name}`}
       </small>
+    </div>
+  );
+}
+
+function modulWert(w: number | string | boolean | null): string {
+  if (w === null) return '–';
+  if (typeof w === 'boolean') return w ? 'ja' : 'nein';
+  return typeof w === 'number' ? zahl(w, w % 1 === 0 ? 0 : 2) : w;
+}
+
+/**
+ * Geänderte Katalogdaten verwendeter Module (Festlegung 31.10.2026), gleiche Logik wie bei den Fachvorgaben:
+ * Unterschiede, Auswirkung und Entscheidung nur für Fachprüfer, der Außendienst sieht einen neutralen Hinweis.
+ */
+function ModulStand({
+  projektId,
+  stand,
+  offenLautProjekt,
+  freigegeben,
+  fachpruefer,
+  entscheidbar,
+  uebernehmen,
+  ablehnen,
+}: {
+  projektId: number;
+  stand: number;
+  offenLautProjekt: boolean;
+  freigegeben: boolean;
+  fachpruefer: boolean;
+  entscheidbar: boolean;
+  uebernehmen: () => Promise<void>;
+  ablehnen: (bemerkung: string) => Promise<void>;
+}) {
+  const [abgleich, setAbgleich] = useState<ModulAbgleich | null>(null);
+  const [offen, setOffen] = useState(false);
+  useEffect(() => {
+    if (freigegeben || !fachpruefer) return setAbgleich(null);
+    // ohne Netz nicht verfügbar – dann gilt der Stand vom Auschecken (offenLautProjekt)
+    api.get<ModulAbgleich>(`/projekte/${projektId}/module-abgleich`).then(setAbgleich).catch(() => setAbgleich(null));
+  }, [projektId, stand, freigegeben, fachpruefer]);
+
+  if (freigegeben) return null;
+  if (!fachpruefer) return offenLautProjekt ? <Meldung art="hinweis">{HINWEIS_MODULE_AKTUALISIERT}</Meldung> : null;
+  if (!abgleich || abgleich.unterschiede.length === 0) return null;
+  const a = abgleich.auswirkung;
+  return (
+    <div className={`karte vorgaben-aenderung${abgleich.offen ? '' : ' abgelehnt'}`}>
+      <div className="zeile">
+        <div>
+          <strong>
+            {abgleich.offen
+              ? 'Daten verwendeter Module wurden im Katalog geändert. Bis zur Entscheidung ist kein Angebot möglich.'
+              : 'Geänderte Moduldaten wurden bewusst abgelehnt; das Projekt plant mit den bisherigen Moduldaten.'}
+          </strong>
+          {a && (
+            <>
+              <br />
+              <small>
+                Installierte Leistung: {watt(a.installiert_alt_w)} → <strong>{watt(a.installiert_neu_w)}</strong>
+                {a.neue_verstoesse > 0 && <span className="verstoss-text"> · {a.neue_verstoesse} neue(r) Regelverstoß/-verstöße</span>}
+              </small>
+            </>
+          )}
+        </div>
+        <button className="knopf-leise klein" onClick={() => setOffen(!offen)} aria-expanded={offen}>
+          {offen ? 'Unterschiede ausblenden' : `${abgleich.unterschiede.length} Unterschied(e) anzeigen`}
+        </button>
+      </div>
+      {offen && (
+        <div className="tabelle-rahmen">
+          <table className="tabelle">
+            <thead>
+              <tr>
+                <th>Modul / Feld</th>
+                <th>Projekt (alt)</th>
+                <th>Katalog (neu)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {abgleich.unterschiede.map((u, i) => (
+                <tr key={i}>
+                  <td>{u.bezeichnung}</td>
+                  <td>{modulWert(u.alt)}</td>
+                  <td>
+                    <strong>{modulWert(u.neu)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {a && a.raeume.length > 0 && (
+            <ul className="auswirkung">
+              {a.raeume.map((r) => (
+                <li key={r.raum_id}>
+                  {r.bezeichnung}: installiert {watt(r.installiert_alt_w)} → <strong>{watt(r.installiert_neu_w)}</strong>
+                  {r.neue_verstoesse > 0 && <span className="verstoss-text"> · {r.neue_verstoesse} neue(r) Regelverstoß/-verstöße</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {entscheidbar ? (
+        <div className="knopfreihe">
+          <button
+            className={abgleich.offen ? 'knopf' : 'knopf-zweit'}
+            onClick={() =>
+              window.confirm('Neue Moduldaten in dieses Projekt übernehmen? Lage und Drehung der Module bleiben; die Übernahme wird protokolliert.') &&
+              void uebernehmen()
+            }
+          >
+            Neue Moduldaten übernehmen
+          </button>
+          {abgleich.offen && (
+            <button
+              className="knopf-zweit"
+              onClick={() => {
+                const bemerkung = window.prompt('Bei den bisherigen Moduldaten bleiben?\n\nBegründung (optional, wird protokolliert):', '');
+                if (bemerkung !== null) void ablehnen(bemerkung.trim());
+              }}
+            >
+              Ablehnen, bisherige Moduldaten behalten
+            </button>
+          )}
+        </div>
+      ) : (
+        <small className="leise">Entscheidung nicht möglich, solange das Projekt gesperrt oder auf einem Gerät ausgecheckt ist.</small>
+      )}
     </div>
   );
 }

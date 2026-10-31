@@ -184,7 +184,7 @@ export function wartetAufFachpruefer(paket: ProjektPaket): boolean {
  */
 export function abgeleitet(paket: ProjektPaket): Pick<ProjektPaket, 'wartet_auf_fachpruefer' | 'angebot_gesperrt'> {
   const wartet = wartetAufFachpruefer(paket);
-  return { wartet_auf_fachpruefer: wartet, angebot_gesperrt: wartet || paket.vorgaben_offen };
+  return { wartet_auf_fachpruefer: wartet, angebot_gesperrt: wartet || paket.vorgaben_offen || !!paket.module_offen };
 }
 
 /** Fachvorgaben, mit denen das Projekt rechnet: sein eingefrorener Stand (sonst der Schnappschuss des Geräts) */
@@ -372,6 +372,7 @@ export function neuesProjekt(
     vorgaben_stand_am: vorgaben ? vorgaben.stand : null,
     wartet_auf_fachpruefer: false,
     vorgaben_offen: false,
+    module_offen: false,
     angebot_gesperrt: false,
     vorgaben_stand: vorgaben
       ? {

@@ -7,6 +7,7 @@ import { Anmeldung } from './komponenten/Anmeldung';
 import { BenutzerVerwaltung } from './komponenten/Benutzer';
 import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
 import { Konto } from './komponenten/Konto';
+import { ModulkatalogSeite } from './komponenten/Modulkatalog';
 import { ProjektSeite } from './komponenten/Projekt';
 import { Projektliste } from './komponenten/Projektliste';
 import { Verbindung } from './komponenten/Verbindung';
@@ -85,6 +86,8 @@ export function App() {
         ['', 'Projekte', true],
         // Fachvorgaben (Raumtypen und Pauschalen) nur für Fachprüfer und Admins, nicht für den Außendienst
         ['fachvorgaben', 'Fachvorgaben', fachansicht(benutzer)],
+        // Modulkatalog: alle lesen, Admin und Fachprüfer pflegen
+        ['module', 'Modulkatalog', true],
         // Sammelansicht: Entscheidungen über neue Fachvorgaben, nur Fachprüfer
         ['abgleich', 'Vorgaben-Abgleich', hatRolle(benutzer, 'fachpruefer')],
         ['benutzer', 'Benutzer', hatRolle(benutzer, 'admin')],
@@ -134,6 +137,7 @@ export function App() {
         )}
         {benutzer && seite === 'projekt' && id && <ProjektSeite key={id} projektId={Number(id)} benutzer={benutzer} />}
         {benutzer && seite === 'fachvorgaben' && fachansicht(benutzer) && <FachvorgabenSeite benutzer={benutzer} />}
+        {benutzer && seite === 'module' && <ModulkatalogSeite benutzer={benutzer} />}
         {benutzer && seite === 'abgleich' && hatRolle(benutzer, 'fachpruefer') && <AbgleichSeite />}
         {benutzer && seite === 'benutzer' && hatRolle(benutzer, 'admin') && <BenutzerVerwaltung benutzer={benutzer} />}
         {benutzer && seite === 'konto' && <Konto benutzer={benutzer} />}

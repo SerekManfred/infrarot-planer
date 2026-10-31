@@ -46,6 +46,7 @@ export function paket(): ProjektPaket {
     vorgaben_stand_am: '2026-10-10T08:00:00Z',
     wartet_auf_fachpruefer: false,
     vorgaben_offen: false,
+    module_offen: false,
     angebot_gesperrt: false,
     vorgaben_stand: (({ werte, raumtypen, pauschalen }) => ({ werte, raumtypen, pauschalen }))(vorgaben().fachvorgaben),
     erstellt_am: '2026-10-10T08:00:00Z',

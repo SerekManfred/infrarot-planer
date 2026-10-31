@@ -59,6 +59,8 @@ export interface Projekt {
   wartet_auf_fachpruefer: boolean;
   /** neue zentrale Fachvorgaben, über die der Fachprüfer noch nicht entschieden hat (übernehmen oder ablehnen) */
   vorgaben_offen: boolean;
+  /** geänderte Katalogdaten verwendeter Module, über die der Fachprüfer noch nicht entschieden hat */
+  module_offen: boolean;
   /** kein Angebot möglich: wartet_auf_fachpruefer oder vorgaben_offen */
   angebot_gesperrt: boolean;
   erstellt_am: string;
@@ -311,8 +313,25 @@ export interface ProjektVorgaben {
 export interface VorgabenAuswirkung {
   summe_alt_w: number;
   summe_neu_w: number;
-  raeume: { raum_id: number; bezeichnung: string; alt_w: number | null; neu_w: number | null; neue_verstoesse: number }[];
+  raeume: {
+    raum_id: number;
+    bezeichnung: string;
+    alt_w: number | null;
+    neu_w: number | null;
+    neue_verstoesse: number;
+    installiert_alt_w: number;
+    installiert_neu_w: number;
+  }[];
   neue_verstoesse: number;
+  installiert_alt_w: number;
+  installiert_neu_w: number;
+}
+
+/** GET /projekte/{id}/module-abgleich: geänderte Katalogdaten der verwendeten Module */
+export interface ModulAbgleich {
+  unterschiede: { modul_id: number; artikel_nr: string; feld: string; bezeichnung: string; alt: number | string | boolean | null; neu: number | string | boolean | null }[];
+  offen: boolean;
+  auswirkung: VorgabenAuswirkung | null;
 }
 
 /** Projekt in der Sammelansicht bzw. in der Vorschau einer Fachvorgaben-Änderung */
@@ -323,6 +342,8 @@ export interface AbgleichProjekt extends VorgabenAuswirkung {
   status: Projektstatus;
   ausgecheckt: boolean;
   unterschiede: number;
+  /** Anlass: geänderte Fachvorgaben oder geänderte Moduldaten */
+  art: 'vorgaben' | 'module';
 }
 
 /** Geplante Fachvorgaben-Änderung für POST /fachvorgaben/vorschau */

@@ -12,9 +12,13 @@ interface SammelErgebnis {
   meldung: string;
 }
 
+/** Ein Projekt kann wegen Fachvorgaben und wegen Moduldaten warten – je Anlass eine Zeile */
+const schluessel = (p: AbgleichProjekt) => `${p.art}:${p.projekt_id}`;
+
 export function AbgleichSeite() {
   const [liste, setListe] = useState<AbgleichProjekt[] | null>(null);
-  const [auswahl, setAuswahl] = useState<Set<number>>(new Set());
+  // Auswahl je Projekt und Anlass („vorgaben:12“, „module:12“)
+  const [auswahl, setAuswahl] = useState<Set<string>>(new Set());
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState('');
   const [bericht, setBericht] = useState<{ text: string; fehler: string[] } | null>(null);
@@ -25,14 +29,15 @@ export function AbgleichSeite() {
       .get<AbgleichProjekt[]>('/fachvorgaben/abgleich')
       .then((l) => {
         setListe(l);
-        setAuswahl((alt) => new Set([...alt].filter((id) => l.some((p) => p.projekt_id === id))));
+        setAuswahl((alt) => new Set([...alt].filter((k) => l.some((p) => schluessel(p) === k))));
       })
       .catch((e) => setFehler((e as Error).message));
   }, []);
   useEffect(laden, [laden]);
 
   async function entscheiden(aktion: 'uebernehmen' | 'ablehnen') {
-    const ids = [...auswahl];
+    const gewaehlt = (liste ?? []).filter((p) => auswahl.has(schluessel(p)));
+    const ids = gewaehlt.map((p) => p.projekt_id);
     let bemerkung = '';
     if (aktion === 'ablehnen') {
       const eingabe = window.prompt(
@@ -47,7 +52,12 @@ export function AbgleichSeite() {
     setLaeuft(true);
     setFehler('');
     try {
-      const ergebnis = await api.post<SammelErgebnis[]>('/fachvorgaben/abgleich', { aktion, projekt_ids: ids, bemerkung });
+      // je Anlass eine Anfrage (Fachvorgaben bzw. Moduldaten)
+      const ergebnis: SammelErgebnis[] = [];
+      for (const art of ['vorgaben', 'module'] as const) {
+        const projektIds = gewaehlt.filter((p) => p.art === art).map((p) => p.projekt_id);
+        if (projektIds.length) ergebnis.push(...(await api.post<SammelErgebnis[]>('/fachvorgaben/abgleich', { aktion, art, projekt_ids: projektIds, bemerkung })));
+      }
       const ok = ergebnis.filter((e) => e.ok).length;
       const namen = new Map((liste ?? []).map((p) => [p.projekt_id, `${p.nummer} ${p.bezeichnung}`]));
       setBericht({
@@ -62,12 +72,12 @@ export function AbgleichSeite() {
     }
   }
 
-  const alle = liste !== null && liste.length > 0 && liste.every((p) => auswahl.has(p.projekt_id));
-  const umschalten = (id: number) =>
+  const alle = liste !== null && liste.length > 0 && liste.every((p) => auswahl.has(schluessel(p)));
+  const umschalten = (k: string) =>
     setAuswahl((alt) => {
       const neu = new Set(alt);
-      if (neu.has(id)) neu.delete(id);
-      else neu.add(id);
+      if (neu.has(k)) neu.delete(k);
+      else neu.add(k);
       return neu;
     });
 
@@ -78,7 +88,8 @@ export function AbgleichSeite() {
         <Hilfe begriff="Vorgaben-Abgleich" text={HILFE.abgleich} />
       </h1>
       <Meldung art="hinweis">
-        Hier stehen nur Projekte, bei denen neue Fachvorgaben tatsächlich etwas ändern (Heizlast, Modulauswahl oder Regelprüfung). Alle anderen
+        Hier stehen nur Projekte, bei denen neue Fachvorgaben oder geänderte Moduldaten aus dem Katalog tatsächlich etwas ändern (Heizlast,
+        installierte Leistung, Modulauswahl oder Regelprüfung). Alle anderen
         haben die Änderungen still übernommen; das steht in ihrem Protokoll.
       </Meldung>
       {fehler && <Meldung>{fehler}</Meldung>}
@@ -115,25 +126,27 @@ export function AbgleichSeite() {
                       <input
                         type="checkbox"
                         checked={alle}
-                        onChange={() => setAuswahl(alle ? new Set() : new Set(liste.map((p) => p.projekt_id)))}
+                        onChange={() => setAuswahl(alle ? new Set() : new Set(liste.map(schluessel)))}
                         aria-label="Alle auswählen"
                       />
                     </label>
                   </th>
                   <th>Projekt</th>
+                  <th>Anlass</th>
                   <th>Status</th>
                   <th className="zahl">Heizlast vorher</th>
                   <th className="zahl">nachher</th>
+                  <th className="zahl">installiert vorher → nachher</th>
                   <th className="zahl">neue Regelverstöße</th>
                   <th>betroffene Räume</th>
                 </tr>
               </thead>
               <tbody>
                 {liste.map((p) => (
-                  <tr key={p.projekt_id}>
+                  <tr key={schluessel(p)}>
                     <td>
                       <label className="ankreuzen">
-                        <input type="checkbox" checked={auswahl.has(p.projekt_id)} onChange={() => umschalten(p.projekt_id)} aria-label={`${p.nummer} auswählen`} />
+                        <input type="checkbox" checked={auswahl.has(schluessel(p))} onChange={() => umschalten(schluessel(p))} aria-label={`${p.nummer} auswählen`} />
                       </label>
                     </td>
                     <td>
@@ -142,16 +155,20 @@ export function AbgleichSeite() {
                       </a>
                       {p.ausgecheckt && <small className="leise"> (ausgecheckt – erst nach dem Einchecken)</small>}
                     </td>
+                    <td>{p.art === 'module' ? 'Moduldaten' : 'Fachvorgaben'}</td>
                     <td>{STATUS[p.status]}</td>
                     <td className="zahl">{watt(p.summe_alt_w)}</td>
                     <td className="zahl">
                       <strong>{watt(p.summe_neu_w)}</strong>
                     </td>
+                    <td className="zahl">
+                      {p.installiert_alt_w === p.installiert_neu_w ? watt(p.installiert_alt_w) : `${watt(p.installiert_alt_w)} → ${watt(p.installiert_neu_w)}`}
+                    </td>
                     <td className="zahl">{p.neue_verstoesse > 0 ? <span className="verstoss-text">{p.neue_verstoesse}</span> : '0'}</td>
                     <td>
                       {p.raeume.map((r) => (
                         <span key={r.raum_id} className="hilfe-absatz">
-                          {r.bezeichnung}: {watt(r.alt_w)} → {watt(r.neu_w)}
+                          {r.bezeichnung}: {p.art === 'module' ? `installiert ${watt(r.installiert_alt_w)} → ${watt(r.installiert_neu_w)}` : `${watt(r.alt_w)} → ${watt(r.neu_w)}`}
                           {r.neue_verstoesse > 0 && `, ${r.neue_verstoesse} neue(r) Verstoß/Verstöße`}
                         </span>
                       ))}

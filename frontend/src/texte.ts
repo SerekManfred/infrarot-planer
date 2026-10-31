@@ -37,6 +37,7 @@ export const PAUSCHALE_DURCH_FACHPRUEFER = 'Pauschale wird vom Fachprüfer festg
 
 /** Für den Außendienst statt Unterschiedsliste und Übernahme-Knopf (Festlegung 13.10.2026) */
 export const HINWEIS_VORGABEN_AKTUALISIERT = 'Die Fachvorgaben wurden aktualisiert. Der Fachprüfer prüft dieses Projekt vor dem Angebot.';
+export const HINWEIS_MODULE_AKTUALISIERT = 'Daten verwendeter Module wurden im Katalog aktualisiert. Der Fachprüfer prüft dieses Projekt vor dem Angebot.';
 
 /**
  * Hinweise des Rechenkerns für den Außendienst: Kontrollrechnung ausblenden, die fehlende Altbau-Pauschale steht schon
@@ -107,6 +108,7 @@ export const HILFE = {
     'Die App wählt möglichst wenige Module, die zusammen die benötigte Leistung bringen und mit allen Mindestabständen an die Decke passen. Danach lassen sie sich von Hand verschieben, drehen oder tauschen.',
   benoetigteLeistung: 'Heizlast des Raums plus Leistungsreserve. So viel Leistung sollen die Module zusammen mindestens haben.',
   installierteLeistung: 'Summe der Leistung aller Module im Raum.',
+  badGeeignet: 'Darf im Bad eingesetzt werden. Nur bei Schutzart IP44 oder höher möglich; die Schutzbereiche prüft eine Elektrofachkraft.',
   tuerFenster:
     'Nur zur Orientierung im Plan: Tür (mit Aufschlag) und Fenster liegen in der Wand. Sie sind keine Sperrflächen und beeinflussen die Platzierung der Module nicht. Antippen, dann auf die Wand tippen.',
   thermostat: 'Jeder Raum mit Modulen bekommt ein eigenes Thermostat zur Regelung.',
