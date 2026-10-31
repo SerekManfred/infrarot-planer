@@ -1,7 +1,9 @@
 """Projekte, Projektstatus und Änderungsprotokoll.
 
-Alle angemeldeten Benutzer sehen und bearbeiten alle Projekte. Den Status ändern nur Fachprüfer;
-löschen dürfen nur Admins. Freigegebene Projekte sind gesperrt (app/projektzugriff.py).
+Sichtbarkeit (31.10.2026): Fachprüfer und Admins sehen alle Projekte; Benutzer mit nur der Rolle Außendienst nur
+eigene und ihnen zugewiesene (app/projektzugriff.py). Zuweisen und die Projektnummer ändern dürfen nur Admins.
+Die Projektnummer vergibt der Server fortlaufend je Jahr (z. B. 2026-0004).
+Den Status ändern nur Fachprüfer; löschen dürfen nur Admins. Freigegebene Projekte sind gesperrt (app/projektzugriff.py).
 Zur Offline-Bearbeitung checkt ein Gerät ein Projekt aus; solange ist es für alle anderen gesperrt.
 Einchecken kann das Gerät selbst; ein Admin kann die Sperre lösen.
 Jedes Projekt rechnet mit seiner Kopie der Fachvorgaben (app/vorgabenstand.py); neue zentrale Werte werden
@@ -14,7 +16,10 @@ import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import re
+
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_admin, nur_fachpruefer
@@ -23,10 +28,10 @@ from app.vorgabenabgleich import vergleich
 from app.vorgabenstand import mit_texten, offene_unterschiede, projekt_stand, schnappschuss, unterschiede
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
-from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sperre_hash, sperre_pruefen
+from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sichtbarkeit_filter, sichtbarkeit_pruefen, sperre_hash, sperre_pruefen
 from app.schemas import (
     Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProjektVorgaben,
-    ProtokollLesen, StatusAenderung, VorgabenAblehnen,
+    ProtokollLesen, StatusAenderung, VorgabenAblehnen, Zuweisung,
 )
 
 router = APIRouter(prefix="/projekte", tags=["Projekte"], dependencies=[Depends(aktueller_benutzer)])
@@ -42,20 +47,49 @@ UEBERGAENGE = {
 
 @router.get("", response_model=list[ProjektLesen])
 def auflisten(db: Session = Depends(get_db)):
-    return db.scalars(select(Projekt).order_by(Projekt.geaendert_am.desc(), Projekt.id.desc())).all()
+    return db.scalars(
+        select(Projekt).where(sichtbarkeit_filter(db)).order_by(Projekt.geaendert_am.desc(), Projekt.id.desc())
+    ).all()
+
+
+def naechste_nummer(db: Session, jahr: int) -> str:
+    """Fortlaufende Projektnummer je Jahr: JJJJ-NNNN (z. B. 2026-0004)."""
+    muster = re.compile(rf"^{jahr}-(\d{{4,}})$")
+    hoechste = max(
+        (int(t.group(1)) for n in db.scalars(select(Projekt.nummer).where(Projekt.nummer.like(f"{jahr}-%")))
+         if (t := muster.match(n))),
+        default=0,
+    )
+    return f"{jahr}-{hoechste + 1:04d}"
+
+
+def nummer_frei_pruefen(db: Session, nummer: str, ausser: int | None = None) -> None:
+    vorhanden = db.scalar(select(Projekt.id).where(Projekt.nummer == nummer))
+    if vorhanden is not None and vorhanden != ausser:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Projektnummer {nummer} ist bereits vergeben")
 
 
 @router.post("", response_model=ProjektDetail, status_code=status.HTTP_201_CREATED)
 def anlegen(daten: ProjektNeu, db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)):
-    werte = daten.model_dump()
+    werte = daten.model_dump(exclude={"nummer"})  # Nummer vergibt der Server
     gebaeude = {k: werte.pop(k) for k in ("gebaeudestandard", "strasse", "plz", "ort")}
-    # Fachvorgaben einfrieren: das Projekt rechnet ab jetzt mit dieser Kopie
-    projekt = Projekt(
-        **werte, ersteller_id=benutzer.id, vorgaben_stand=schnappschuss(db), vorgaben_stand_am=datetime.now(UTC)
-    )
-    projekt.objekte.append(Objekt(bezeichnung="Gebäude", **gebaeude))
-    db.add(projekt)
-    db.commit()
+    stand = schnappschuss(db)
+    jetzt = datetime.now(UTC)
+    for _versuch in range(5):  # gleichzeitiges Anlegen: bei doppelter Nummer die nächste nehmen
+        # Fachvorgaben einfrieren: das Projekt rechnet ab jetzt mit dieser Kopie
+        projekt = Projekt(
+            **werte, nummer=naechste_nummer(db, jetzt.year), ersteller_id=benutzer.id, vorgaben_stand=stand,
+            vorgaben_stand_am=jetzt,
+        )
+        projekt.objekte.append(Objekt(bezeichnung="Gebäude", **gebaeude))
+        db.add(projekt)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+    else:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Projektnummer konnte nicht vergeben werden – bitte erneut versuchen")
     return lesen(projekt.id, db)
 
 
@@ -65,17 +99,42 @@ def lesen(projekt_id: int, db: Session = Depends(get_db)):
         select(Projekt).where(Projekt.id == projekt_id).options(selectinload(Projekt.objekte))
     ).one_or_none()
     if projekt is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Projekt {projekt_id} nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projekt nicht gefunden – evtl. inzwischen gelöscht")
+    sichtbarkeit_pruefen(db, projekt)
     db.refresh(projekt)
     return projekt
 
 
 @router.patch("/{projekt_id}", response_model=ProjektLesen)
-def aendern(projekt_id: int, daten: ProjektAenderung, db: Session = Depends(get_db)):
+def aendern(
+    projekt_id: int, daten: ProjektAenderung, db: Session = Depends(get_db),
+    benutzer: Benutzer = Depends(aktueller_benutzer),
+):
     projekt = hole_oder_404(db, Projekt, projekt_id)
     bearbeitung_pruefen(db, projekt)
-    for name, wert in daten.model_dump(exclude_unset=True).items():
+    werte = daten.model_dump(exclude_unset=True)
+    if "nummer" in werte and werte["nummer"] != projekt.nummer:
+        if not benutzer.hat_rolle("admin"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Die Projektnummer wird automatisch vergeben; ändern darf sie nur ein Admin.")
+        nummer_frei_pruefen(db, werte["nummer"], projekt.id)
+    for name, wert in werte.items():
         setattr(projekt, name, wert)
+    db.commit()
+    db.refresh(projekt)
+    return projekt
+
+
+@router.put("/{projekt_id}/zuweisung", response_model=ProjektLesen)
+def zuweisen(
+    projekt_id: int, daten: Zuweisung, db: Session = Depends(get_db), _admin: Benutzer = Depends(nur_admin),
+):
+    """Admin weist das Projekt einem (anderen) Außendienst-Benutzer zu, z. B. als Urlaubsvertretung (protokolliert)."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    if daten.benutzer_id is not None:
+        ziel = hole_oder_404(db, Benutzer, daten.benutzer_id)
+        if not ziel.aktiv or not ziel.hat_rolle("aussendienst"):
+            raise HTTPException(status.HTTP_409_CONFLICT, f"{ziel.name} ist kein aktiver Außendienst-Benutzer")
+    projekt.zugewiesen_an_id = daten.benutzer_id
     db.commit()
     db.refresh(projekt)
     return projekt

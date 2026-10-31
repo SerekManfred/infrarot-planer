@@ -1,9 +1,11 @@
 """FastAPI-Anwendung Infrarot-Planer."""
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from app import protokoll  # noqa: F401  (registriert das Änderungsprotokoll)
+from app.fehlertexte import eingabefehler_text
 from app.routers import auth, benutzer, berechnungen, bibliotheken, fachvorgaben, hierarchie, offline, projekte
 
 app = FastAPI(
@@ -17,11 +19,20 @@ app = FastAPI(
 
 @app.exception_handler(IntegrityError)
 def integritaetsfehler(request: Request, fehler: IntegrityError) -> JSONResponse:
-    # Doppelte Schlüssel, ungültige Verweise auf Bibliotheken, noch verwendete Bibliothekseinträge
+    # Doppelte Schlüssel, ungültige Verweise auf Bibliotheken, noch verwendete Einträge. Häufige Fälle (Projektnummer,
+    # E-Mail, Raumtyp) prüfen die Endpunkte vorher selbst und melden sie konkret.
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "Konflikt mit vorhandenen Daten (doppelter Eintrag oder ungültiger Verweis)"},
+        content={"detail": "Speichern nicht möglich: Ein Eintrag mit diesen Angaben gibt es bereits, oder ein verknüpfter "
+                           "Eintrag wurde inzwischen gelöscht oder wird noch verwendet. Bitte die Seite neu laden und "
+                           "die Angaben prüfen."},
     )
+
+
+@app.exception_handler(RequestValidationError)
+def eingabefehler(request: Request, fehler: RequestValidationError) -> JSONResponse:
+    """Ungültige Eingaben als verständlicher deutscher Text (statt technischer Feldliste)."""
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": eingabefehler_text(fehler.errors())})
 
 
 @app.get("/api/gesundheit", tags=["System"])

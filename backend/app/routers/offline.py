@@ -11,6 +11,7 @@ from app.models import (
     Bauteilflaeche, BibBauteil, BibKlimadaten, BibModul, BibRaumtyp, Fachvorgaben, Geschoss, HeizlastPauschale,
     Objekt, Platzierungsregel, Projekt, Raum,
 )
+from app.projektzugriff import sichtbarkeit_pruefen
 from app.routers.fachvorgaben import lesen as fachvorgaben_lesen
 from app.schemas import OfflineVorgaben, ProjektPaket
 
@@ -43,5 +44,6 @@ def projekt(projekt_id: int, db: Session = Depends(get_db)):
         )
     ).one_or_none()
     if projekt is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Projekt {projekt_id} nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projekt nicht gefunden – evtl. inzwischen gelöscht")
+    sichtbarkeit_pruefen(db, projekt)  # Außendienst: nur eigene und zugewiesene Projekte
     return projekt

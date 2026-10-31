@@ -1,4 +1,9 @@
-"""Zuordnung beliebiger Projektdaten zu ihrem Projekt und Prüfung, ob das Projekt bearbeitet werden darf.
+"""Zuordnung beliebiger Projektdaten zu ihrem Projekt, Sichtbarkeit und Prüfung, ob das Projekt bearbeitet werden darf.
+
+Sichtbarkeit (Festlegung 31.10.2026): Benutzer mit nur der Rolle Außendienst sehen ausschließlich Projekte, die sie
+angelegt haben oder die ihnen zugewiesen sind; Fachprüfer und Admins sehen alle. Geprüft wird serverseitig beim
+Laden jedes Projekt-Datensatzes (abhaengigkeiten.hole_oder_404), in der Projektliste und im Offline-Paket.
+Fremde Projekte gelten als „nicht gefunden“ (404), damit nicht einmal ihre Existenz sichtbar wird.
 
 Offline-Sperre: Hat ein Gerät ein Projekt ausgecheckt, darf nur dieses Gerät (gleicher Benutzer und
 passendes Sperr-Token im Kopf X-Sperre) es ändern. Alle anderen erhalten 423 mit Angabe, wer es hat.
@@ -7,6 +12,7 @@ import hashlib
 import hmac
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import Bauteilflaeche, Berechnung, Geschoss, Objekt, Oeffnung, Projekt, Raum
@@ -20,6 +26,38 @@ _ELTERN = {
     Oeffnung: ("bauteilflaeche_id", Bauteilflaeche),
     Berechnung: ("objekt_id", Objekt),
 }
+
+
+# db.info-Schlüssel: Benutzer-ID, wenn die Anfrage nur Projekte dieses Außendienst-Benutzers sehen darf
+NUR_EIGENE = "nur_eigene_projekte"
+
+
+def nur_eigene(benutzer) -> bool:
+    """Nur Außendienst (ohne Fachprüfer/Admin): sieht nur eigene bzw. zugewiesene Projekte."""
+    return not benutzer.hat_rolle("fachpruefer", "admin")
+
+
+def sichtbar(db: Session, projekt: Projekt) -> bool:
+    benutzer_id = db.info.get(NUR_EIGENE)
+    return benutzer_id is None or benutzer_id in (projekt.ersteller_id, projekt.zugewiesen_an_id)
+
+
+def sichtbarkeit_filter(db: Session):
+    """WHERE-Bedingung für Projektabfragen (oder True, wenn alles sichtbar ist)."""
+    benutzer_id = db.info.get(NUR_EIGENE)
+    if benutzer_id is None:
+        return True
+    return or_(Projekt.ersteller_id == benutzer_id, Projekt.zugewiesen_an_id == benutzer_id)
+
+
+def sichtbarkeit_pruefen(db: Session, obj: object) -> None:
+    """404, wenn der Datensatz zu einem Projekt gehört, das der Benutzer nicht sehen darf."""
+    if db.info.get(NUR_EIGENE) is None:
+        return
+    projekt_id = obj.id if isinstance(obj, Projekt) else projekt_id_von(db, obj)
+    projekt = obj if isinstance(obj, Projekt) else (db.get(Projekt, projekt_id) if projekt_id is not None else None)
+    if projekt is not None and not sichtbar(db, projekt):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projekt nicht gefunden oder kein Zugriff")
 
 
 def projekt_id_von(db: Session, obj: object) -> int | None:

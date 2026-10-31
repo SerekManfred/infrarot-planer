@@ -3,7 +3,7 @@
 Rollen sind kombinierbar (z. B. Admin und Fachprüfer). Es bleibt immer mindestens ein aktiver Admin.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.abhaengigkeiten import hole_oder_404, nur_admin
@@ -36,8 +36,11 @@ def auflisten(db: Session = Depends(get_db)):
 
 @router.post("", response_model=BenutzerLesen, status_code=status.HTTP_201_CREATED, dependencies=[Depends(nur_admin)])
 def anlegen(daten: BenutzerNeu, db: Session = Depends(get_db)):
+    email = daten.email.strip().lower()
+    if db.scalar(select(Benutzer.id).where(func.lower(Benutzer.email) == email)) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Die E-Mail-Adresse {email} ist bereits vergeben")
     benutzer = Benutzer(
-        email=daten.email.strip().lower(), name=daten.name, rollen=daten.rollen,
+        email=email, name=daten.name, rollen=daten.rollen,
         passwort_hash=passwort_hashen(daten.passwort),
     )
     db.add(benutzer)

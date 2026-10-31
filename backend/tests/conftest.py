@@ -52,8 +52,10 @@ def client(db):
             db.rollback()
             raise
         finally:
-            # Wie im Betrieb (neue Sitzung je Anfrage): nichts Geladenes in die nächste Anfrage mitnehmen
+            # Wie im Betrieb (neue Sitzung je Anfrage): nichts Geladenes in die nächste Anfrage mitnehmen,
+            # auch nicht die Sichtbarkeit des letzten Benutzers (Kommandozeilen-Tests sehen alles)
             db.expire_all()
+            db.info.pop("nur_eigene_projekte", None)
 
     app.dependency_overrides[get_db] = db_je_anfrage
     with TestClient(app) as c:

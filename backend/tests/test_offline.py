@@ -88,9 +88,12 @@ def test_admin_loest_sperre_und_geraet_merkt_es(client, db, ausgecheckt, admin, 
     assert "aufgehoben" in antwort.json()["detail"]
 
 
-def test_einchecken_durch_andere_nicht_admins_verboten(client, db, ausgecheckt):
+def test_einchecken_durch_andere_nicht_admins_verboten(client, db, ausgecheckt, fachpruefer):
+    # anderer Außendienst sieht das Projekt gar nicht (31.10.2026), ein Fachprüfer sieht es, darf aber nicht einchecken
     zweiter = _benutzer(db, "zweiter@test.invalid", "aussendienst")
     anmelden(client, zweiter.email)
+    assert client.post(f"/api/projekte/{ausgecheckt['projekt']['id']}/einchecken").status_code == 404
+    anmelden(client, fachpruefer.email)
     assert client.post(f"/api/projekte/{ausgecheckt['projekt']['id']}/einchecken").status_code == 423
 
 

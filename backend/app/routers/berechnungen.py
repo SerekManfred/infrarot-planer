@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404
+from app.projektzugriff import sichtbarkeit_pruefen
 from app.auswertung import objekt_auswerten
 from app.db import get_db
 from app.models import Benutzer, Berechnung, Objekt
@@ -36,7 +37,8 @@ def speichern(
     # Sperre auf das Objekt, damit parallele Läufe keine doppelte Versionsnummer bekommen
     objekt = db.scalars(select(Objekt).where(Objekt.id == objekt_id).with_for_update()).one_or_none()
     if objekt is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Objekt {objekt_id} nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gebäude nicht gefunden – evtl. inzwischen gelöscht")
+    sichtbarkeit_pruefen(db, objekt)
     eingabe, ergebnis = objekt_auswerten(db, objekt)
     version = (db.scalar(select(func.max(Berechnung.version)).where(Berechnung.objekt_id == objekt_id)) or 0) + 1
     berechnung = Berechnung(

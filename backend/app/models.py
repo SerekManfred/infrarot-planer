@@ -237,6 +237,8 @@ class Projekt(Zeitstempel, Base):
     kunde_name: Mapped[str] = mapped_column(String(300), default="")
     notizen: Mapped[str] = mapped_column(Text, default="")
     ersteller_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
+    # Zuständiger Außendienst, z. B. Vertretung bei Urlaub (Festlegung 31.10.2026); sieht das Projekt wie der Ersteller
+    zugewiesen_an_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(20), default="entwurf", server_default="entwurf")
     geprueft_von_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     geprueft_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -257,8 +259,17 @@ class Projekt(Zeitstempel, Base):
     vorgaben_abgelehnt_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     ersteller: Mapped[Benutzer | None] = relationship(foreign_keys=[ersteller_id])
+    zugewiesen_an: Mapped[Benutzer | None] = relationship(foreign_keys=[zugewiesen_an_id])
     ausgecheckt_von: Mapped[Benutzer | None] = relationship(foreign_keys=[ausgecheckt_von_id])
     objekte: Mapped[list["Objekt"]] = relationship(back_populates="projekt", passive_deletes=True)
+
+    @property
+    def ersteller_name(self) -> str | None:
+        return self.ersteller.name if self.ersteller else None
+
+    @property
+    def zugewiesen_an_name(self) -> str | None:
+        return self.zugewiesen_an.name if self.zugewiesen_an else None
 
     @property
     def ausgecheckt_von_name(self) -> str | None:

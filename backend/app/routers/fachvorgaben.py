@@ -5,6 +5,8 @@ Nach jeder Änderung werden die Projekte abgeglichen (app/vorgabenabgleich.py): 
 /abgleich ist die Sammelansicht des Fachprüfers.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -71,6 +73,7 @@ def werte_setzen(daten: FachvorgabenWerte, db: Session = Depends(get_db)):
 @router.post("/raumtypen", response_model=RaumtypLesen, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(vorgaben_pflege)])
 def raumtyp_anlegen(daten: RaumtypNeu, db: Session = Depends(get_db)):
+    _raumtyp_frei(db, daten.bezeichnung)
     raumtyp = BibRaumtyp(**daten.model_dump())
     db.add(raumtyp)
     db.commit()
@@ -79,9 +82,17 @@ def raumtyp_anlegen(daten: RaumtypNeu, db: Session = Depends(get_db)):
     return raumtyp
 
 
+def _raumtyp_frei(db: Session, bezeichnung: str, ausser: int | None = None) -> None:
+    vorhanden = db.scalar(select(BibRaumtyp.id).where(BibRaumtyp.bezeichnung == bezeichnung.strip()))
+    if vorhanden is not None and vorhanden != ausser:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Den Raumtyp „{bezeichnung.strip()}“ gibt es bereits")
+
+
 @router.patch("/raumtypen/{raumtyp_id}", response_model=RaumtypLesen, dependencies=[Depends(vorgaben_pflege)])
 def raumtyp_aendern(raumtyp_id: int, daten: RaumtypAenderung, db: Session = Depends(get_db)):
     raumtyp = hole_oder_404(db, BibRaumtyp, raumtyp_id)
+    if daten.bezeichnung is not None:
+        _raumtyp_frei(db, daten.bezeichnung, raumtyp_id)
     for name, wert in daten.model_dump(exclude_unset=True).items():
         setattr(raumtyp, name, wert)
     db.commit()
@@ -154,7 +165,10 @@ _VORSCHAU_SCHEMAS = {
 def vorschau(anfrage: VorschauAnfrage, db: Session = Depends(get_db)):
     """Welche Projekte eine geplante Änderung beträfe – vor dem Speichern, ohne etwas zu speichern."""
     schema = _VORSCHAU_SCHEMAS.get(anfrage.art)
-    daten = schema.model_validate(anfrage.daten).model_dump(exclude_unset=anfrage.art != "werte") if schema else {}
+    try:
+        daten = schema.model_validate(anfrage.daten).model_dump(exclude_unset=anfrage.art != "werte") if schema else {}
+    except ValidationError as fehler:  # wie ungültige Eingaben einer Anfrage melden (422, verständlicher Text)
+        raise RequestValidationError(fehler.errors()) from None
     return vorschau_berechnen(db, anfrage.art, anfrage.ziel, daten)
 
 

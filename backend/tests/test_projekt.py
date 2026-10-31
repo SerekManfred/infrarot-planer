@@ -66,7 +66,9 @@ def test_projekt_braucht_gebaeudestandard(client, aussendienst):
     p = _post(client, "/api/projekte", {"nummer": "X", "bezeichnung": "X", "gebaeudestandard": "sonstiger_bestand"})
     assert p["status"] == "entwurf"
     assert p["objekte"][0]["gebaeudestandard"] == "sonstiger_bestand"
-    assert client.post("/api/projekte", json={"nummer": "X", "bezeichnung": "Y", "gebaeudestandard": "neubau"}).status_code == 409
+    # Projektnummer vergibt der Server; eine mitgeschickte Nummer wird ignoriert
+    assert p["nummer"] != "X"
+    assert _post(client, "/api/projekte", {"nummer": "X", "bezeichnung": "Y", "gebaeudestandard": "neubau"})["nummer"] != p["nummer"]
 
 
 def test_flaeche_aus_laenge_mal_breite(client, projekt):
@@ -446,3 +448,133 @@ def test_tueren_und_fenster_ohne_einfluss_auf_die_planung(client, projekt):
     assert paket["objekte"][0]["geschosse"][0]["raeume"][0]["tueren_fenster"][1]["breite"] == 1.2
     assert client.patch(f"/api/raeume/{raum['id']}", json={"tueren_fenster": [{**tuer, "wand": "decke"}]}).status_code == 422
     assert client.patch(f"/api/raeume/{raum['id']}", json={"tueren_fenster": [{**tuer, "breite": 0}]}).status_code == 422
+
+
+# ── Sichtbarkeit und Projektnummer (Festlegung 31.10.2026) ──
+
+
+def _projekt_mit_raum(client, bezeichnung):
+    p = _post(client, "/api/projekte", {"bezeichnung": bezeichnung, "gebaeudestandard": "neubau"})
+    g = _post(client, f"/api/objekte/{p['objekte'][0]['id']}/geschosse", {"bezeichnung": "EG"})
+    r = _post(client, f"/api/geschosse/{g['id']}/raeume", {"bezeichnung": "Raum", "laenge_m": 4, "breite_m": 5})
+    return p, g, r
+
+
+def test_aussendienst_a_sieht_keine_projekte_von_b(client, db, aussendienst, fachpruefer, admin):
+    from tests.conftest import _benutzer
+
+    b = _benutzer(db, "aussendienst-b@test.invalid", "aussendienst")
+    anmelden(client, aussendienst.email)
+    pa, ga, ra = _projekt_mit_raum(client, "Projekt von A")
+    anmelden(client, b.email)
+    pb, gb, rb = _projekt_mit_raum(client, "Projekt von B")
+
+    # B sieht nur sein eigenes Projekt – in der Liste und über jeden Weg der API
+    assert [p["bezeichnung"] for p in client.get("/api/projekte").json()] == ["Projekt von B"]
+    oid = pa["objekte"][0]["id"]
+    for methode, pfad, daten in (
+        ("get", f"/api/projekte/{pa['id']}", None),
+        ("patch", f"/api/projekte/{pa['id']}", {"bezeichnung": "übernommen"}),
+        ("get", f"/api/projekte/{pa['id']}/protokoll", None),
+        ("get", f"/api/projekte/{pa['id']}/vorgaben", None),
+        ("post", f"/api/projekte/{pa['id']}/auschecken", {"geraet": "Tablet B"}),
+        ("post", f"/api/projekte/{pa['id']}/einchecken", None),
+        ("get", f"/api/offline/projekte/{pa['id']}", None),
+        ("get", f"/api/objekte/{oid}", None),
+        ("get", f"/api/objekte/{oid}/geschosse", None),
+        ("get", f"/api/objekte/{oid}/auswertung", None),
+        ("get", f"/api/objekte/{oid}/berechnungen", None),
+        ("post", f"/api/objekte/{oid}/berechnungen", {}),
+        ("post", f"/api/objekte/{oid}/geschosse", {"bezeichnung": "OG"}),
+        ("get", f"/api/geschosse/{ga['id']}/raeume", None),
+        ("post", f"/api/geschosse/{ga['id']}/raeume", {"bezeichnung": "fremd"}),
+        ("get", f"/api/raeume/{ra['id']}", None),
+        ("patch", f"/api/raeume/{ra['id']}", {"laenge_m": 9}),
+        ("delete", f"/api/raeume/{ra['id']}", None),
+        ("get", f"/api/raeume/{ra['id']}/flaechen", None),
+    ):
+        antwort = getattr(client, methode)(pfad, **({"json": daten} if daten is not None else {}))
+        assert antwort.status_code == 404, (methode, pfad, antwort.status_code)
+        assert "nicht gefunden" in antwort.json()["detail"]
+    assert client.get(f"/api/raeume/{ra['id']}").status_code == 404
+    # nichts verändert
+    anmelden(client, aussendienst.email)
+    assert client.get(f"/api/raeume/{ra['id']}").json()["laenge_m"] == 4
+    assert [p["bezeichnung"] for p in client.get("/api/projekte").json()] == ["Projekt von A"]
+
+    # Fachprüfer und Admin sehen alle
+    for wer in (fachpruefer, admin):
+        anmelden(client, wer.email)
+        assert sorted(p["bezeichnung"] for p in client.get("/api/projekte").json()) == ["Projekt von A", "Projekt von B"]
+        assert client.get(f"/api/raeume/{rb['id']}").status_code == 200
+
+
+def test_admin_weist_projekt_zu(client, db, aussendienst, admin, fachpruefer):
+    from tests.conftest import _benutzer
+
+    vertretung = _benutzer(db, "vertretung@test.invalid", "aussendienst")
+    anmelden(client, aussendienst.email)
+    p, _g, r = _projekt_mit_raum(client, "Urlaubsprojekt")
+    anmelden(client, vertretung.email)
+    assert client.get(f"/api/projekte/{p['id']}").status_code == 404
+
+    # nur Admin darf zuweisen, nur an aktive Außendienst-Benutzer
+    anmelden(client, aussendienst.email)
+    assert client.put(f"/api/projekte/{p['id']}/zuweisung", json={"benutzer_id": vertretung.id}).status_code == 403
+    anmelden(client, admin.email)
+    assert client.put(f"/api/projekte/{p['id']}/zuweisung", json={"benutzer_id": fachpruefer.id}).status_code == 409
+    z = client.put(f"/api/projekte/{p['id']}/zuweisung", json={"benutzer_id": vertretung.id}).json()
+    assert (z["zugewiesen_an_name"], z["ersteller_name"]) == (vertretung.name, aussendienst.name)
+    eintrag = next(e for e in client.get(f"/api/projekte/{p['id']}/protokoll").json() if "zugewiesen_an_id" in e["aenderungen"])
+    assert eintrag["aenderungen"]["zugewiesen_an_id"] == [None, vertretung.id]
+
+    # Vertretung sieht und bearbeitet; Ersteller sieht es weiterhin
+    anmelden(client, vertretung.email)
+    assert [x["bezeichnung"] for x in client.get("/api/projekte").json()] == ["Urlaubsprojekt"]
+    assert client.patch(f"/api/raeume/{r['id']}", json={"laenge_m": 6}).status_code == 200
+    assert client.get(f"/api/offline/projekte/{p['id']}").status_code == 200
+    anmelden(client, aussendienst.email)
+    assert client.get(f"/api/projekte/{p['id']}").status_code == 200
+
+    # Zuweisung aufheben
+    anmelden(client, admin.email)
+    client.put(f"/api/projekte/{p['id']}/zuweisung", json={"benutzer_id": None})
+    anmelden(client, vertretung.email)
+    assert client.get("/api/projekte").json() == []
+
+
+def test_projektnummer_automatisch_und_nur_admin_aendert(client, aussendienst, admin):
+    from datetime import UTC, datetime
+
+    jahr = datetime.now(UTC).year
+    anmelden(client, aussendienst.email)
+    erste = _post(client, "/api/projekte", {"bezeichnung": "A", "gebaeudestandard": "neubau"})
+    zweite = _post(client, "/api/projekte", {"bezeichnung": "B", "gebaeudestandard": "neubau"})
+    assert (erste["nummer"], zweite["nummer"]) == (f"{jahr}-0001", f"{jahr}-0002")
+
+    antwort = client.patch(f"/api/projekte/{erste['id']}", json={"nummer": "frei-1"})
+    assert antwort.status_code == 403 and "nur ein Admin" in antwort.json()["detail"]
+    assert client.patch(f"/api/projekte/{erste['id']}", json={"bezeichnung": "A2", "nummer": erste["nummer"]}).status_code == 200
+
+    anmelden(client, admin.email)
+    antwort = client.patch(f"/api/projekte/{erste['id']}", json={"nummer": zweite["nummer"]})
+    assert antwort.status_code == 409
+    assert antwort.json()["detail"] == f"Projektnummer {zweite['nummer']} ist bereits vergeben"
+    assert _patch(client, f"/api/projekte/{erste['id']}", {"nummer": f"{jahr}-0050"})["nummer"] == f"{jahr}-0050"
+    # die Zählung setzt hinter der höchsten Nummer fort
+    assert _post(client, "/api/projekte", {"bezeichnung": "C", "gebaeudestandard": "neubau"})["nummer"] == f"{jahr}-0051"
+
+
+def test_verstaendliche_fehlermeldungen(client, aussendienst, admin):
+    anmelden(client, aussendienst.email)
+    antwort = client.post("/api/projekte", json={"bezeichnung": "", "gebaeudestandard": "villa"})
+    assert antwort.status_code == 422
+    assert antwort.json()["detail"] == "Bitte Eingaben prüfen: Bezeichnung darf nicht leer sein; Gebäudestandard ist keine gültige Auswahl."
+    p, _g, r = _projekt_mit_raum(client, "X")
+    antwort = client.patch(f"/api/raeume/{r['id']}", json={"laenge_m": 500})
+    assert antwort.json()["detail"] == "Bitte Eingaben prüfen: Länge darf höchstens 100 sein."
+    assert client.get("/api/raeume/999999").json()["detail"] == "Raum nicht gefunden – evtl. inzwischen gelöscht"
+    anmelden(client, admin.email)
+    neu = {"email": aussendienst.email, "name": "Doppelt", "rollen": ["aussendienst"], "passwort": "x" * 12}
+    antwort = client.post("/api/benutzer", json=neu)
+    assert antwort.status_code == 409 and antwort.json()["detail"] == f"Die E-Mail-Adresse {aussendienst.email} ist bereits vergeben"

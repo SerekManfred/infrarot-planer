@@ -75,7 +75,8 @@ class BenutzerAenderung(BaseModel):
 
 
 class ProjektNeu(BaseModel):
-    nummer: str = Field(min_length=1, max_length=50)
+    # Die Projektnummer vergibt der Server (fortlaufend, z. B. 2026-0004); ältere Geräte schicken sie evtl. noch mit
+    nummer: str | None = Field(default=None, max_length=50)
     bezeichnung: str = Field(min_length=1, max_length=300)
     kunde_name: str = ""
     notizen: str = ""
@@ -101,6 +102,10 @@ class ProjektLesen(Lesbar):
     notizen: str
     status: Projektstatus
     ersteller_id: int | None
+    ersteller_name: str | None
+    # zuständiger Außendienst (Zuweisung durch Admin)
+    zugewiesen_an_id: int | None
+    zugewiesen_an_name: str | None
     geprueft_von_id: int | None
     geprueft_am: datetime | None
     freigegeben_von_id: int | None
@@ -119,6 +124,11 @@ class ProjektLesen(Lesbar):
     angebot_gesperrt: bool
     erstellt_am: datetime
     geaendert_am: datetime
+
+
+class Zuweisung(BaseModel):
+    # None hebt die Zuweisung auf
+    benutzer_id: int | None
 
 
 class Auschecken(BaseModel):

@@ -120,14 +120,14 @@ def test_regeln_im_projekt_eingefroren(client, aussendienst, fachpruefer):
     anmelden(client, aussendienst.email)
     projekte = []
     for nummer, module in (("R-1", [modul]), ("R-2", [])):
-        p = client.post("/api/projekte", json={"nummer": nummer, "bezeichnung": "R", "gebaeudestandard": "neubau"}).json()
+        p = client.post("/api/projekte", json={"bezeichnung": nummer, "gebaeudestandard": "neubau"}).json()
         g = client.post(f"/api/objekte/{p['objekte'][0]['id']}/geschosse", json={"bezeichnung": "EG"}).json()
         client.post(f"/api/geschosse/{g['id']}/raeume", json={"bezeichnung": "Raum", "laenge_m": 4, "breite_m": 5, "module": module})
         projekte.append(p["id"])
 
     anmelden(client, fachpruefer.email)
     vorschau = client.post("/api/fachvorgaben/vorschau", json={"art": "regel", "ziel": "abstand_wand_cm", "daten": {"wert": 50}}).json()
-    assert [b["nummer"] for b in vorschau["betroffen"]] == ["R-1"] and vorschau["geprueft"] == 2
+    assert [b["bezeichnung"] for b in vorschau["betroffen"]] == ["R-1"] and vorschau["geprueft"] == 2
     assert vorschau["betroffen"][0]["neue_verstoesse"] == 1
 
     client.patch("/api/fachvorgaben/regeln/abstand_wand_cm", json={"wert": 50})

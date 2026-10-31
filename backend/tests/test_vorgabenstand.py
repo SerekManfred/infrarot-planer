@@ -234,7 +234,7 @@ def test_vorschau_zeigt_betroffene_ohne_zu_speichern(client, aussendienst, fachp
     werte.pop("geaendert_am")
     v = client.post("/api/fachvorgaben/vorschau", json={"art": "werte", "daten": werte | {"rueckfall_neubau_w_m2": 50}}).json()
     assert v["geprueft"] == 2
-    assert [(b["nummer"], b["summe_alt_w"], b["summe_neu_w"]) for b in v["betroffen"]] == [("P-A", 900, 1000)]
+    assert [(b["bezeichnung"], b["summe_alt_w"], b["summe_neu_w"]) for b in v["betroffen"]] == [("P-A", 900, 1000)]
     assert client.get("/api/fachvorgaben").json()["werte"]["rueckfall_neubau_w_m2"] == 45  # nichts gespeichert
     # reine Quellenänderung betrifft niemanden
     v = client.post("/api/fachvorgaben/vorschau", json={"art": "werte", "daten": werte | {"quelle": "NEU"}}).json()
@@ -249,7 +249,7 @@ def test_sammelansicht_und_sammelentscheidung(client, aussendienst, fachpruefer)
     _werte_setzen(client, fachpruefer, rueckfall_neubau_w_m2=50)
     # nur P-A ist betroffen, P-B hat still übernommen
     liste = client.get("/api/fachvorgaben/abgleich").json()
-    assert [(x["nummer"], x["summe_alt_w"], x["summe_neu_w"], x["neue_verstoesse"]) for x in liste] == [("P-A", 900, 1000, 0)]
+    assert [(x["bezeichnung"], x["summe_alt_w"], x["summe_neu_w"], x["neue_verstoesse"]) for x in liste] == [("P-A", 900, 1000, 0)]
     assert liste[0]["raeume"][0]["bezeichnung"] == "EG · Raum" and liste[0]["unterschiede"] == 1
     assert client.get(f"/api/projekte/{pb}").json()["vorgaben_offen"] is False
 
@@ -294,4 +294,6 @@ def test_cli_regel_setzen_und_uebernehmen(db, client, aussendienst):
         regel_setzen(db, "gibtsnicht", 1, None, "Q")
     with pytest.raises(ValueError):
         regel_setzen(db, "abstand_dusche_cm", 30, None, " ")
-    assert "Status entwurf" in vorgaben_uebernehmen_cli(db, "P-A")
+    from app.models import Projekt
+
+    assert "Status entwurf" in vorgaben_uebernehmen_cli(db, db.get(Projekt, pa).nummer)
