@@ -31,7 +31,13 @@ Vor-Ort-Entwurf ──(Fachprüfer: geprüft)──▶ fachlich geprüft ──(
 - **„wartet auf Fachprüfer“** (Festlegung 13.10.2026): Wird angezeigt statt „Vor-Ort-Entwurf“, solange ein Projekt mit Gebäudestandard „Altbau (nicht Effizienzhaus)“ mindestens einen Raum ohne W/m²-Wert hat. Dasselbe gilt, solange über neue zentrale Fachvorgaben nicht entschieden ist (siehe „Fachvorgaben je Projekt eingefroren“). Beides zusammen ergibt `angebot_gesperrt`. Der Status wird aus den Daten abgeleitet, nicht von Hand gesetzt, und gilt auch offline auf dem Tablet. So lange kann das Projekt nicht als geprüft markiert werden und ist damit für Angebote gesperrt. Das künftige Angebotsmodul prüft dafür `angebot_gesperrt`. Ein Projekt ohne Räume wartet noch nicht.
 - **Fachlich geprüft:** Ändert danach jemand Projektdaten, fällt das Projekt automatisch auf „Vor-Ort-Entwurf“ zurück (die Prüfung gilt nur für den geprüften Stand).
 - **Freigegeben:** Projektdaten sind gesperrt. Zum Ändern setzt ein Fachprüfer das Projekt zurück auf „Vor-Ort-Entwurf“. Bei der Freigabe wird die Auswertung als unveränderliche, versionierte Berechnung gespeichert, damit spätere Änderungen an den Fachvorgaben das freigegebene Ergebnis nicht verändern.
-- Alle Benutzer sehen alle Projekte. Jede Änderung (anlegen, ändern, löschen, Status) wird mit Benutzer, Zeit und alten/neuen Werten protokolliert.
+- **Sichtbarkeit** (Festlegung 31.10.2026):
+  - Fachprüfer und Admins sehen alle Projekte.
+  - Benutzer mit nur der Rolle Außendienst sehen ausschließlich Projekte, die sie selbst angelegt haben oder die ihnen zugewiesen sind.
+  - Das gilt im Server für jeden Zugriff: Projektliste, alle Projektdaten, Auswertung, Berechnungen, Offline-Paket, Auschecken und Synchronisierung. Fremde Projekte gelten als „nicht gefunden“.
+  - Admins weisen ein Projekt einem anderen aktiven Außendienst-Benutzer zu (Projektkopf „Zuständig“), z. B. als Urlaubsvertretung; der Ersteller sieht es weiterhin. Die Zuweisung wird protokolliert.
+- **Projektnummer:** vergibt der Server beim Anlegen, fortlaufend je Jahr (JJJJ-NNNN, z. B. 2026-0004), eindeutig. Nicht frei eintippbar; nur Admins dürfen sie im Ausnahmefall ändern. Ist eine Nummer schon vergeben, erscheint „Projektnummer x ist bereits vergeben“. Hinweis: Wird das Projekt mit der höchsten Nummer eines Jahres gelöscht, wird diese Nummer erneut vergeben.
+- Jede Änderung (anlegen, ändern, löschen, Status) wird mit Benutzer, Zeit und alten/neuen Werten protokolliert.
 
 ## Gebäudestandard (Pflichtfeld)
 
@@ -139,9 +145,9 @@ Vor Ort gibt es oft kein Netz. Deshalb arbeitet die App auf dem Tablet auch offl
   - Ohne Netz angelegte Projekte frieren den Vorgaben-Schnappschuss des Geräts ein. Beim Übertragen legt der Server den dann gültigen Stand fest.
   - Jede Änderung kommt in eine Warteschlange. Sobald der Server erreichbar ist, wird sie automatisch übertragen.
 - **Statusanzeige** im Kopf: „Online“, „Offline“, „x Änderungen ausstehend“ oder „Übertragung angehalten“.
-  - Lehnt der Server eine Änderung ab, hält die Übertragung an diesem Eintrag an und zeigt den Grund. Typische Gründe: ungültiger Wert, Sperre aufgehoben, Projektnummer vergeben.
+  - Lehnt der Server eine Änderung ab, hält die Übertragung an diesem Eintrag an und zeigt den Grund. Typische Gründe: ungültiger Wert, Sperre aufgehoben, kein Zugriff mehr auf das Projekt.
   - Danach: erneut versuchen oder nur diese eine Änderung verwerfen.
-- **Neue Projekte ohne Netz** werden auf dem Gerät angelegt. Beim nächsten Kontakt werden sie auf dem Server angelegt und für das Gerät ausgecheckt. Die Projektnummer lässt sich bis dahin noch korrigieren.
+- **Neue Projekte ohne Netz** werden auf dem Gerät angelegt. Beim nächsten Kontakt werden sie auf dem Server angelegt und für das Gerät ausgecheckt. Bis dahin steht „Nr. folgt“; die Projektnummer vergibt der Server bei der Übertragung.
 - **Einchecken** (braucht Netz): Zuerst wird alles übertragen. Dann wird die Sperre aufgehoben und das Projekt vom Gerät entfernt. Statuswechsel (prüfen, freigeben) gehen erst danach.
 - **Sperre lösen:** Ein Admin kann die Sperre aufheben, etwa wenn ein Tablet verloren ging. Noch nicht übertragene Änderungen dieses Geräts nimmt der Server danach nicht mehr an (Sperr-Token ungültig). Das Gerät zeigt das an und verwirft nichts selbst.
 - **Abmelden:** Bei Verbindung wird zuerst alles übertragen und eingecheckt. Danach werden die lokalen Daten gelöscht.

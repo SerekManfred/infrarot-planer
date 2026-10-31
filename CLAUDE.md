@@ -24,7 +24,7 @@ Fachregeln im Detail: `docs/FACHKONZEPT.md`.
 - Rollen sind **kombinierbar**; Prüfen und Freigeben nur mit Rolle Fachprüfer.
 - Projekte rechnen mit ihrer beim Anlegen **eingefrorenen Kopie der Fachvorgaben**; neue zentrale Werte nur per Klick übernehmen.
 - Projektstatus: **Vor-Ort-Entwurf → fachlich geprüft → freigegeben**. Nur Fachprüfer ändern den Status.
-- Alle sehen alle Projekte. Jede Änderung wird mit Benutzer und Zeit protokolliert.
+- Fachprüfer und Admins sehen alle Projekte; Benutzer mit nur der Rolle Außendienst nur selbst angelegte und ihnen zugewiesene (serverseitig geprüft). Projektnummern vergibt der Server (JJJJ-NNNN). Jede Änderung wird mit Benutzer und Zeit protokolliert.
 
 ## Stack
 
