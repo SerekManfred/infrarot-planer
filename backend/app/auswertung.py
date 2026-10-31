@@ -5,6 +5,8 @@ eingefrorenen Fachvorgaben, app/vorgabenstand.py);
 die Auflösung der Vorgaben mit Herkunft und die Rechnung übernimmt der Rechenkern (art "objekt").
 Derselbe Code rechnet offline im Browser – Server und Tablet kommen so zum selben Ergebnis.
 """
+from collections.abc import Callable
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,10 +33,13 @@ def _felder(obj: object, namen: tuple[str, ...]) -> dict:
     return {n: getattr(obj, n) for n in namen}
 
 
-def objekt_planung(db: Session, objekt: Objekt, stand: dict | None = None) -> dict:
+def objekt_planung(
+    db: Session, objekt: Objekt, stand: dict | None = None, module_neu: Callable[[list], list] | None = None
+) -> dict:
     """Vollständiger Planungsstand eines Objekts als Rechenkern-Eingabe (art "objekt").
 
     stand: Fachvorgaben, mit denen gerechnet wird – ohne Angabe die des Projekts (eingefroren).
+    module_neu: ersetzt die platzierten Module je Raum (z. B. mit aktuellen Katalogdaten, app/modulabgleich.py).
     """
     stand = stand or objekt.projekt.vorgaben_stand or schnappschuss(db)
     w = stand["werte"]
@@ -72,6 +77,7 @@ def objekt_planung(db: Session, objekt: Objekt, stand: dict | None = None) -> di
                 "raeume": [
                     {
                         **_felder(r, RAUM_FELDER),
+                        **({"module": module_neu(r.module or [])} if module_neu else {}),
                         "flaechen": [
                             {**_felder(f, FLAECHE_FELDER), "oeffnungen": [_felder(o, OEFFNUNG_FELDER) for o in f.oeffnungen]}
                             for f in r.flaechen
@@ -85,7 +91,9 @@ def objekt_planung(db: Session, objekt: Objekt, stand: dict | None = None) -> di
     }
 
 
-def objekt_auswerten(db: Session, objekt: Objekt, stand: dict | None = None) -> tuple[dict, dict]:
+def objekt_auswerten(
+    db: Session, objekt: Objekt, stand: dict | None = None, module_neu: Callable[[list], list] | None = None
+) -> tuple[dict, dict]:
     """Gibt (Planungsstand als Rechenkern-Eingabe, Auswertung) zurück."""
-    planung = objekt_planung(db, objekt, stand)
+    planung = objekt_planung(db, objekt, stand, module_neu)
     return planung, rechenkern_aufrufen(planung)["auswertung"]

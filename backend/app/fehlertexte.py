@@ -51,7 +51,11 @@ def _grund(fehler: dict) -> str:
 def eingabefehler_text(fehler: list[dict]) -> str:
     teile = []
     for f in fehler:
-        text = f"{_feld(tuple(f.get('loc', ())))} {_grund(f)}"
+        if f.get("type") == "value_error":
+            # eigene Prüfungen (z. B. „Bad geeignet“ nur ab IP44) liefern bereits einen verständlichen Satz
+            text = str(f.get("msg", "")).removeprefix("Value error, ")
+        else:
+            text = f"{_feld(tuple(f.get('loc', ())))} {_grund(f)}"
         if text not in teile:
             teile.append(text)
     return "Bitte Eingaben prüfen: " + "; ".join(teile[:5]) + ("; …" if len(teile) > 5 else "") + "."

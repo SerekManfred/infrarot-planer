@@ -31,6 +31,7 @@ from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
 from app.anmeldebremse import freigeben, ips_mit_fehlversuchen
 from app.excel_import import ImportFehler, importiere_excel
+from app.modulabgleich import abgleichen as module_abgleichen
 from app.vorgabenabgleich import abgleichen
 from app.models import ROLLEN, Anmeldeversuch, Benutzer, Fachvorgaben, Platzierungsregel, Projekt, Protokoll
 from app.schemas import ROLLEN_REIHENFOLGE
@@ -162,7 +163,9 @@ def excel_importieren(db: Session, inhalt: bytes, umbenennen: list[str], probela
         db.rollback()
         return "PROBELAUF – nichts gespeichert\n" + bericht.text()
     db.commit()
-    return bericht.text() + "\n" + abgleich_text(abgleichen(db, None))
+    text = bericht.text() + "\n" + abgleich_text(abgleichen(db, None))
+    module = module_abgleichen(db, None)  # Katalogdaten in laufenden Projekten
+    return text + f"\nModuldaten abgeglichen: {len(module['still'])} ohne Auswirkung übernommen, {len(module['betroffen'])} warten auf den Fachprüfer"
 
 
 def abgleich_text(ergebnis: dict) -> str:

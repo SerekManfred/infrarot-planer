@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 Angrenzung = Literal["aussen", "beheizt", "unbeheizt", "erdreich"]
 Rolle = Literal["admin", "fachpruefer", "aussendienst"]
@@ -120,7 +120,9 @@ class ProjektLesen(Lesbar):
     wartet_auf_fachpruefer: bool
     # neue zentrale Fachvorgaben, über die der Fachprüfer noch nicht entschieden hat (übernehmen oder ablehnen)
     vorgaben_offen: bool
-    # kein Angebot möglich: wartet_auf_fachpruefer oder vorgaben_offen
+    # geänderte Daten verwendeter Module, über die der Fachprüfer noch nicht entschieden hat
+    module_offen: bool
+    # kein Angebot möglich: wartet_auf_fachpruefer, vorgaben_offen oder module_offen
     angebot_gesperrt: bool
     erstellt_am: datetime
     geaendert_am: datetime
@@ -476,6 +478,56 @@ class ModulLesen(Lesbar):
     aktiv: bool
 
 
+class ModulNeu(BaseModel):
+    """Modul im Katalog mit Plausibilitätsprüfung (Festlegung 31.10.2026)."""
+
+    artikel_nr: str = Field(min_length=1, max_length=50)
+    bezeichnung: str = Field(min_length=1, max_length=300)
+    leistung_w: float = Field(gt=0, le=10000)
+    laenge_mm: float = Field(gt=0, le=10000)
+    breite_mm: float = Field(gt=0, le=10000)
+    bauhoehe_mm: float | None = Field(default=None, gt=0, le=1000)
+    gewicht_kg: float | None = Field(default=None, gt=0, le=500)
+    schutzart: str = Field(pattern=r"^IP\d{2}$", description="z. B. IP44")
+    bad_geeignet: bool = False
+    oberflaeche: str = Field(default="", max_length=300)
+    ek_netto: float | None = Field(default=None, ge=0, le=100000)
+    vk_netto: float | None = Field(default=None, ge=0, le=100000)
+    montagezeit_min: float | None = Field(default=None, ge=0, le=10000)
+    quelle: str = Field(min_length=1, max_length=500)
+    bemerkung: str = ""
+    aktiv: bool = True
+
+    @model_validator(mode="after")
+    def _bad_nur_ab_ip44(self):
+        if self.bad_geeignet and int(self.schutzart[2:]) < 44:
+            raise ValueError(f"„Bad geeignet“ nur ab Schutzart IP44 (hier {self.schutzart})")
+        return self
+
+
+class ModulAenderung(BaseModel):
+    """Einzelne Felder ändern; geprüft wird der Datensatz nach der Änderung (ModulNeu)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artikel_nr: str | None = None
+    bezeichnung: str | None = None
+    leistung_w: float | None = None
+    laenge_mm: float | None = None
+    breite_mm: float | None = None
+    bauhoehe_mm: float | None = None
+    gewicht_kg: float | None = None
+    schutzart: str | None = None
+    bad_geeignet: bool | None = None
+    oberflaeche: str | None = None
+    ek_netto: float | None = None
+    vk_netto: float | None = None
+    montagezeit_min: float | None = None
+    quelle: str | None = None
+    bemerkung: str | None = None
+    aktiv: bool | None = None
+
+
 class KlimadatenLesen(Lesbar):
     id: int
     plz: str
@@ -603,6 +655,8 @@ class RaumAuswirkung(BaseModel):
     neu_w: float | None
     # Regelverstöße, die mit den neuen Vorgaben hinzukommen
     neue_verstoesse: int = 0
+    installiert_alt_w: float = 0
+    installiert_neu_w: float = 0
 
 
 class VorgabenAuswirkung(BaseModel):
@@ -613,6 +667,8 @@ class VorgabenAuswirkung(BaseModel):
     # nur Räume, bei denen sich Heizlast, Modulauswahl/Leistung oder Regelprüfung ändert
     raeume: list[RaumAuswirkung]
     neue_verstoesse: int = 0
+    installiert_alt_w: float = 0
+    installiert_neu_w: float = 0
 
 
 class AbgleichProjekt(VorgabenAuswirkung):
@@ -624,6 +680,8 @@ class AbgleichProjekt(VorgabenAuswirkung):
     status: Projektstatus
     ausgecheckt: bool
     unterschiede: int = 0
+    # Anlass: geänderte Fachvorgaben oder geänderte Moduldaten aus dem Katalog
+    art: Literal["vorgaben", "module"] = "vorgaben"
 
 
 class VorschauAnfrage(BaseModel):
@@ -643,6 +701,7 @@ class VorschauErgebnis(BaseModel):
 
 class SammelEntscheidung(BaseModel):
     aktion: Literal["uebernehmen", "ablehnen"]
+    art: Literal["vorgaben", "module"] = "vorgaben"
     projekt_ids: list[int] = Field(min_length=1, max_length=500)
     bemerkung: str = Field(default="", max_length=500)
 
@@ -671,3 +730,24 @@ class ProjektVorgaben(BaseModel):
 class VorgabenAblehnen(BaseModel):
     # Begründung des Fachprüfers, warum das Projekt bei seinem Stand bleibt (optional, protokolliert)
     bemerkung: str = Field(default="", max_length=500)
+
+
+# ── Moduldaten in laufenden Projekten ──────────────────────────────────────
+
+
+class ModulUnterschied(BaseModel):
+    modul_id: int
+    artikel_nr: str
+    feld: str
+    bezeichnung: str
+    alt: float | str | bool | None
+    neu: float | str | bool | None
+
+
+class ModulAbgleich(BaseModel):
+    """Geänderte Daten der im Projekt verwendeten Module gegenüber dem Katalog."""
+
+    unterschiede: list[ModulUnterschied]
+    # True: der Fachprüfer muss noch übernehmen oder ablehnen
+    offen: bool
+    auswirkung: VorgabenAuswirkung | None

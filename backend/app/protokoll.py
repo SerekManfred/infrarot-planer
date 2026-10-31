@@ -23,7 +23,7 @@ PROTOKOLLIERT = (
 # „vorgaben_abgelehnt“ (app/routers/projekte.py)
 NICHT_PROTOKOLLIERT = {
     "id", "erstellt_am", "geaendert_am", "sitzungs_version", "eingaben", "ergebnis", "sperre_hash",
-    "vorgaben_stand", "vorgaben_stand_am", "vorgaben_abgelehnt", "vorgaben_abgelehnt_am",
+    "vorgaben_stand", "vorgaben_stand_am", "vorgaben_abgelehnt", "vorgaben_abgelehnt_am", "module_abgelehnt",
 }
 BESCHRIFTUNG = ("bezeichnung", "nummer", "email", "gebaeudestandard")
 

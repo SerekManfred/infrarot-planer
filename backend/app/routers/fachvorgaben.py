@@ -15,12 +15,15 @@ from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_fachpruef
 from app.auswertung import fachvorgaben_laden
 from app.db import get_db
 from app.models import Benutzer, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Protokoll
-from app.routers.projekte import protokoll_lesen, vorgaben_ablehnen, vorgaben_uebernehmen
+from app.routers.projekte import (
+    module_ablehnen, module_uebernehmen, protokoll_lesen, vorgaben_ablehnen, vorgaben_uebernehmen,
+)
 from app.schemas import (
     GEBAEUDESTANDARD_TEXT, FachvorgabenGesamt, FachvorgabenLesen, FachvorgabenWerte, PauschaleLesen,
     AbgleichProjekt, PauschaleSetzen, ProtokollLesen, RaumtypAenderung, RaumtypLesen, RaumtypNeu, RegelAenderung,
     RegelLesen, SammelEntscheidung, SammelErgebnis, VorgabenAblehnen, VorschauAnfrage, VorschauErgebnis,
 )
+from app.modulabgleich import betroffene as module_betroffene
 from app.vorgabenabgleich import abgleichen, betroffene, vorschau as vorschau_berechnen
 
 router = APIRouter(prefix="/fachvorgaben", tags=["Fachvorgaben"], dependencies=[Depends(aktueller_benutzer)])
@@ -174,8 +177,8 @@ def vorschau(anfrage: VorschauAnfrage, db: Session = Depends(get_db)):
 
 @router.get("/abgleich", response_model=list[AbgleichProjekt], dependencies=[Depends(nur_fachpruefer)])
 def abgleich(db: Session = Depends(get_db)):
-    """Sammelansicht: Projekte, die auf die Entscheidung über neue Fachvorgaben warten, mit Auswirkung."""
-    return betroffene(db)
+    """Sammelansicht: Projekte, die auf eine Entscheidung warten – über neue Fachvorgaben oder geänderte Moduldaten."""
+    return betroffene(db) + module_betroffene(db)
 
 
 @router.post("/abgleich", response_model=list[SammelErgebnis])
@@ -186,7 +189,12 @@ def abgleich_entscheiden(
     ergebnisse = []
     for projekt_id in daten.projekt_ids:
         try:
-            if daten.aktion == "uebernehmen":
+            if daten.art == "module":
+                if daten.aktion == "uebernehmen":
+                    module_uebernehmen(projekt_id, db, benutzer)
+                else:
+                    module_ablehnen(projekt_id, VorgabenAblehnen(bemerkung=daten.bemerkung), db, benutzer)
+            elif daten.aktion == "uebernehmen":
                 vorgaben_uebernehmen(projekt_id, db, benutzer)
             else:
                 vorgaben_ablehnen(projekt_id, VorgabenAblehnen(bemerkung=daten.bemerkung), db, benutzer)

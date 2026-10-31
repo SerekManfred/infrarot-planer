@@ -1,15 +1,27 @@
-"""Bibliotheken lesen (alle) und per CSV importieren (Fachprüfer und Admins). Raumtypen: siehe Fachvorgaben."""
+"""Bibliotheken lesen (alle) und per CSV importieren (Fachprüfer und Admins). Raumtypen: siehe Fachvorgaben.
+
+Modulkatalog (Festlegung 31.10.2026): lesen alle, pflegen Admin und Fachprüfer (anlegen, jedes Feld ändern,
+deaktivieren; löschen nur, wenn in keinem Projekt verwendet). Jede Änderung wird je Feld protokolliert; danach werden
+laufende Projekte mit verwendeten Modulen abgeglichen (app/modulabgleich.py). Export als Excel.
+"""
+import io
+from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi.exceptions import RequestValidationError
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.abhaengigkeiten import aktueller_benutzer, vorgaben_pflege
+from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, vorgaben_pflege
 from app.csv_import import importiere
 from app.db import get_db
 from app.models import BibBauteil, BibKlimadaten, BibModul
-from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, ModulLesen
+from app.modulabgleich import abgleichen as module_abgleichen, verwendungen
+from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, ModulAenderung, ModulLesen, ModulNeu
 from app.vorgabenabgleich import abgleichen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
@@ -34,6 +46,98 @@ def klimadaten(plz: str | None = None, db: Session = Depends(get_db)):
 def module(db: Session = Depends(get_db)):
     """Modulkatalog (Deckenmodule), auch inaktive – die Oberfläche schlägt nur aktive vor."""
     return db.scalars(select(BibModul).order_by(BibModul.leistung_w, BibModul.artikel_nr)).all()
+
+
+def _artikel_frei(db: Session, artikel_nr: str, ausser: int | None = None) -> None:
+    vorhanden = db.scalar(select(BibModul.id).where(BibModul.artikel_nr == artikel_nr))
+    if vorhanden is not None and vorhanden != ausser:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Artikel-Nr. {artikel_nr} ist bereits vergeben")
+
+
+def _pruefen(daten: dict) -> ModulNeu:
+    try:
+        return ModulNeu.model_validate(daten)
+    except ValidationError as fehler:  # verständlicher Text wie bei ungültigen Anfragen
+        raise RequestValidationError(fehler.errors()) from None
+
+
+@router.post("/module", response_model=ModulLesen, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(vorgaben_pflege)])
+def modul_anlegen(daten: ModulNeu, db: Session = Depends(get_db)):
+    _artikel_frei(db, daten.artikel_nr)
+    modul = BibModul(**daten.model_dump())
+    db.add(modul)
+    db.commit()
+    db.refresh(modul)
+    return modul
+
+
+@router.patch("/module/{modul_id}", response_model=ModulLesen, dependencies=[Depends(vorgaben_pflege)])
+def modul_aendern(modul_id: int, daten: ModulAenderung, db: Session = Depends(get_db)):
+    """Einzelne Felder ändern (geprüft wird der ganze Datensatz); danach laufende Projekte abgleichen."""
+    modul = hole_oder_404(db, BibModul, modul_id)
+    aenderung = daten.model_dump(exclude_unset=True)
+    for feld in ("artikel_nr", "bezeichnung", "quelle", "leistung_w", "laenge_mm", "breite_mm", "schutzart", "bad_geeignet", "aktiv"):
+        if feld in aenderung and aenderung[feld] is None:
+            aenderung.pop(feld)  # Pflichtfelder lassen sich nicht leeren
+    geprueft = _pruefen({**ModulLesen.model_validate(modul).model_dump(), **aenderung})
+    if "artikel_nr" in aenderung:
+        _artikel_frei(db, geprueft.artikel_nr, modul.id)
+    for feld in aenderung:
+        setattr(modul, feld, getattr(geprueft, feld))
+    db.commit()
+    module_abgleichen(db, db.info.get("benutzer_id"))
+    db.refresh(modul)
+    return modul
+
+
+@router.delete("/module/{modul_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(vorgaben_pflege)])
+def modul_loeschen(modul_id: int, db: Session = Depends(get_db)):
+    """Nur unbenutzte Module löschen; verwendete deaktivieren (bestehende Planungen bleiben gültig)."""
+    modul = hole_oder_404(db, BibModul, modul_id)
+    anzahl = verwendungen(db, modul_id)
+    if anzahl:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Modul {modul.artikel_nr} wird in {anzahl} Projekt{'' if anzahl == 1 else 'en'} verwendet und kann nicht gelöscht "
+            "werden – bitte stattdessen deaktivieren (dann nicht mehr auswählbar, bestehende Planungen bleiben gültig).",
+        )
+    db.delete(modul)
+    db.commit()
+
+
+EXPORT_SPALTEN = (
+    ("Artikel-Nr.", "artikel_nr"), ("Bezeichnung", "bezeichnung"), ("Leistung (W)", "leistung_w"),
+    ("Länge (mm)", "laenge_mm"), ("Breite (mm)", "breite_mm"), ("Bauhöhe (mm)", "bauhoehe_mm"),
+    ("Gewicht (kg)", "gewicht_kg"), ("Schutzart (IP)", "schutzart"), ("Bad geeignet", "bad_geeignet"),
+    ("Oberfläche / Farbe", "oberflaeche"), ("EK netto (€)", "ek_netto"), ("VK netto (€)", "vk_netto"),
+    ("Montagezeit (min)", "montagezeit_min"), ("Quelle (Produktseite)", "quelle"), ("Bemerkung", "bemerkung"),
+)
+
+
+@router.get("/module/export.xlsx")
+def module_export(db: Session = Depends(get_db)):
+    """Modulkatalog als Excel – Blatt „Modulkatalog“ im Aufbau der Importdatei, dazu die Spalte „aktiv“."""
+    mappe = Workbook()
+    blatt = mappe.active
+    blatt.title = "Modulkatalog"
+    blatt.append([k for k, _ in EXPORT_SPALTEN] + ["aktiv"])
+    for zelle in blatt[1]:
+        zelle.font = Font(bold=True)
+    for m in db.scalars(select(BibModul).order_by(BibModul.leistung_w, BibModul.artikel_nr)):
+        werte = [getattr(m, f) for _, f in EXPORT_SPALTEN]
+        werte[8] = "ja" if m.bad_geeignet else "nein"
+        blatt.append(werte + ["ja" if m.aktiv else "nein"])
+    for spalte, breite in zip("ABCDEFGHIJKLMNOP", (12, 40, 12, 11, 11, 12, 12, 13, 12, 36, 12, 12, 16, 50, 40, 8), strict=True):
+        blatt.column_dimensions[spalte].width = breite
+    blatt.freeze_panes = "A2"
+    puffer = io.BytesIO()
+    mappe.save(puffer)
+    return Response(
+        puffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Modulkatalog_{date.today():%Y-%m-%d}.xlsx"'},
+    )
 
 
 @router.post("/{art}/import", response_model=ImportBericht, dependencies=[Depends(vorgaben_pflege)])

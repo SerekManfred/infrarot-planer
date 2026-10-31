@@ -257,6 +257,8 @@ class Projekt(Zeitstempel, Base):
     # als entschieden (Festlegung 13.10.2026, app/vorgabenstand.py)
     vorgaben_abgelehnt: Mapped[dict | None] = mapped_column(JsonDaten)
     vorgaben_abgelehnt_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bewusst abgelehnte Katalogstände je Modul {modul_id: Katalogdaten} (app/modulabgleich.py, Festlegung 31.10.2026)
+    module_abgelehnt: Mapped[dict | None] = mapped_column(JsonDaten)
 
     ersteller: Mapped[Benutzer | None] = relationship(foreign_keys=[ersteller_id])
     zugewiesen_an: Mapped[Benutzer | None] = relationship(foreign_keys=[zugewiesen_an_id])
@@ -301,9 +303,20 @@ class Projekt(Zeitstempel, Base):
         return bool(offene_unterschiede(sitzung, self))
 
     @property
+    def module_offen(self) -> bool:
+        """Daten verwendeter Module haben sich im Katalog geändert; der Fachprüfer hat noch nicht entschieden."""
+        from app.modulabgleich import katalog, offene_unterschiede  # vermeidet Kreisimport
+
+        sitzung = object_session(self)
+        if sitzung is None or self.status == "freigegeben":
+            return False
+        return bool(offene_unterschiede(self, katalog(sitzung)))
+
+    @property
     def angebot_gesperrt(self) -> bool:
-        """Kein Angebot, solange der Fachprüfer noch etwas entscheiden muss: Altbau-W/m² oder neue Fachvorgaben."""
-        return self.wartet_auf_fachpruefer or self.vorgaben_offen
+        """Kein Angebot, solange der Fachprüfer noch etwas entscheiden muss: Altbau-W/m², neue Fachvorgaben oder
+        geänderte Moduldaten."""
+        return self.wartet_auf_fachpruefer or self.vorgaben_offen or self.module_offen
 
 
 class Objekt(Zeitstempel, Base):

@@ -13,6 +13,7 @@ abgeglichen: Ihre Ergebnisse ändern sich bei einer stillschweigenden Übernahme
 Freigegebene Projekte bleiben unverändert.
 """
 import copy
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -36,6 +37,8 @@ def _kennwerte(raum: dict) -> tuple:
         raum.get("phi_a_w"),
         raum.get("phi_c_w"),
         None if benoetigt is None else round(benoetigt, 6),
+        # installierte Leistung: ändert sich mit Moduldaten aus dem Katalog (app/modulabgleich.py)
+        m.get("installiert_w"),
         m.get("thermostate"),
         warnungen,
         verstoesse,
@@ -46,16 +49,22 @@ def _verstoesse(raum: dict) -> set[str]:
     return {f"{k}:{v}" for k, liste in ((raum.get("modulplanung") or {}).get("verstoesse") or {}).items() for v in liste}
 
 
-def vergleich(db: Session, projekt: Projekt, alt: dict, neu: dict) -> dict | None:
-    """Auswirkung von Fachvorgaben-Stand `alt` → `neu` auf das Projekt; None, wenn sich nichts ändert, was zählt."""
+def vergleich(
+    db: Session, projekt: Projekt, alt: dict, neu: dict, module_neu: Callable[[list], list] | None = None
+) -> dict | None:
+    """Auswirkung von Fachvorgaben-Stand `alt` → `neu` (und ggf. neuen Moduldaten, app/modulabgleich.py) auf das
+    Projekt; None, wenn sich nichts ändert, was zählt."""
     summe_alt = summe_neu = 0.0
+    inst_alt = inst_neu = 0.0
     raeume: list[dict] = []
     neue_verstoesse = 0
     for objekt in projekt.objekte:
         a = objekt_auswerten(db, objekt, alt)[1]
-        n = objekt_auswerten(db, objekt, neu)[1]
+        n = objekt_auswerten(db, objekt, neu, module_neu)[1]
         summe_alt += a["summe"]["phi_massgeblich_w"]
         summe_neu += n["summe"]["phi_massgeblich_w"]
+        inst_alt += a["summe"].get("installiert_w", 0)
+        inst_neu += n["summe"].get("installiert_w", 0)
         for ra, rn in zip(a["raeume"], n["raeume"], strict=True):
             if _kennwerte(ra) == _kennwerte(rn):
                 continue
@@ -64,10 +73,15 @@ def vergleich(db: Session, projekt: Projekt, alt: dict, neu: dict) -> dict | Non
             raeume.append({
                 "raum_id": ra["raum_id"], "bezeichnung": f"{ra['geschoss']} · {ra['bezeichnung']}",
                 "alt_w": ra["phi_massgeblich_w"], "neu_w": rn["phi_massgeblich_w"], "neue_verstoesse": neu_hier,
+                "installiert_alt_w": (ra.get("modulplanung") or {}).get("installiert_w", 0),
+                "installiert_neu_w": (rn.get("modulplanung") or {}).get("installiert_w", 0),
             })
     if not raeume:
         return None
-    return {"summe_alt_w": summe_alt, "summe_neu_w": summe_neu, "raeume": raeume, "neue_verstoesse": neue_verstoesse}
+    return {
+        "summe_alt_w": summe_alt, "summe_neu_w": summe_neu, "raeume": raeume, "neue_verstoesse": neue_verstoesse,
+        "installiert_alt_w": inst_alt, "installiert_neu_w": inst_neu,
+    }
 
 
 def basis(projekt: Projekt, db: Session) -> dict:

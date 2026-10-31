@@ -31,7 +31,11 @@ from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
 from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sichtbarkeit_filter, sichtbarkeit_pruefen, sperre_hash, sperre_pruefen
 from app.schemas import (
     Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProjektVorgaben,
-    ProtokollLesen, StatusAenderung, VorgabenAblehnen, Zuweisung,
+    ModulAbgleich, ProtokollLesen, StatusAenderung, VorgabenAblehnen, Zuweisung,
+)
+from app.modulabgleich import (
+    ablehnen as modul_ablehnen, auswirkung as module_auswirkung, katalog as modulkatalog,
+    offene_unterschiede as module_offen_liste, uebernehmen as modul_uebernehmen, unterschiede as module_unterschiede,
 )
 
 router = APIRouter(prefix="/projekte", tags=["Projekte"], dependencies=[Depends(aktueller_benutzer)])
@@ -158,6 +162,11 @@ def status_aendern(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Die zentralen Fachvorgaben wurden geändert: Erst übernehmen oder bewusst ablehnen, dann prüfen.",
+        )
+    if daten.status != "entwurf" and projekt.module_offen:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Daten verwendeter Module wurden im Katalog geändert: Erst übernehmen oder bewusst ablehnen, dann prüfen.",
         )
     jetzt = datetime.now(UTC)
     # Ohne Zwischenspeichern, damit der Statuswechsel als ein Protokolleintrag erscheint
@@ -319,6 +328,44 @@ def vorgaben_ablehnen(
     projekt.vorgaben_abgelehnt_am = jetzt
     db.commit()
     return vorgaben(projekt_id, db)
+
+
+@router.get("/{projekt_id}/module-abgleich", response_model=ModulAbgleich)
+def module_abgleich(projekt_id: int, db: Session = Depends(get_db)):
+    """Geänderte Katalogdaten der im Projekt verwendeten Module, mit Auswirkung (Festlegung 31.10.2026)."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    if projekt.status == "freigegeben":
+        return ModulAbgleich(unterschiede=[], offen=False, auswirkung=None)
+    kat = modulkatalog(db)
+    offen = module_offen_liste(projekt, kat)
+    liste = offen or module_unterschiede(projekt, kat)
+    folge = module_auswirkung(db, projekt, kat, {u["modul_id"] for u in liste}) if liste else None
+    return ModulAbgleich(unterschiede=liste, offen=bool(offen), auswirkung=folge)
+
+
+@router.post("/{projekt_id}/module/uebernehmen", response_model=ModulAbgleich)
+def module_uebernehmen(projekt_id: int, db: Session = Depends(get_db), benutzer: Benutzer = Depends(nur_fachpruefer)):
+    """Aktuelle Katalogdaten in die platzierten Module übernehmen (nur Fachprüfer, protokolliert)."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    bearbeitung_pruefen(db, projekt)  # Sperre, Freigabe (409), geprüft → Entwurf
+    modul_uebernehmen(db, projekt, benutzer.id)
+    db.commit()
+    return module_abgleich(projekt_id, db)
+
+
+@router.post("/{projekt_id}/module/ablehnen", response_model=ModulAbgleich)
+def module_ablehnen(
+    projekt_id: int, daten: VorgabenAblehnen | None = None, db: Session = Depends(get_db),
+    benutzer: Benutzer = Depends(nur_fachpruefer),
+):
+    """Bei den bisherigen Moduldaten bleiben (nur Fachprüfer, protokolliert); Projektdaten und Status bleiben."""
+    projekt = hole_oder_404(db, Projekt, projekt_id)
+    sperre_pruefen(db, projekt)
+    if projekt.status == "freigegeben":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Freigegebene Projekte bleiben ohnehin unverändert.")
+    modul_ablehnen(db, projekt, benutzer.id, daten.bemerkung.strip() if daten else "")
+    db.commit()
+    return module_abgleich(projekt_id, db)
 
 
 @router.delete("/{projekt_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(nur_admin)])
