@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RECHENKERN_VERSION } from '@infrarot/rechenkern';
 import { api, ApiFehler, fachansicht, hatRolle, type Benutzer } from './api';
 import { AbgleichSeite } from './komponenten/Abgleich';
+import { Aktualisierung } from './komponenten/Aktualisierung';
 import { Anmeldung } from './komponenten/Anmeldung';
 import { BenutzerVerwaltung } from './komponenten/Benutzer';
 import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
@@ -120,6 +121,7 @@ export function App() {
           </span>
         )}
       </header>
+      <Aktualisierung />
       <main className="inhalt">
         {fehler && <p className="meldung fehler">{fehler}</p>}
         {benutzer === undefined && <p>Wird geladen …</p>}

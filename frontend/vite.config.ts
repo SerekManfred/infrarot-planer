@@ -12,7 +12,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Neue Version erst auf Klick übernehmen (Hinweis in src/komponenten/Aktualisierung.tsx), damit nichts
+      // mitten in der Eingabe neu lädt; registriert wird im Code, nicht über ein eingefügtes Skript
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Infrarot-Planer',
@@ -36,6 +39,8 @@ export default defineConfig({
         // API-Aufrufe nie aus dem Cache beantworten – Offline-Daten liegen in IndexedDB (src/offline/).
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // Caches alter Versionen aufräumen
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

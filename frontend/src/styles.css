@@ -254,7 +254,8 @@ tr.inaktiv { color: var(--leise); }
 .plan-modul rect { fill: rgba(31, 58, 110, 0.75); stroke: var(--blau); }
 .plan-modul text { fill: #fff; font-weight: 700; }
 .plan-modul.verstoss rect { fill: rgba(180, 35, 24, 0.8); stroke: var(--fehler); }
-.gewaehlt rect:not(.plan-halo), .gewaehlt .plan-punkt-kern { stroke: var(--orange); stroke-width: 3px; }
+/* Auswahl nur an den sichtbaren Formen, nie an Tippflächen oder Ausschnitten */
+.plan-sperr.gewaehlt > rect:not(.plan-halo), .plan-modul.gewaehlt > rect, .plan-punkt.gewaehlt .plan-punkt-kern { stroke: var(--orange); stroke-width: 3px; }
 .auswahl-leiste { align-items: center; background: var(--orange-hell); border-radius: 8px; padding: 0.5rem; margin-top: 0.5rem; }
 .auswahl-leiste select { width: auto; margin: 0; }
 .werkzeuge { margin-top: 0.75rem; }
@@ -308,9 +309,22 @@ body.ohne-bildlauf { overflow: hidden; }
 .plan-oeffnung-ausschnitt { fill: #fff; }
 .plan-oeffnung line, .plan-tuerbogen { stroke: var(--text); stroke-width: 1.5px; vector-effect: non-scaling-stroke; fill: none; }
 .plan-tuerbogen { stroke-dasharray: 5 3; stroke-width: 1px; }
-.plan-oeffnung.gewaehlt line, .plan-oeffnung.gewaehlt .plan-tuerbogen { stroke: var(--orange); stroke-width: 3px; }
+.plan-oeffnung.gewaehlt line, .plan-oeffnung.gewaehlt .plan-tuerbogen { stroke: var(--orange); stroke-width: 2px; }
 .plan-wand-waehlen { cursor: crosshair; }
 .knopf-leise.aktiv { background: var(--orange-hell); border-color: var(--orange); }
 .auswahl-leiste .zahlfeld input { width: 5.5rem; }
 .auswahl-leiste label.inline { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; }
 .modulzeile .meldung { flex-basis: 100%; margin: 0.25rem 0 0; }
+
+/* Alle Striche im Plan in Bildschirmpixeln (nicht in Planeinheiten = Meter): verhindert riesige Ränder bei jeder
+   Bildschirmgröße; Tippflächen sind unsichtbar und haben nie einen Rand. */
+.plan * { vector-effect: non-scaling-stroke; }
+.plan .plan-tippflaeche { fill: transparent; stroke: none !important; }
+.plan .plan-oeffnung-ausschnitt { stroke: none; }
+.plan-oeffnung.gewaehlt .plan-oeffnung-ausschnitt { fill: var(--orange-hell); }
+
+/* Hinweis auf neue App-Version */
+.aktualisierung {
+  position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.75rem;
+  padding: 0.5rem 1rem; background: var(--orange-hell); border-bottom: 2px solid var(--orange); font-weight: 600;
+}

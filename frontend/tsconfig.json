@@ -9,7 +9,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": ["node", "vite/client", "vite-plugin-pwa/client"],
+    "types": ["node", "vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/react"],
     "paths": { "@infrarot/rechenkern": ["../rechenkern/src/index.ts"] }
   },
   "include": ["src", "test", "vite.config.ts", "vitest.config.ts"]

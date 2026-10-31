@@ -60,7 +60,8 @@ const WANDANFANG: Record<Wand, string> = { oben: 'von links', unten: 'von links'
 type Ecke = 'nw' | 'ne' | 'sw' | 'se';
 type Art = 'sperr' | 'modul' | 'oeffnung';
 type Auswahl = { art: Art; id: string } | null;
-type Zug = { art: Art; id: string; modus: 'schieben' | Ecke; dx: number; dy: number; bewegt: boolean };
+/** schieben; Sperrfläche: Ecke ziehen; Tür/Fenster: Anfang oder Ende ziehen (Breite ändern) */
+type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'anfang' | 'ende'; dx: number; dy: number; bewegt: boolean };
 
 export function neueId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -228,7 +229,15 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         alt.map((o) => {
           if (o.id !== z.id) return o;
           const s = o.wand === 'oben' || o.wand === 'unten' ? p.x : p.y;
-          return { ...o, position: rasten(begrenzen(s - z.dx, 0, wandLaenge(o.wand, L, B) - o.breite)) };
+          const laenge = wandLaenge(o.wand, L, B);
+          if (z.modus === 'anfang') {
+            // Ende bleibt, Anfang wandert: Lage und Breite ändern sich
+            const ende = o.position + o.breite;
+            const anfang = rasten(begrenzen(s, 0, ende - MIN_GROESSE));
+            return { ...o, position: anfang, breite: ende - anfang };
+          }
+          if (z.modus === 'ende') return { ...o, breite: rasten(begrenzen(s - o.position, MIN_GROESSE, laenge - o.position)) };
+          return { ...o, position: rasten(begrenzen(s - z.dx, 0, laenge - o.breite)) };
         }),
       );
       return;
@@ -244,7 +253,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           );
           return { ...s, ...schraegeStreifen(w, tiefe, L, B) };
         }
-        if (z.modus !== 'schieben') return { ...s, ...eckeZiehen(s, z.modus, p, L, B) };
+        if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') return { ...s, ...eckeZiehen(s, z.modus, p, L, B) };
         return { ...s, x: rasten(begrenzen(p.x - z.dx, 0, L - s.b)), y: rasten(begrenzen(p.y - z.dy, 0, B - s.t)) };
       }),
     );
@@ -400,9 +409,11 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
               L={L}
               B={B}
               wandStaerke={wandStaerke}
-              gewaehlt={gewaehlteOeffnung?.id === o.id}
+              gewaehlt={gewaehlteOeffnung?.id === o.id && !gesperrt}
               treffer={griffTreffer}
-              onAnfassen={(e) => anfassen(e, 'oeffnung', o.id)}
+              griffR={griffR}
+              schrift={schrift}
+              onAnfassen={(e, modus = 'schieben') => anfassen(e, 'oeffnung', o.id, modus)}
             />
           ))}
 
@@ -664,6 +675,8 @@ function Oeffnung({
   wandStaerke,
   gewaehlt,
   treffer,
+  griffR,
+  schrift,
   onAnfassen,
 }: {
   o: TuerFenster;
@@ -671,8 +684,11 @@ function Oeffnung({
   B: number;
   wandStaerke: number;
   gewaehlt: boolean;
+  /** Radius der unsichtbaren Tippfläche (in Planeinheiten aus Bildschirmpixeln umgerechnet) */
   treffer: number;
-  onAnfassen: (e: ReactPointerEvent) => void;
+  griffR: number;
+  schrift: number;
+  onAnfassen: (e: ReactPointerEvent, modus?: 'schieben' | 'anfang' | 'ende') => void;
 }) {
   const [a, e] = oeffnungStrecke(o, L, B);
   const waagerecht = o.wand === 'oben' || o.wand === 'unten';
@@ -687,6 +703,32 @@ function Oeffnung({
   const tipp = waagerecht
     ? { x: lx, y: ausschnitt.y - treffer / 2, width: ausschnitt.width, height: wandStaerke + treffer }
     : { x: ausschnitt.x - treffer / 2, y: ly, width: wandStaerke + treffer, height: ausschnitt.height };
+  // Auswahl: kleine Anfasser an beiden Enden (Trefferfläche 44 px), Breite als Maßzahl
+  const mitte = { x: (a.x + e.x) / 2, y: (a.y + e.y) / 2 };
+  const n = { x: waagerecht ? 0 : -aussen, y: waagerecht ? -aussen : 0 };
+  const auswahl = gewaehlt && (
+    <>
+      {([
+        ['anfang', a],
+        ['ende', e],
+      ] as const).map(([modus, p]) => (
+        <g key={modus} className="plan-griff" onPointerDown={(ev) => onAnfassen(ev, modus)}>
+          <circle cx={p.x} cy={p.y} r={treffer} className="plan-tippflaeche" />
+          <circle cx={p.x} cy={p.y} r={griffR * 0.8} className="plan-griff-punkt" />
+        </g>
+      ))}
+      <text
+        x={mitte.x + n.x * (wandStaerke + schrift * 1.2)}
+        y={mitte.y + n.y * (wandStaerke + schrift * 1.2)}
+        fontSize={schrift}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        className="plan-mass-live"
+      >
+        {zahl(o.breite)} m
+      </text>
+    </>
+  );
   if (o.art === 'fenster') {
     const d = wandStaerke / 3;
     return (
@@ -704,6 +746,7 @@ function Oeffnung({
           </>
         )}
         <rect {...tipp} className="plan-tippflaeche" />
+        {auswahl}
       </g>
     );
   }
@@ -715,6 +758,7 @@ function Oeffnung({
       <line x1={g.band.x} y1={g.band.y} x2={g.blatt.x} y2={g.blatt.y} className="plan-tuerblatt" />
       <path d={`M${g.blatt.x},${g.blatt.y} A${r},${r} 0 0 ${g.sweep} ${g.zu.x},${g.zu.y}`} className="plan-tuerbogen" />
       <rect {...tipp} className="plan-tippflaeche" />
+      {auswahl}
     </g>
   );
 }
