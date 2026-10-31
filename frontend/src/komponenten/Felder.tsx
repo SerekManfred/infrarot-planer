@@ -195,3 +195,47 @@ export function GebaeudestandardHilfe() {
     />
   );
 }
+
+/** Passwortfeld mit Augen-Symbol zum Ein-/Ausblenden (Tippfläche 44 px) */
+export function PasswortFeld({
+  wert,
+  onAendern,
+  autoComplete,
+  minLength,
+}: {
+  wert: string;
+  onAendern: (wert: string) => void;
+  autoComplete: 'current-password' | 'new-password';
+  minLength?: number;
+}) {
+  const [sichtbar, setSichtbar] = useState(false);
+  return (
+    <span className="passwortfeld">
+      <input
+        type={sichtbar ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        value={wert}
+        onChange={(e) => onAendern(e.target.value)}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        required
+      />
+      <button
+        type="button"
+        className="passwort-auge"
+        aria-label={sichtbar ? 'Passwort verbergen' : 'Passwort anzeigen'}
+        aria-pressed={sichtbar}
+        title={sichtbar ? 'Passwort verbergen' : 'Passwort anzeigen'}
+        onClick={() => setSichtbar(!sichtbar)}
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+          <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+          {sichtbar && <line x1="3" y1="21" x2="21" y2="3" stroke="currentColor" strokeWidth="1.8" />}
+        </svg>
+      </button>
+    </span>
+  );
+}

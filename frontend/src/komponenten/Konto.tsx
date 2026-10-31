@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { api, type Benutzer } from '../api';
 import { rollenText } from '../texte';
-import { Meldung } from './Felder';
+import { Meldung, PasswortFeld } from './Felder';
 
 export function Konto({ benutzer }: { benutzer: Benutzer }) {
   const [alt, setAlt] = useState('');
@@ -37,15 +37,15 @@ export function Konto({ benutzer }: { benutzer: Benutzer }) {
         <h2>Passwort ändern</h2>
         <label>
           Bisheriges Passwort
-          <input type="password" autoComplete="current-password" value={alt} onChange={(e) => setAlt(e.target.value)} required />
+          <PasswortFeld wert={alt} onAendern={setAlt} autoComplete="current-password" />
         </label>
         <label>
           Neues Passwort (mind. 12 Zeichen)
-          <input type="password" autoComplete="new-password" minLength={12} value={neu} onChange={(e) => setNeu(e.target.value)} required />
+          <PasswortFeld wert={neu} onAendern={setNeu} autoComplete="new-password" minLength={12} />
         </label>
         <label>
           Neues Passwort wiederholen
-          <input type="password" autoComplete="new-password" minLength={12} value={wiederholung} onChange={(e) => setWiederholung(e.target.value)} required />
+          <PasswortFeld wert={wiederholung} onAendern={setWiederholung} autoComplete="new-password" minLength={12} />
         </label>
         {fehler && <Meldung>{fehler}</Meldung>}
         {erfolg && <Meldung art="hinweis">Passwort geändert. Andere angemeldete Geräte wurden abgemeldet.</Meldung>}

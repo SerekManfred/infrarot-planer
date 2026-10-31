@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api, type Benutzer } from '../api';
+import { PasswortFeld } from './Felder';
 
 export function Anmeldung({ onAngemeldet }: { onAngemeldet: (b: Benutzer) => void }) {
   const [email, setEmail] = useState('');
@@ -29,13 +30,7 @@ export function Anmeldung({ onAngemeldet }: { onAngemeldet: (b: Benutzer) => voi
       </label>
       <label>
         Passwort
-        <input
-          type="password"
-          autoComplete="current-password"
-          value={passwort}
-          onChange={(e) => setPasswort(e.target.value)}
-          required
-        />
+        <PasswortFeld wert={passwort} onAendern={setPasswort} autoComplete="current-password" />
       </label>
       {fehler && <p className="meldung fehler">{fehler}</p>}
       <button className="knopf" type="submit" disabled={laeuft}>

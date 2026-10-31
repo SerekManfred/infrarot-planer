@@ -1,8 +1,8 @@
 // Benutzerverwaltung (nur Admin). Rollen sind kombinierbar, z. B. Admin + Fachprüfer.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type Benutzer, type Rolle } from '../api';
-import { ROLLEN } from '../texte';
-import { Meldung, Textfeld } from './Felder';
+import { ROLLEN, zeitpunkt } from '../texte';
+import { Meldung, PasswortFeld, Textfeld } from './Felder';
 
 export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
   const [liste, setListe] = useState<Benutzer[] | null>(null);
@@ -83,6 +83,7 @@ export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
           </table>
         </div>
       )}
+      <Anmeldesperren />
       <NeuerBenutzer onAngelegt={(name) => aendern(async () => undefined, `${name} angelegt.`)} />
     </section>
   );
@@ -122,7 +123,7 @@ function NeuerBenutzer({ onAngelegt }: { onAngelegt: (name: string) => void }) {
       </label>
       <label>
         Erstes Passwort (mind. 12 Zeichen)
-        <input type="password" autoComplete="new-password" minLength={12} value={passwort} onChange={(e) => setPasswort(e.target.value)} required />
+        <PasswortFeld wert={passwort} onAendern={setPasswort} autoComplete="new-password" minLength={12} />
       </label>
       <div>
         <span className="feldname">Rollen</span>
@@ -157,5 +158,79 @@ function RollenWahl({ rollen, fest = [], onWahl }: { rollen: Rolle[]; fest?: Rol
         </button>
       ))}
     </span>
+  );
+}
+
+interface Anmeldesperre {
+  ip: string;
+  fehlversuche: number;
+  gesperrt: boolean;
+  gesperrt_bis: string | null;
+  letzter_versuch: string | null;
+  konten: string[];
+}
+
+/** Geräte/IP-Adressen mit vielen Fehlversuchen; gesperrte lassen sich sofort freigeben (protokolliert) */
+function Anmeldesperren() {
+  const [liste, setListe] = useState<Anmeldesperre[] | null>(null);
+  const [fehler, setFehler] = useState('');
+  const laden = useCallback(() => {
+    api.get<Anmeldesperre[]>('/benutzer/anmeldesperren').then(setListe).catch((e) => setFehler((e as Error).message));
+  }, []);
+  useEffect(laden, [laden]);
+
+  async function loesen(ip: string) {
+    setFehler('');
+    try {
+      await api.post('/benutzer/anmeldesperren/loesen', { ip });
+    } catch (e) {
+      setFehler((e as Error).message);
+    }
+    laden();
+  }
+
+  return (
+    <div className="karte">
+      <h2>Anmeldesperren</h2>
+      <p className="leise">
+        Gezählt wird je Gerät bzw. IP-Adresse, nicht je Konto: Ab 5 Fehlversuchen erscheint „Noch x Versuche“, nach 10 folgen 2 Minuten Pause.
+        Hier stehen Geräte ab 5 Fehlversuchen.
+      </p>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      {liste === null ? (
+        <p>Wird geladen …</p>
+      ) : liste.length === 0 ? (
+        <p className="leise">Keine auffälligen Anmeldeversuche.</p>
+      ) : (
+        <div className="tabelle-rahmen">
+          <table className="tabelle">
+            <thead>
+              <tr>
+                <th>Gerät / IP-Adresse</th>
+                <th>Versuchte Konten</th>
+                <th className="zahl">Fehlversuche</th>
+                <th>Status</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map((s) => (
+                <tr key={s.ip} className={s.gesperrt ? 'verstoss' : ''}>
+                  <td>{s.ip}</td>
+                  <td>{s.konten.join(', ')}</td>
+                  <td className="zahl">{s.fehlversuche}</td>
+                  <td>{s.gesperrt ? `gesperrt bis ${zeitpunkt(s.gesperrt_bis)}` : `zuletzt ${zeitpunkt(s.letzter_versuch)}`}</td>
+                  <td>
+                    <button className="knopf-zweit" onClick={() => void loesen(s.ip)}>
+                      {s.gesperrt ? 'Sperre lösen' : 'Zähler zurücksetzen'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
