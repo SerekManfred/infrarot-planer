@@ -325,8 +325,10 @@ export function ausfuehren(
   return null;
 }
 
+/** Vorläufige Anzeige, bis der Server die Projektnummer vergibt (Festlegung 31.10.2026) */
+export const NUMMER_FOLGT = 'Nr. folgt';
+
 export interface ProjektNeuDaten {
-  nummer: string;
   bezeichnung: string;
   kunde_name?: string;
   notizen?: string;
@@ -350,12 +352,15 @@ export function neuesProjekt(
   const objektId = neueId();
   const paket: ProjektPaket = {
     id,
-    nummer: daten.nummer,
+    nummer: NUMMER_FOLGT,
     bezeichnung: daten.bezeichnung,
     kunde_name: daten.kunde_name ?? '',
     notizen: daten.notizen ?? '',
     status: 'entwurf',
     ersteller_id: benutzer.id,
+    ersteller_name: benutzer.name,
+    zugewiesen_an_id: null,
+    zugewiesen_an_name: null,
     geprueft_von_id: null,
     geprueft_am: null,
     freigegeben_von_id: null,
@@ -395,17 +400,17 @@ export function neuesProjekt(
   return {
     lp: { id, paket, sperre: null, geraet },
     eintraege: [
-      { projekt_id: id, methode: 'POST', pfad: '/projekte', temp_id: id, temp_objekt_id: objektId, beschreibung: `Projekt „${daten.nummer}“ angelegt` },
+      { projekt_id: id, methode: 'POST', pfad: '/projekte', temp_id: id, temp_objekt_id: objektId, beschreibung: `Projekt „${daten.bezeichnung}“ angelegt` },
       { projekt_id: id, methode: 'POST', pfad: `/projekte/${id}/auschecken`, daten: { geraet }, beschreibung: 'Projekt für dieses Gerät ausgecheckt' },
     ],
   };
 }
 
-/** Anlagedaten eines offline angelegten Projekts – aus dem aktuellen lokalen Stand, damit spätere Korrekturen (z. B. Nummer) mitgehen */
+/** Anlagedaten eines offline angelegten Projekts – aus dem aktuellen lokalen Stand, damit spätere Korrekturen mitgehen.
+ *  Die Projektnummer vergibt der Server. */
 export function projektAnlageDaten(paket: ProjektPaket): ProjektNeuDaten {
   const o = paket.objekte[0];
   return {
-    nummer: paket.nummer,
     bezeichnung: paket.bezeichnung,
     kunde_name: paket.kunde_name,
     notizen: paket.notizen,

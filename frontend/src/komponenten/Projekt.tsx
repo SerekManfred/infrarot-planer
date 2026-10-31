@@ -148,13 +148,15 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
       <div className="karte kopfdaten">
         <label>
           Projektnummer
+          {/* wird automatisch vergeben; nur Admins dürfen sie im Ausnahmefall ändern */}
           <Textfeld
             wert={projekt.nummer}
             pflicht
-            gesperrt={gesperrt}
+            gesperrt={gesperrt || !hatRolle(benutzer, 'admin')}
             onSpeichern={(v) => aendern(() => api.patch(`/projekte/${projektId}`, { nummer: v }))}
           />
         </label>
+        <Zustaendig projekt={projekt} benutzer={benutzer} onZuweisen={(id) => aendern(() => api.put(`/projekte/${projektId}/zuweisung`, { benutzer_id: id }))} />
         <label>
           Kunde
           <Textfeld
@@ -449,6 +451,55 @@ function VorgabenStand({
       ) : (
         <small className="leise">Entscheidung nicht möglich, solange das Projekt gesperrt oder auf einem Gerät ausgecheckt ist.</small>
       )}
+    </div>
+  );
+}
+
+/**
+ * Zuständiger Außendienst: angelegt von … / zugewiesen an … (Festlegung 31.10.2026). Nur Admins weisen zu,
+ * z. B. als Urlaubsvertretung; Benutzer mit nur der Rolle Außendienst sehen nur eigene und zugewiesene Projekte.
+ */
+function Zustaendig({
+  projekt,
+  benutzer,
+  onZuweisen,
+}: {
+  projekt: ProjektDetail;
+  benutzer: Benutzer;
+  onZuweisen: (benutzerId: number | null) => Promise<void>;
+}) {
+  const admin = hatRolle(benutzer, 'admin');
+  const [kandidaten, setKandidaten] = useState<Benutzer[]>([]);
+  useEffect(() => {
+    if (!admin) return;
+    api
+      .get<Benutzer[]>('/benutzer')
+      .then((l) => setKandidaten(l.filter((b) => b.aktiv && b.rollen.includes('aussendienst'))))
+      .catch(() => setKandidaten([]));
+  }, [admin]);
+  return (
+    <div>
+      <span className="feldname">Zuständig (Außendienst)</span>
+      {admin ? (
+        <select
+          aria-label="Projekt zuweisen"
+          value={projekt.zugewiesen_an_id ?? ''}
+          onChange={(e) => void onZuweisen(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">– keine Zuweisung (nur {projekt.ersteller_name ?? 'Ersteller'}) –</option>
+          {kandidaten.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>{projekt.zugewiesen_an_name ?? projekt.ersteller_name ?? '–'}</span>
+      )}
+      <small className="leise">
+        angelegt von {projekt.ersteller_name ?? '–'}
+        {projekt.zugewiesen_an_name && `, zugewiesen an ${projekt.zugewiesen_an_name}`}
+      </small>
     </div>
   );
 }

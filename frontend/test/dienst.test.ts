@@ -34,7 +34,7 @@ class Server {
     if (methode === 'GET' && pfad === '/offline/vorgaben') return vorgaben() as T;
     if (methode === 'GET' && pfad.startsWith('/offline/projekte/')) return paket() as T;
     if (pfad.endsWith('/auschecken')) return { sperre: `token-${pfad}` } as T;
-    if (methode === 'POST' && pfad === '/projekte') return { id: this.naechsteId++, objekte: [{ id: this.naechsteId++ }] } as T;
+    if (methode === 'POST' && pfad === '/projekte') return { id: this.naechsteId++, nummer: '2026-0007', objekte: [{ id: this.naechsteId++ }] } as T;
     if (methode === 'POST') return { id: this.naechsteId++ } as T;
     return {} as T;
   };
@@ -167,13 +167,13 @@ describe('Ohne Netz angelegtes Projekt', () => {
     await speicher.wertSchreiben('benutzer', { id: 1, name: 'Test' });
     server.erreichbar = false;
     const p = await dienst.anfrage<{ id: number; objekte: { id: number }[] }>('POST', '/projekte', {
-      nummer: 'N-1', bezeichnung: 'Neu', gebaeudestandard: 'neubau',
+      bezeichnung: 'Neu', gebaeudestandard: 'neubau',
     });
     expect(p.id).toBeLessThan(0);
     const g = await dienst.anfrage<{ id: number }>('POST', `/objekte/${p.objekte[0].id}/geschosse`, { bezeichnung: 'EG' });
-    // Nummer korrigiert, bevor übertragen wurde: geht mit der Anlage mit
-    await dienst.anfrage('PATCH', `/projekte/${p.id}`, { nummer: 'N-2' });
-    expect((await dienst.anfrage<Projekt[]>('GET', '/projekte')).map((x) => x.nummer)).toEqual(['N-2']);
+    // Bezeichnung korrigiert, bevor übertragen wurde: geht mit der Anlage mit; die Nummer vergibt der Server
+    await dienst.anfrage('PATCH', `/projekte/${p.id}`, { bezeichnung: 'Neu 2' });
+    expect((await dienst.anfrage<Projekt[]>('GET', '/projekte')).map((x) => x.nummer)).toEqual(['Nr. folgt']);
 
     server.erreichbar = true;
     await dienst.synchronisieren();
@@ -183,7 +183,11 @@ describe('Ohne Netz angelegtes Projekt', () => {
       'POST /objekte/101/geschosse',
       'PATCH /projekte/100',
     ]);
-    expect(server.aufrufe.find((a) => a.pfad === '/projekte')!.daten).toMatchObject({ nummer: 'N-2', gebaeudestandard: 'neubau' });
+    const anlage = server.aufrufe.find((a) => a.pfad === '/projekte')!.daten as Record<string, unknown>;
+    expect(anlage).toMatchObject({ bezeichnung: 'Neu 2', gebaeudestandard: 'neubau' });
+    expect(anlage).not.toHaveProperty('nummer');
+    // vom Server vergebene Nummer erscheint lokal
+    expect((await dienst.anfrage<Projekt[]>('GET', '/projekte')).map((x) => x.nummer)).toEqual(['2026-0007']);
     expect(server.aufrufe.find((a) => a.pfad === '/objekte/101/geschosse')!.kopf['X-Sperre']).toBe('token-/projekte/100/auschecken');
     expect(g.id).toBeLessThan(0);
     // Projektliste: Server kennt das Projekt jetzt als 100 – es erscheint nur einmal (lokal)

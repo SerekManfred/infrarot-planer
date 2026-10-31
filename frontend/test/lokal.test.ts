@@ -204,7 +204,7 @@ describe('ausfuehren', () => {
 describe('neuesProjekt und pfadAufloesen', () => {
   it('offline angelegt: Projekt und Gebäude mit vorläufigen IDs, Anlegen und Auschecken in der Warteschlange', () => {
     const { lp: neu, eintraege } = neuesProjekt(
-      { nummer: 'N-1', bezeichnung: 'Neu', gebaeudestandard: 'neubau' },
+      { bezeichnung: 'Neu', gebaeudestandard: 'neubau' },
       zaehler(),
       { id: 1, name: 'Test' },
       'Tablet 1',

@@ -40,6 +40,10 @@ export interface Projekt {
   notizen: string;
   status: Projektstatus;
   ersteller_id: number | null;
+  ersteller_name: string | null;
+  /** zuständiger Außendienst (Zuweisung durch Admin, z. B. Urlaubsvertretung) */
+  zugewiesen_an_id: number | null;
+  zugewiesen_an_name: string | null;
   geprueft_von_id: number | null;
   geprueft_am: string | null;
   freigegeben_von_id: number | null;

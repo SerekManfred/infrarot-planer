@@ -285,7 +285,7 @@ export class OfflineDienst {
     return this.exklusiv(async () => {
       const benutzer = await this.speicher.wertLesen<Benutzer>(W.benutzer);
       const geraet = await this.speicher.wertLesen<string>(W.geraet);
-      if (!benutzer) throw new ApiFehler(0, 'Server nicht erreichbar');
+      if (!benutzer) throw new ApiFehler(0, 'Keine Verbindung zum Server. Bitte Internetverbindung prüfen.');
       const ids: number[] = [await this.neueId(), await this.neueId()];
       const { lp, eintraege } = neuesProjekt(daten, () => ids.shift()!, benutzer, geraet ?? 'dieses Gerät', this.jetzt(), this.vorgaben);
       this.projekte = [...this.projekte, lp];
@@ -374,6 +374,11 @@ export class OfflineDienst {
         if (objekte?.[0]) this.zuordnung[String(e.temp_objekt_id)] = objekte[0].id;
       }
       await this.speicher.wertSchreiben(W.zuordnung, this.zuordnung);
+    }
+    // Offline angelegtes Projekt: die Projektnummer vergibt der Server
+    if (lp && istAnlage && typeof antwort.nummer === 'string') {
+      lp.paket.nummer = antwort.nummer;
+      await this.speicher.projektSchreiben(lp);
     }
     if (lp && /\/auschecken$/.test(e.pfad) && typeof antwort.sperre === 'string') {
       lp.sperre = antwort.sperre;

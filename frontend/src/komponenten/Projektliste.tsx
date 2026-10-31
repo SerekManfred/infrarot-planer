@@ -44,6 +44,7 @@ export function Projektliste() {
                 <th>Nr.</th>
                 <th>Bezeichnung</th>
                 <th>Kunde</th>
+                <th>Zuständig</th>
                 <th>Status</th>
                 <th>Geändert</th>
               </tr>
@@ -56,6 +57,7 @@ export function Projektliste() {
                     <a href={`#/projekt/${p.id}`}>{p.bezeichnung}</a>
                   </td>
                   <td>{p.kunde_name}</td>
+                  <td>{p.zugewiesen_an_name ?? p.ersteller_name ?? '–'}</td>
                   <td>
                     <span className={`status ${statusAnzeige(p).klasse}`}>{statusAnzeige(p).text}</span>
                     {lokal.includes(p.id) ? (
@@ -80,7 +82,6 @@ export function Projektliste() {
 }
 
 function NeuesProjekt() {
-  const [nummer, setNummer] = useState('');
   const [bezeichnung, setBezeichnung] = useState('');
   const [kunde, setKunde] = useState('');
   const [ort, setOrt] = useState('');
@@ -93,7 +94,7 @@ function NeuesProjekt() {
     setFehler('');
     try {
       const p = await api.post<ProjektDetail>('/projekte', {
-        nummer, bezeichnung, kunde_name: kunde, ort, gebaeudestandard: standard,
+        bezeichnung, kunde_name: kunde, ort, gebaeudestandard: standard,
       });
       gehe(`/projekt/${p.id}`);
     } catch (err) {
@@ -103,10 +104,7 @@ function NeuesProjekt() {
 
   return (
     <form className="karte formular" onSubmit={absenden}>
-      <label>
-        Projektnummer
-        <input value={nummer} onChange={(e) => setNummer(e.target.value)} required maxLength={50} />
-      </label>
+      <p className="leise ganze-breite">Die Projektnummer wird automatisch vergeben (fortlaufend, z. B. 2026-0004).</p>
       <label>
         Bezeichnung
         <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} required maxLength={300} />

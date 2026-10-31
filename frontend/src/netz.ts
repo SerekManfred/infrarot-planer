@@ -9,15 +9,31 @@ export class ApiFehler extends Error {
   }
 }
 
+/** Verständliche Texte, wenn der Server keinen eigenen liefert (z. B. Proxy- oder Serverfehler) */
+const STANDARDMELDUNG: Record<number, string> = {
+  400: 'Die Anfrage war unvollständig oder ungültig. Bitte Eingaben prüfen.',
+  401: 'Bitte neu anmelden.',
+  403: 'Dafür fehlt die Berechtigung.',
+  404: 'Nicht gefunden – evtl. wurde es inzwischen gelöscht. Bitte Seite neu laden.',
+  409: 'Speichern nicht möglich, weil sich die Daten inzwischen geändert haben. Bitte Seite neu laden.',
+  413: 'Die Datei ist zu groß.',
+  422: 'Bitte Eingaben prüfen – mindestens ein Wert ist ungültig.',
+  423: 'Das Projekt ist gerade auf einem anderen Gerät zur Offline-Bearbeitung ausgecheckt.',
+  429: 'Zu viele Versuche – bitte kurz warten und erneut versuchen.',
+  500: 'Auf dem Server ist ein Fehler aufgetreten. Bitte erneut versuchen; falls es wieder passiert, Admin informieren.',
+  502: 'Der Server ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.',
+  503: 'Der Server ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.',
+  504: 'Der Server antwortet nicht rechtzeitig. Bitte gleich noch einmal versuchen.',
+};
+
 function meldungAus(status: number, detail: unknown): string {
   if (typeof detail === 'string') return detail;
   if (detail && typeof detail === 'object' && 'meldung' in detail) {
     const d = detail as { meldung: unknown; fehler?: unknown };
     return Array.isArray(d.fehler) ? `${d.meldung}: ${d.fehler.join('; ')}` : String(d.meldung);
   }
-  if (Array.isArray(detail)) return 'Eingaben ungültig – bitte Werte prüfen';
-  if (status === 429) return 'Zu viele Versuche – bitte später erneut versuchen';
-  return `Fehler ${status}`;
+  if (Array.isArray(detail)) return 'Bitte Eingaben prüfen – mindestens ein Wert ist ungültig.';
+  return STANDARDMELDUNG[status] ?? `Unerwarteter Fehler (Code ${status}). Bitte erneut versuchen; falls es wieder passiert, Admin informieren.`;
 }
 
 const ZEITLIMIT_MS = 20_000;
@@ -51,7 +67,7 @@ export async function netzAnfrage<T>(methode: string, pfad: string, daten?: unkn
     });
   } catch {
     beobachter(false);
-    throw new ApiFehler(0, 'Server nicht erreichbar');
+    throw new ApiFehler(0, 'Keine Verbindung zum Server. Bitte Internetverbindung prüfen.');
   } finally {
     clearTimeout(frist);
   }
