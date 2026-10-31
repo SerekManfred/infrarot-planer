@@ -33,8 +33,11 @@ docker exec -it infrarot-backend python -m app.cli benutzer-anlegen --email … 
 docker exec infrarot-backend python -m app.cli rollen-setzen --email … --rollen admin,fachpruefer
 
 # Passwort neu setzen (verdeckt, zweimal, mind. 12 Zeichen): meldet alle Sitzungen ab,
-# hebt die Anmeldesperre des Kontos auf und protokolliert beides
+# gibt die Geräte/IP-Adressen mit Fehlversuchen zu dem Konto frei und protokolliert beides
 docker exec -it infrarot-backend python -m app.cli passwort-setzen --email …
+# Anmeldebremse sofort aufheben (alle Geräte mit Fehlversuchen zu einem Konto bzw. eine IP-Adresse)
+docker exec infrarot-backend python -m app.cli sperre-loesen --email …
+docker exec infrarot-backend python -m app.cli sperre-loesen --ip …
 docker exec infrarot-backend python -m app.cli benutzer-deaktivieren --email …
 
 # Importdatei des Auftraggebers (Raumtypen, Platzierungsregeln, Modulkatalog); erst Probelauf, vorher sichern
@@ -94,5 +97,5 @@ Jedes Projekt speichert beim Anlegen eine Kopie der Fachvorgaben (`projekt.vorga
 
 ## Anmeldung
 
-- Bremse: nach 5 Fehlversuchen je Konto oder 20 je IP-Adresse innerhalb von 15 Minuten wird 15 Minuten lang abgewiesen (HTTP 429). Werte über `INFRAROT_ANMELDUNG_*` einstellbar.
+- Bremse je Gerät/IP-Adresse, nicht je Konto (`app/anmeldebremse.py`): ab 5 Fehlversuchen Hinweis „Noch x Versuche“, nach 10 Fehlversuchen 2 Minuten Pause (HTTP 429), danach je weiterem Fehlversuch erneut 2 Minuten. Es zählen Fehlversuche seit der letzten erfolgreichen Anmeldung bzw. Freigabe von dieser IP, höchstens 24 Stunden. Werte über `INFRAROT_ANMELDUNG_MAX_FEHLVERSUCHE`, `…_PAUSE_MINUTEN`, `…_HINWEIS_AB`. Freigabe: Benutzerverwaltung „Anmeldesperren“ oder `sperre-loesen`.
 - Passwortwechsel, Passwort-Neusetzen durch den Admin und Deaktivierung beenden alle anderen Sitzungen des Benutzers.
