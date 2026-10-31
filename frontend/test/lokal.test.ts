@@ -97,6 +97,20 @@ describe('ausfuehren', () => {
     expect(a.raeume[0].werte.pauschale_w_m2.herkunft).toBe('vorgabe');
   });
 
+  it('Tür und Fenster offline: gespeichert, in der Warteschlange, ohne Einfluss auf die Auswertung', () => {
+    const p = lp();
+    const vorher = ausfuehren(p, vorgaben(), 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort;
+    const e = ausfuehren(p, vorgaben(), 'PATCH', '/raeume/5000', {
+      tueren_fenster: [
+        { id: 't1', art: 'tuer', wand: 'unten', position: 0.5, breite: 0.9, aufschlag: 'innen', band: 'links' },
+        { id: 'f1', art: 'fenster', wand: 'oben', position: 1.5, breite: 1.2 },
+      ],
+    }, zaehler())!;
+    expect(e.eintrag).toMatchObject({ methode: 'PATCH', pfad: '/raeume/5000' });
+    expect(p.paket.objekte[0].geschosse[0].raeume[0].tueren_fenster).toHaveLength(2);
+    expect(ausfuehren(p, vorgaben(), 'GET', '/objekte/50/auswertung', undefined, zaehler())!.antwort).toEqual(vorher);
+  });
+
   it('Deckenplan offline: Sperrflächen und Module speichern, Regelprüfung mit den eingefrorenen Regeln', () => {
     const p = lp();
     // Regeln im Projektstand (TESTWERTE)

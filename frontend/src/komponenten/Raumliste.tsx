@@ -44,9 +44,8 @@ export function Raumliste({ objekt, stand }: { objekt: Objekt; stand: number }) 
           <tbody>
             {auswertung.raeume.map((r) => {
               const m = r.modulplanung;
-              const warnungen = m.hinweise.filter((h) => /unterschreitet|übersteigt/.test(h));
               return (
-                <tr key={r.raum_id} className={m.module_mit_verstoss > 0 ? 'verstoss' : ''}>
+                <tr key={r.raum_id} className={m.module_mit_verstoss > 0 || m.leistung === 'unter' ? 'verstoss' : ''}>
                   <td>{r.geschoss}</td>
                   <td>{r.bezeichnung}</td>
                   <td>{r.raumtyp ?? '–'}</td>
@@ -61,9 +60,11 @@ export function Raumliste({ objekt, stand }: { objekt: Objekt; stand: number }) 
                       ? 'noch nicht geplant'
                       : m.module_mit_verstoss > 0
                         ? `${m.module_mit_verstoss} Modul${m.module_mit_verstoss === 1 ? '' : 'e'} mit Regelverstoß`
-                        : warnungen.length > 0
-                          ? warnungen.join('; ')
-                          : 'in Ordnung'}
+                        : m.leistung === 'unter'
+                          ? `Unterdimensioniert: ${watt(m.installiert_w)} < ${watt(m.benoetigt_w)}`
+                          : m.leistung === 'ueber'
+                            ? `Überdimensioniert (${m.leistung_hinweis?.replace(/^.* um /, 'um ')})`
+                            : 'in Ordnung'}
                   </td>
                 </tr>
               );

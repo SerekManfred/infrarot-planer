@@ -1,9 +1,9 @@
 // Zugriff auf die Backend-API. Die Sitzung liegt im HttpOnly-Cookie; das Frontend sieht kein Token.
 // Typen der API-Daten; Schlüssel wie im Backend (snake_case).
-import type { PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche } from '@infrarot/rechenkern';
+import type { PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche, TuerFenster } from '@infrarot/rechenkern';
 import { anfrage } from './offline/daten';
 
-export type { PlatziertesModul, Sperrflaeche };
+export type { PlatziertesModul, Sperrflaeche, TuerFenster };
 
 export { ApiFehler } from './netz';
 
@@ -104,6 +104,8 @@ export interface Raum {
   /** Draufsicht der Decke (m ab linker oberer Raumecke) */
   sperrflaechen: Sperrflaeche[];
   module: PlatziertesModul[];
+  /** Türen und Fenster nur zur Orientierung (keine Sperrflächen) */
+  tueren_fenster: TuerFenster[];
 }
 
 export interface Flaeche {

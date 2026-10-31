@@ -73,7 +73,7 @@ const NEU: Record<Exclude<Art, 'projekte'>, Record<string, unknown>> = {
   raeume: {
     raumtyp_id: null, laenge_m: null, breite_m: null, flaeche_m2: null, hoehe_m: null, volumen_m3: null,
     heizlastquelle: 'A', hottgenroth_w: null, pauschale_w_m2: null, theta_int: null, luftwechsel: null,
-    sperrflaechen: [], module: [],
+    sperrflaechen: [], module: [], tueren_fenster: [],
   },
   flaechen: {
     bezeichnung: '', bauteil_id: null, u_wert: null, orientierung: '', angrenzung: 'aussen',

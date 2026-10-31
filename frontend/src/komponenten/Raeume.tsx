@@ -1,7 +1,7 @@
 // Schnellerfassung vor Ort: Geschoss wählen, Räume als Rechteck (Länge × Breite, Höhe, Raumtyp) erfassen.
 // Fläche und Heizlast erscheinen sofort; Bauteile nur bei Bedarf für die Kontrollrechnung (Gegenprobe C).
 // Der Außendienst sieht eine vereinfachte Karte (Raumtyp, Maße, W/m² nur zur Ansicht, Heizlast); Fachprüfer und Admins alles.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   api,
   fachansicht,
@@ -29,7 +29,7 @@ import {
   zahl,
 } from '../texte';
 import { Bauteile } from './Bauteile';
-import { Deckenplan } from './Deckenplan';
+import { Deckenplan, LeistungWarnung, PlanVorschau } from './Deckenplan';
 import { Hilfe, Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
@@ -289,10 +289,18 @@ function RaumKarte({
       {ergebnis && (fach ? <Ergebnis e={ergebnis} /> : <ErgebnisEinfach e={ergebnis} />)}
       {ergebnis && <Modulzeile e={ergebnis} />}
 
-      <button className="aufklapper" onClick={() => setPlan(!plan)} aria-expanded={plan}>
-        {plan ? '▾' : '▸'} Deckenplan: Sperrflächen und Module
+      <button className="deckenplan-knopf" onClick={() => setPlan(true)}>
+        <PlanVorschau raum={raum} />
+        <span>
+          <strong>Deckenplan öffnen</strong>
+          <small>Sperrflächen, Tür und Fenster, Module</small>
+        </span>
       </button>
-      {plan && <Deckenplan raum={raum} ergebnis={ergebnis} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} />}
+      {plan && (
+        <Vollbild titel={`Deckenplan · ${raum.bezeichnung}`} onSchliessen={() => setPlan(false)}>
+          <Deckenplan raum={raum} ergebnis={ergebnis} vorgaben={vorgaben} gesperrt={gesperrt} aendern={aendern} />
+        </Vollbild>
+      )}
 
       {fach && (
         <button className="aufklapper" onClick={() => setDetails(!details)} aria-expanded={details}>
@@ -435,6 +443,31 @@ function Modulzeile({ e }: { e: AuswertungRaum }) {
         <Hilfe begriff="Thermostat" text={HILFE.thermostat} />
       </span>
       {m.module_mit_verstoss > 0 && <span className="verstoss-text">{m.module_mit_verstoss} Modul(e) mit Regelverstoß</span>}
+      <LeistungWarnung planung={m} />
+    </div>
+  );
+}
+
+/** Deckenplan bildschirmfüllend (Tablet): oben Raumname und „Schließen“, Esc schließt ebenfalls */
+function Vollbild({ titel, onSchliessen, children }: { titel: string; onSchliessen: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const taste = (e: KeyboardEvent) => e.key === 'Escape' && onSchliessen();
+    document.addEventListener('keydown', taste);
+    document.body.classList.add('ohne-bildlauf');
+    return () => {
+      document.removeEventListener('keydown', taste);
+      document.body.classList.remove('ohne-bildlauf');
+    };
+  }, [onSchliessen]);
+  return (
+    <div className="vollbild" role="dialog" aria-modal="true" aria-label={titel}>
+      <div className="vollbild-kopf">
+        <strong>{titel}</strong>
+        <button className="knopf" onClick={onSchliessen}>
+          Schließen
+        </button>
+      </div>
+      <div className="vollbild-inhalt">{children}</div>
     </div>
   );
 }

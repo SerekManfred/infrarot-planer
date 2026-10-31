@@ -107,6 +107,8 @@ export const HILFE = {
     'Die App wählt möglichst wenige Module, die zusammen die benötigte Leistung bringen und mit allen Mindestabständen an die Decke passen. Danach lassen sie sich von Hand verschieben, drehen oder tauschen.',
   benoetigteLeistung: 'Heizlast des Raums plus Leistungsreserve. So viel Leistung sollen die Module zusammen mindestens haben.',
   installierteLeistung: 'Summe der Leistung aller Module im Raum.',
+  tuerFenster:
+    'Nur zur Orientierung im Plan: Tür (mit Aufschlag) und Fenster liegen in der Wand. Sie sind keine Sperrflächen und beeinflussen die Platzierung der Module nicht. Antippen, dann auf die Wand tippen.',
   thermostat: 'Jeder Raum mit Modulen bekommt ein eigenes Thermostat zur Regelung.',
   raumliste: 'Übersicht aller Räume mit Heizlast, Modulen, installierter Leistung und Thermostaten. Rot: Regelverstöße im Deckenplan.',
   richtwertAltbau: 'Orientierungswert des Fachprüfers für Altbau. Er wird nicht automatisch verwendet; die Pauschale je Raum legt der Fachprüfer fest.',

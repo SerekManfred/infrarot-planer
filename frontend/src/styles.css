@@ -240,7 +240,6 @@ tr.inaktiv { color: var(--leise); }
 .deckenplan { margin-top: 0.5rem; }
 .plan-rahmen { background: var(--grau); border-radius: 8px; padding: 0.5rem; }
 .plan { display: block; width: 100%; max-height: 65vh; touch-action: none; user-select: none; -webkit-user-select: none; }
-.plan-raum { fill: #fff; stroke: var(--text); vector-effect: non-scaling-stroke; }
 .plan-wandabstand { fill: none; stroke: var(--leise); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .plan text { fill: var(--text); pointer-events: none; }
 .plan-sperr rect:not(.plan-halo), .plan-modul rect { stroke-width: 1.5px; vector-effect: non-scaling-stroke; cursor: grab; }
@@ -256,7 +255,6 @@ tr.inaktiv { color: var(--leise); }
 .plan-modul text { fill: #fff; font-weight: 700; }
 .plan-modul.verstoss rect { fill: rgba(180, 35, 24, 0.8); stroke: var(--fehler); }
 .gewaehlt rect:not(.plan-halo), .gewaehlt .plan-punkt-kern { stroke: var(--orange); stroke-width: 3px; }
-.plan-griff { fill: var(--orange); stroke: #fff; stroke-width: 2px; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
 .auswahl-leiste { align-items: center; background: var(--orange-hell); border-radius: 8px; padding: 0.5rem; margin-top: 0.5rem; }
 .auswahl-leiste select { width: auto; margin: 0; }
 .werkzeuge { margin-top: 0.75rem; }
@@ -270,3 +268,49 @@ tr.inaktiv { color: var(--leise); }
 .tabelle tr.verstoss td { background: var(--fehler-hell); }
 .ankreuzen { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: 0; cursor: pointer; }
 .ankreuzen input { width: 22px; height: 22px; min-height: 0; margin: 0; }
+
+/* ── Deckenplan: Zugang, Vollbild, Bemaßung, Tür/Fenster (31.10.2026) ── */
+.deckenplan-knopf {
+  display: flex; align-items: center; gap: 1rem; width: 100%; min-height: 72px; margin-top: 0.75rem; padding: 0.5rem 0.75rem;
+  border: 2px solid var(--blau); border-radius: 10px; background: var(--blau-hell); color: var(--blau); text-align: left;
+  font-size: 1.05rem; cursor: pointer;
+}
+.deckenplan-knopf span { display: flex; flex-direction: column; }
+.deckenplan-knopf small { color: var(--leise); font-size: 0.85rem; }
+.plan-vorschau { flex: 0 0 auto; width: 110px; height: 80px; background: #fff; border-radius: 6px; }
+.plan-vorschau .plan-raum { stroke: var(--text); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.vorschau-sperr { fill: rgba(93, 104, 120, 0.3); }
+.vorschau-sitzplatz, .vorschau-bett { fill: rgba(180, 35, 24, 0.3); }
+.vorschau-modul { fill: var(--blau); }
+.vorschau-punkt { fill: var(--warnung); }
+.vorschau-tuer, .vorschau-fenster { stroke-width: 4px; vector-effect: non-scaling-stroke; }
+.vorschau-tuer { stroke: var(--orange); }
+.vorschau-fenster { stroke: #6aa0d8; }
+body.ohne-bildlauf { overflow: hidden; }
+.vollbild { position: fixed; inset: 0; z-index: 40; background: var(--grau); display: flex; flex-direction: column; }
+.vollbild-kopf {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 1rem;
+  background: var(--blau); color: #fff;
+}
+.vollbild-kopf .knopf { background: #fff; color: var(--blau); }
+.vollbild-inhalt { flex: 1; overflow: auto; padding: 0.75rem 1rem 2rem; max-width: 1100px; width: 100%; margin: 0 auto; }
+.vollbild .plan { max-height: 62vh; }
+.plan-wand { fill: var(--text); }
+.plan-raum { fill: #fff; stroke: none; }
+.plan-bemassung line { stroke: var(--leise); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.plan-bemassung text, .plan-modulmass text { fill: var(--leise); }
+.plan-modulmass line { stroke: var(--orange); stroke-width: 1.5px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.plan-modulmass text { fill: #9a3d0b; font-weight: 600; }
+.plan-mass-live { fill: #9a3d0b !important; font-weight: 600; }
+.plan-griff { cursor: nwse-resize; }
+.plan-griff-punkt { fill: var(--orange); stroke: #fff; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.plan-oeffnung { cursor: grab; }
+.plan-oeffnung-ausschnitt { fill: #fff; }
+.plan-oeffnung line, .plan-tuerbogen { stroke: var(--text); stroke-width: 1.5px; vector-effect: non-scaling-stroke; fill: none; }
+.plan-tuerbogen { stroke-dasharray: 5 3; stroke-width: 1px; }
+.plan-oeffnung.gewaehlt line, .plan-oeffnung.gewaehlt .plan-tuerbogen { stroke: var(--orange); stroke-width: 3px; }
+.plan-wand-waehlen { cursor: crosshair; }
+.knopf-leise.aktiv { background: var(--orange-hell); border-color: var(--orange); }
+.auswahl-leiste .zahlfeld input { width: 5.5rem; }
+.auswahl-leiste label.inline { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; }
+.modulzeile .meldung { flex-basis: 100%; margin: 0.25rem 0 0; }

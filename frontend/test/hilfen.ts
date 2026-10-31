@@ -70,7 +70,7 @@ export function paket(): ProjektPaket {
               {
                 id: 5000, geschoss_id: 500, bezeichnung: 'Wohnen', raumtyp_id: 10, laenge_m: 4, breite_m: 5, flaeche_m2: 20,
                 hoehe_m: 2.5, volumen_m3: null, heizlastquelle: 'A', hottgenroth_w: null, pauschale_w_m2: null,
-                theta_int: null, luftwechsel: null, flaechen: [], sperrflaechen: [], module: [],
+                theta_int: null, luftwechsel: null, flaechen: [], sperrflaechen: [], module: [], tueren_fenster: [],
               },
             ],
           },
