@@ -116,7 +116,6 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   // Tür/Fenster setzen: wartet auf das Antippen einer Wand
   const [neueOeffnung, setNeueOeffnung] = useState<'tuer' | 'fenster' | null>(null);
   const [zieht, setZieht] = useState<string | null>(null);
-  const [pxProM, setPxProM] = useState(100);
   const zug = useRef<Zug | null>(null);
   const svg = useRef<SVGSVGElement>(null);
 
@@ -134,9 +133,14 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     api.get<KatalogModulDaten[]>('/bibliotheken/module').then(setKatalog).catch(() => setKatalog([]));
   }, []);
 
-  // Rand für Bemaßung und nach außen aufschlagende Türen
+  // Rand für Bemaßung (in Bildschirmpixeln bemessen, damit Maßzahlen auch auf dem Handy Platz haben)
+  // und für nach außen aufschlagende Türen
+  const [pxProM, setPxProM] = useState(100);
+  const px = (p: number) => p / pxProM;
+  const wandStaerke = Math.max(0.08, px(7));
+  const masslinie = wandStaerke + px(14);
   const aussenTuer = Math.max(0, ...oeffnungen.filter((o) => o.art === 'tuer' && o.aufschlag === 'aussen').map((o) => o.breite));
-  const rand = Math.max(0.55, 0.12 * Math.max(L, B), aussenTuer + 0.3);
+  const rand = Math.max(masslinie + px(24), aussenTuer + px(16));
   const vbBreite = L + 2 * rand;
 
   // Maßstab (Bildschirmpixel je Meter), damit Schrift und Anfasser unabhängig von der Raumgröße fingerfreundlich bleiben
@@ -146,15 +150,14 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     const messen = () => {
       const r = el.getBoundingClientRect();
       const vbHoehe = B + 2 * rand;
-      // preserveAspectRatio meet: der kleinere Maßstab gilt
-      if (r.width > 0) setPxProM(Math.min(r.width / vbBreite, r.height > 0 ? r.height / vbHoehe : Infinity));
+      // preserveAspectRatio meet: der kleinere Maßstab gilt; gerundet, damit sich Rand und Maßstab schnell einpendeln
+      if (r.width > 0) setPxProM(Math.round(Math.min(r.width / vbBreite, r.height > 0 ? r.height / vbHoehe : Infinity) * 2) / 2);
     };
     messen();
     const beobachter = new ResizeObserver(messen);
     beobachter.observe(el);
     return () => beobachter.disconnect();
   }, [vbBreite, B, rand]);
-  const px = (p: number) => p / pxProM;
 
   const regeln = useMemo(() => regelnAufloesen(vorgaben.regeln), [vorgaben.regeln]);
   const raumtyp = vorgaben.raumtypen.find((t) => t.id === raum.raumtyp_id)?.bezeichnung ?? null;
@@ -358,11 +361,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     void speichernOeffnungen(oeffnungen.map((o) => (o.id === neu.id ? korrigiert : o)));
   }
 
-  const wandStaerke = Math.max(0.08, px(7));
   const schrift = px(13);
   const griffR = px(10);
   const griffTreffer = px(22); // 44 px Durchmesser
-  const masslinie = wandStaerke + rand * 0.45;
 
   return (
     <div className="deckenplan">
@@ -630,12 +631,13 @@ function Bemassung({ L, B, abstand, schrift, strich }: { L: number; B: number; a
           <line key={i} x1={x - strich / 2} y1={y + strich / 2} x2={x + strich / 2} y2={y - strich / 2} />
         ))}
         <text
-          x={senkrecht ? mx + textSeite * schrift * 0.4 : mx}
-          y={senkrecht ? my : my + textSeite * schrift * 0.4}
+          x={senkrecht ? mx + textSeite * schrift * 0.3 : mx}
+          y={senkrecht ? my : my + textSeite * schrift * 0.3}
           fontSize={schrift}
           textAnchor="middle"
-          dominantBaseline={senkrecht ? 'auto' : textSeite < 0 ? 'auto' : 'hanging'}
-          transform={senkrecht ? `rotate(-90 ${mx + textSeite * schrift * 0.4} ${my})` : undefined}
+          // außen neben der Linie: links/oben über der Grundlinie, rechts/unten darunter (senkrecht um −90° gedreht)
+          dominantBaseline={textSeite < 0 ? 'auto' : 'hanging'}
+          transform={senkrecht ? `rotate(-90 ${mx + textSeite * schrift * 0.3} ${my})` : undefined}
         >
           {text}
         </text>
