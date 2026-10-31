@@ -283,6 +283,16 @@ export function benoetigteLeistung(heizlastW: number | null, r: Regeln): number 
   return heizlastW * (1 + r.reserve_prozent / 100);
 }
 
+export type Leistungsstatus = 'unter' | 'ueber' | 'passend';
+
+/** Bewertung der installierten Leistung; null, wenn nicht prüfbar (keine Module, keine benötigte Leistung) */
+export function leistungsstatus(benoetigtW: number | null, installiertW: number, r: Regeln): Leistungsstatus | null {
+  if (benoetigtW === null || installiertW === 0) return null;
+  if (installiertW < benoetigtW - EPS) return 'unter';
+  if (r.ueberdimensionierung_prozent === null) return null;
+  return (installiertW / benoetigtW - 1) * 100 > r.ueberdimensionierung_prozent + EPS ? 'ueber' : 'passend';
+}
+
 /** Warnungen zur installierten Leistung (Unterschreitung, Überdimensionierung) */
 export function leistungPruefen(benoetigtW: number | null, installiertW: number, r: Regeln): string[] {
   if (benoetigtW === null || installiertW === 0) return [];
@@ -592,6 +602,10 @@ export interface RaumModulplanung {
   verstoesse: Record<string, string[]>;
   /** Anzahl Module mit Regelverstoß */
   module_mit_verstoss: number;
+  /** Unter-/Überdimensionierung (deutlich anzeigen); null = nicht prüfbar */
+  leistung: Leistungsstatus | null;
+  /** Warnung zur Leistung im Klartext, sonst null */
+  leistung_hinweis: string | null;
   hinweise: string[];
 }
 
@@ -615,7 +629,8 @@ export function raumModulplanung(
   const hinweise = [...pruefung.hinweise];
   if (module.length > 0) {
     if (heizlastW !== null && benoetigt === null) hinweise.push(`${fehlt(r, 'leistungsreserve_prozent', 'Leistungsreserve')} – Leistung nicht geprüft`);
-    hinweise.push(...leistungPruefen(benoetigt, installiert, r));
+    // „Vorgabe fehlt“ zur Überdimensionierung bleibt Hinweis; echte Unter-/Überdimensionierung steht in leistung_hinweis
+    hinweise.push(...leistungPruefen(benoetigt, installiert, r).filter((h) => h.startsWith('Vorgabe fehlt')));
     if (r.thermostat_je_raum === null) hinweise.push(fehlt(r, 'thermostat_je_raum', 'Thermostat je Raum'));
   }
   return {
@@ -627,6 +642,8 @@ export function raumModulplanung(
     thermostate: module.length > 0 && r.thermostat_je_raum ? 1 : 0,
     verstoesse: pruefung.verstoesse,
     module_mit_verstoss: Object.values(pruefung.verstoesse).filter((v) => v.length > 0).length,
+    leistung: leistungsstatus(benoetigt, installiert, r),
+    leistung_hinweis: leistungPruefen(benoetigt, installiert, r).find((h) => h.startsWith('Installierte Leistung')) ?? null,
     hinweise,
   };
 }

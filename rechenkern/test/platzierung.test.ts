@@ -5,6 +5,7 @@ import {
   abstand,
   HINWEIS_BAD,
   leistungPruefen,
+  leistungsstatus,
   modulRechteck,
   platziertesModul,
   pruefeModule,
@@ -260,5 +261,43 @@ describe('Leistung und Raumergebnis', () => {
     expect(e.thermostate).toBe(1);
     expect(e.module_mit_verstoss).toBe(0);
     expect(raumModulplanung(r, [], [], R, 1200).thermostate).toBe(0);
+  });
+});
+
+describe('Unterdimensionierung (Praxistest 31.10.2026: benötigt 880 W, installiert 840 W)', () => {
+  it('Leistungsstatus: unter, passend, über; ohne benötigte Leistung oder Module nicht prüfbar', () => {
+    expect(leistungsstatus(880, 840, R)).toBe('unter');
+    expect(leistungsstatus(880, 900, R)).toBe('passend');
+    expect(leistungsstatus(880, 1100, R)).toBe('ueber');
+    expect(leistungsstatus(null, 840, R)).toBeNull();
+    expect(leistungsstatus(880, 0, R)).toBeNull();
+  });
+
+  it('von Hand 2 × 420 W bei 880 W Bedarf: deutliche Warnung als eigenes Feld, nicht nur als Hinweis', () => {
+    const r = raum(5, 4);
+    const m420 = { ...KATALOG[5], bad_geeignet: true, schutzart: 'IP54' };
+    const module = [platziertesModul(m420, 0.6, 0.6, false, 'a'), platziertesModul(m420, 3.6, 2.6, false, 'b')];
+    const e = raumModulplanung(r, [], module, R, 800);
+    expect(e.leistung).toBe('unter');
+    expect(e.leistung_hinweis).toBe('Installierte Leistung 840 W unterschreitet die benötigte Leistung 880 W');
+    expect(e.hinweise).toEqual([]);
+  });
+
+  it('der automatische Vorschlag unterdimensioniert nie (200 zufällige Räume mit Sperrflächen)', () => {
+    let saat = 42;
+    const zufall = () => ((saat = (saat * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    let geprueft = 0;
+    for (let i = 0; i < 200; i++) {
+      const L = 2 + zufall() * 6;
+      const B = 2 + zufall() * 5;
+      const s: Sperrflaeche[] = zufall() < 0.5 ? [sperr('sitzplatz', zufall() * (L - 1.5), zufall() * (B - 1), 1.5, 1)] : [];
+      const heizlast = 200 + zufall() * 2500;
+      const v = vorschlagen(raum(L, B, { ist_bad: zufall() < 0.2 }), s, KATALOG, R, heizlast, ids());
+      if (!v.module) continue;
+      geprueft++;
+      expect(v.installiert_w).toBeGreaterThanOrEqual(v.benoetigt_w! - 1e-6);
+      expect(v.installiert_w).toBe(v.module.reduce((x, m) => x + m.leistung_w, 0));
+    }
+    expect(geprueft).toBeGreaterThan(100);
   });
 });

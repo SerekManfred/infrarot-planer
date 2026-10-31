@@ -4,5 +4,6 @@ export * from './pauschal';
 export * from './auswertung';
 export * from './objekt';
 export * from './platzierung';
+export * from './plan';
 export { RECHENKERN_VERSION } from './version';
 export { verarbeiteJson } from './json';
