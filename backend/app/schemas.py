@@ -132,6 +132,22 @@ class AuscheckenAntwort(BaseModel):
     sperre: str
 
 
+class Anmeldesperre(BaseModel):
+    """Gerät/IP-Adresse mit auffällig vielen Fehlversuchen (ab dem Hinweis-Schwellwert), für die Benutzerverwaltung."""
+
+    ip: str
+    fehlversuche: int
+    gesperrt: bool
+    gesperrt_bis: datetime | None
+    letzter_versuch: datetime | None
+    # E-Mail-Adressen, mit denen von dort versucht wurde
+    konten: list[str]
+
+
+class SperreLoesen(BaseModel):
+    ip: str = Field(min_length=1, max_length=100)
+
+
 class StatusAenderung(BaseModel):
     status: Projektstatus
     bemerkung: str = ""

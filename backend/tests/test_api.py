@@ -30,35 +30,67 @@ def test_deaktivierter_benutzer(client, db, aussendienst):
     assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 401
 
 
-# ── Bremse ──────────────────────────────────────────────────────────────────
+# ── Bremse je Gerät/IP-Adresse (Festlegung 31.10.2026) ──────────────────────
 
 
-def test_bremse_nach_fuenf_fehlversuchen(client, aussendienst, fachpruefer):
-    for _ in range(5):
-        assert _anmeldung(client, aussendienst.email, "falsch-falsch-falsch").status_code == 401
-    # Auch das richtige Passwort wird jetzt abgewiesen
+def _falsch(client, email):
+    return _anmeldung(client, email, "falsch-falsch-falsch")
+
+
+def test_bremse_hinweis_ab_fuenf_sperre_nach_zehn(client, aussendienst):
+    for _ in range(4):
+        assert _falsch(client, aussendienst.email).json()["detail"] == "E-Mail oder Passwort falsch"
+    assert _falsch(client, aussendienst.email).json()["detail"] == "E-Mail oder Passwort falsch. Noch 5 Versuche, dann 2 Minuten Pause."
+    for _ in range(3):
+        _falsch(client, aussendienst.email)
+    assert _falsch(client, aussendienst.email).json()["detail"] == "E-Mail oder Passwort falsch. Noch 1 Versuch, dann 2 Minuten Pause."
+    zehnter = _falsch(client, aussendienst.email)
+    assert zehnter.status_code == 401 and "bitte 2 Minuten warten" in zehnter.json()["detail"]
+    # gesperrt – auch mit richtigem Passwort
     antwort = _anmeldung(client, aussendienst.email, TEST_PASSWORT)
     assert antwort.status_code == 429
-    assert "15 Minuten" in antwort.json()["detail"]
-    # Andere Konten sind nicht betroffen
-    assert _anmeldung(client, fachpruefer.email, TEST_PASSWORT).status_code == 200
+    assert antwort.json()["detail"] == "Zu viele Fehlversuche von diesem Gerät. Bitte in 2 Minuten erneut versuchen."
+
+
+def test_fehlversuche_anderer_ip_zaehlen_nicht(client, db, aussendienst):
+    """Fehlversuche von einem anderen Gerät sperren das Konto nicht – niemand kann einen Kollegen aussperren."""
+    from datetime import UTC, datetime
+
+    from app.models import Anmeldeversuch
+
+    jetzt = datetime.now(UTC)
+    for _ in range(30):
+        db.add(Anmeldeversuch(zeitpunkt=jetzt, email=aussendienst.email, ip="203.0.113.9", erfolgreich=False))
+    db.commit()
+    # Dasselbe Konto von diesem Gerät (IP „testclient“): nicht gesperrt
+    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 200
+
+
+def test_bremse_je_ip_gilt_fuer_alle_konten(client, fachpruefer):
+    for i in range(10):
+        _falsch(client, f"versuch{i}@test.invalid")
+    assert _anmeldung(client, fachpruefer.email, TEST_PASSWORT).status_code == 429
+
+
+def test_pause_vorbei_dann_wieder_ein_versuch(client, db, aussendienst):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import Anmeldeversuch
+
+    vor_drei_minuten = datetime.now(UTC) - timedelta(minutes=3)
+    for _ in range(10):
+        db.add(Anmeldeversuch(zeitpunkt=vor_drei_minuten, email=aussendienst.email, ip="testclient", erfolgreich=False))
+    db.commit()
+    # Pause vorbei: ein weiterer Fehlversuch führt sofort wieder in die Pause
+    assert _falsch(client, aussendienst.email).status_code == 401
+    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 429
 
 
 def test_erfolg_setzt_zaehler_zurueck(client, aussendienst):
-    for _ in range(4):
-        _anmeldung(client, aussendienst.email, "falsch-falsch-falsch")
+    for _ in range(9):
+        _falsch(client, aussendienst.email)
     assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 200
-    for _ in range(4):
-        _anmeldung(client, aussendienst.email, "falsch-falsch-falsch")
-    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 200
-
-
-def test_bremse_je_ip(client, db, aussendienst):
-    from app.config import einstellungen
-
-    for i in range(einstellungen().anmeldung_max_fehlversuche_ip):
-        _anmeldung(client, f"versuch{i}@test.invalid", "falsch-falsch-falsch")
-    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 429
+    assert _falsch(client, aussendienst.email).json()["detail"] == "E-Mail oder Passwort falsch"
 
 
 def test_alte_fehlversuche_zaehlen_nicht(client, db, aussendienst):
@@ -66,11 +98,43 @@ def test_alte_fehlversuche_zaehlen_nicht(client, db, aussendienst):
 
     from app.models import Anmeldeversuch
 
-    alt = datetime.now(UTC) - timedelta(minutes=16)
-    for _ in range(10):
+    alt = datetime.now(UTC) - timedelta(hours=25)
+    for _ in range(20):
         db.add(Anmeldeversuch(zeitpunkt=alt, email=aussendienst.email, ip="testclient", erfolgreich=False))
     db.commit()
     assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 200
+
+
+def test_admin_sieht_und_loest_sperre(client, db, admin, aussendienst):
+    for _ in range(10):
+        _falsch(client, aussendienst.email)
+    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 429
+    # Admin meldet sich von einem anderen Gerät an
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    admin_geraet = TestClient(app, client=("198.51.100.7", 50000))
+    anmelden(admin_geraet, admin.email)
+    sperren = admin_geraet.get("/api/benutzer/anmeldesperren").json()
+    assert sperren == [{
+        "ip": "testclient", "fehlversuche": 10, "gesperrt": True, "gesperrt_bis": sperren[0]["gesperrt_bis"],
+        "letzter_versuch": sperren[0]["letzter_versuch"], "konten": [aussendienst.email],
+    }]
+    assert admin_geraet.post("/api/benutzer/anmeldesperren/loesen", json={"ip": "testclient"}).status_code == 204
+    assert admin_geraet.get("/api/benutzer/anmeldesperren").json() == []
+    assert _anmeldung(client, aussendienst.email, TEST_PASSWORT).status_code == 200
+    from sqlalchemy import select
+
+    from app.models import Protokoll
+
+    eintrag = db.scalars(select(Protokoll).where(Protokoll.aktion == "sperre_aufgehoben")).one()
+    assert eintrag.benutzer_id == admin.id
+    assert eintrag.aenderungen == {"ip": "testclient", "fehlversuche_vorher": 10, "ueber": "Benutzerverwaltung"}
+    # nur Admins
+    anmelden(admin_geraet, aussendienst.email)
+    assert admin_geraet.get("/api/benutzer/anmeldesperren").status_code == 403
+    assert admin_geraet.post("/api/benutzer/anmeldesperren/loesen", json={"ip": "testclient"}).status_code == 403
 
 
 # ── Passwort ────────────────────────────────────────────────────────────────

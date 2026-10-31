@@ -1,4 +1,4 @@
-"""Anmeldung, Abmeldung, Passwort ändern. Mit Bremse gegen wiederholte Fehlversuche."""
+"""Anmeldung, Abmeldung, Passwort ändern. Mit Bremse gegen wiederholte Fehlversuche je IP-Adresse (app/anmeldebremse.py)."""
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.abhaengigkeiten import aktueller_benutzer
+from app.anmeldebremse import meldung_nach_fehlversuch, pause_text, zustand
 from app.config import einstellungen
 from app.db import get_db
 from app.models import Anmeldeversuch, Benutzer
@@ -29,35 +30,18 @@ def sitzung_setzen(antwort: Response, benutzer: Benutzer) -> None:
     )
 
 
-def _fehlversuche(db: Session, bedingung, seit: datetime) -> int:
-    # Fehlversuche zählen erst ab der letzten erfolgreichen Anmeldung
-    letzter_erfolg = db.scalar(
-        select(func.max(Anmeldeversuch.zeitpunkt)).where(bedingung, Anmeldeversuch.erfolgreich.is_(True))
-    )
-    if letzter_erfolg is not None:
-        if letzter_erfolg.tzinfo is None:
-            letzter_erfolg = letzter_erfolg.replace(tzinfo=UTC)
-        seit = max(seit, letzter_erfolg)
-    return db.scalar(
-        select(func.count()).where(bedingung, Anmeldeversuch.erfolgreich.is_(False), Anmeldeversuch.zeitpunkt > seit)
-    )
-
-
 @router.post("/anmelden", response_model=BenutzerLesen)
 def anmelden(daten: Anmeldung, anfrage: Request, antwort: Response, db: Session = Depends(get_db)):
-    e = einstellungen()
     jetzt = datetime.now(UTC)
     email = daten.email.strip().lower()
     ip = anfrage.client.host if anfrage.client else "unbekannt"
-    seit = jetzt - timedelta(minutes=e.anmeldung_sperrminuten)
 
-    if (
-        _fehlversuche(db, Anmeldeversuch.email == email, seit) >= e.anmeldung_max_fehlversuche_konto
-        or _fehlversuche(db, Anmeldeversuch.ip == ip, seit) >= e.anmeldung_max_fehlversuche_ip
-    ):
+    # Bremse je IP-Adresse (Gerät/Anschluss), nicht je Konto
+    vorher = zustand(db, ip, jetzt)
+    if vorher.gesperrt_bis is not None:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            f"Zu viele Fehlversuche. Bitte in {e.anmeldung_sperrminuten} Minuten erneut versuchen.",
+            f"Zu viele Fehlversuche von diesem Gerät. Bitte in {pause_text(vorher.gesperrt_bis, jetzt)} erneut versuchen.",
         )
 
     benutzer = db.scalars(select(Benutzer).where(func.lower(Benutzer.email) == email)).first()
@@ -67,7 +51,7 @@ def anmelden(daten: Anmeldung, anfrage: Request, antwort: Response, db: Session 
     db.execute(delete(Anmeldeversuch).where(Anmeldeversuch.zeitpunkt < jetzt - AUFBEWAHRUNG_VERSUCHE))
     db.commit()
     if not erfolg:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-Mail oder Passwort falsch")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, meldung_nach_fehlversuch(vorher.fehlversuche + 1))
     sitzung_setzen(antwort, benutzer)
     return benutzer
 

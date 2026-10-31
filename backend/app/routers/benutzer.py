@@ -1,4 +1,4 @@
-"""Benutzerverwaltung (nur Admin): anlegen, Name/Rollen ändern, deaktivieren, Passwort neu setzen.
+"""Benutzerverwaltung (nur Admin): anlegen, Name/Rollen ändern, deaktivieren, Passwort neu setzen, Anmeldesperren lösen.
 
 Rollen sind kombinierbar (z. B. Admin und Fachprüfer). Es bleibt immer mindestens ein aktiver Admin.
 """
@@ -7,12 +7,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.abhaengigkeiten import hole_oder_404, nur_admin
+from app.anmeldebremse import auffaellige, freigeben
 from app.db import get_db
 from app.models import Benutzer
-from app.schemas import BenutzerAenderung, BenutzerLesen, BenutzerNeu, PasswortSetzen
+from app.schemas import Anmeldesperre, BenutzerAenderung, BenutzerLesen, BenutzerNeu, PasswortSetzen, SperreLoesen
 from app.sicherheit import passwort_hashen
 
 router = APIRouter(prefix="/benutzer", tags=["Benutzer"])
+
+
+@router.get("/anmeldesperren", response_model=list[Anmeldesperre], dependencies=[Depends(nur_admin)])
+def anmeldesperren(db: Session = Depends(get_db)):
+    """Geräte/IP-Adressen mit vielen Fehlversuchen (gesperrte zuerst), mit den dort versuchten Konten."""
+    return auffaellige(db)
+
+
+@router.post("/anmeldesperren/loesen", status_code=status.HTTP_204_NO_CONTENT)
+def sperre_loesen(daten: SperreLoesen, db: Session = Depends(get_db), admin: Benutzer = Depends(nur_admin)):
+    """Hebt die Anmeldebremse einer IP-Adresse sofort auf (protokolliert)."""
+    freigeben(db, [daten.ip], admin.id, "Benutzerverwaltung")
+    db.commit()
 
 
 @router.get("", response_model=list[BenutzerLesen], dependencies=[Depends(nur_admin)])

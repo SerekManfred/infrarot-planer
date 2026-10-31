@@ -56,13 +56,13 @@ def test_passwort_setzen_hebt_sperre_auf_und_protokolliert(client, db, admin):
     from app.cli import passwort_setzen
     from app.models import Protokoll
 
-    for _ in range(5):
+    for _ in range(10):
         assert client.post("/api/auth/anmelden", json={"email": admin.email, "passwort": "falsch-falsch-falsch"}).status_code == 401
-    # Konto gesperrt – auch mit richtigem Passwort
+    # Gerät gesperrt – auch mit richtigem Passwort
     assert client.post("/api/auth/anmelden", json={"email": admin.email, "passwort": TEST_PASSWORT}).status_code == 429
 
     version = admin.sitzungs_version
-    assert passwort_setzen(db, " ADMIN@test.invalid ", "ganz-neues-passwort") == 5
+    assert passwort_setzen(db, " ADMIN@test.invalid ", "ganz-neues-passwort") == 1  # eine IP-Adresse freigegeben
     benutzer = db.get(Benutzer, admin.id)
     assert passwort_pruefen(benutzer.passwort_hash, "ganz-neues-passwort")
     assert benutzer.sitzungs_version == version + 1
@@ -74,9 +74,20 @@ def test_passwort_setzen_hebt_sperre_auf_und_protokolliert(client, db, admin):
 
     eintraege = db.scalars(select(Protokoll).where(Protokoll.objektart == "Benutzer", Protokoll.objekt_id == admin.id)).all()
     assert any(e.aenderungen.get("passwort") == "geändert" for e in eintraege)
-    sperre = next(e for e in eintraege if e.aktion == "sperre_aufgehoben")
-    assert sperre.aenderungen["fehlversuche_vorher"] == 5
     assert "passwort_hash" not in str([e.aenderungen for e in eintraege])
+    sperre = db.scalars(select(Protokoll).where(Protokoll.aktion == "sperre_aufgehoben")).one()
+    assert sperre.aenderungen == {"ip": "testclient", "fehlversuche_vorher": 10, "ueber": "Kommandozeile passwort-setzen"}
+
+
+def test_sperre_loesen_kommandozeile(client, db, admin):
+    from app.cli import sperre_loesen
+
+    for _ in range(10):
+        client.post("/api/auth/anmelden", json={"email": admin.email, "passwort": "falsch-falsch-falsch"})
+    assert client.post("/api/auth/anmelden", json={"email": admin.email, "passwort": TEST_PASSWORT}).status_code == 429
+    assert sperre_loesen(db, admin.email, None) == 1
+    assert client.post("/api/auth/anmelden", json={"email": admin.email, "passwort": TEST_PASSWORT}).status_code == 200
+    assert sperre_loesen(db, None, "1.2.3.4") == 1
 
 
 def test_passwort_setzen_fehler(db, admin):

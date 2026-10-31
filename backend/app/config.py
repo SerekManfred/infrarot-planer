@@ -17,9 +17,10 @@ class Einstellungen(BaseSettings):
     rechenkern_cli: str = "/opt/rechenkern/cli.cjs"
     rechenkern_timeout_s: float = 30.0
     # Bremse gegen Anmeldeversuche
-    anmeldung_sperrminuten: int = 15
-    anmeldung_max_fehlversuche_konto: int = 5
-    anmeldung_max_fehlversuche_ip: int = 20
+    # Anmeldebremse je IP-Adresse (app/anmeldebremse.py, Festlegung 31.10.2026)
+    anmeldung_max_fehlversuche: int = 10
+    anmeldung_pause_minuten: int = 2
+    anmeldung_hinweis_ab: int = 5
 
 
 @lru_cache

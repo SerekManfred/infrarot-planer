@@ -4,6 +4,7 @@
   python -m app.cli benutzer-anlegen --email E --name N [--rollen aussendienst,fachpruefer,admin]
   python -m app.cli rollen-setzen --email E --rollen admin,fachpruefer
   python -m app.cli passwort-setzen --email E
+  python -m app.cli sperre-loesen (--email E | --ip IP)
   python -m app.cli benutzer-deaktivieren --email E
   python -m app.cli email-aendern --alt ALTE@ADRESSE --neu NEUE@ADRESSE
   python -m app.cli bibliothek-importieren {bauteile,raumtypen,klimadaten} DATEI.csv
@@ -28,6 +29,7 @@ from sqlalchemy.orm import Session
 from app import protokoll  # noqa: F401  (Änderungen über die Kommandozeile werden ebenfalls protokolliert)
 from app.csv_import import FORMATE, importiere
 from app.db import sitzungsfabrik
+from app.anmeldebremse import freigeben, ips_mit_fehlversuchen
 from app.excel_import import ImportFehler, importiere_excel
 from app.vorgabenabgleich import abgleichen
 from app.models import ROLLEN, Anmeldeversuch, Benutzer, Fachvorgaben, Platzierungsregel, Projekt, Protokoll
@@ -81,37 +83,28 @@ def benutzer_anlegen(email: str, name: str, rollen: list[str], von_stdin: bool) 
 
 
 def passwort_setzen(db: Session, email: str, passwort: str) -> int:
-    """Setzt ein neues Passwort, meldet alle Sitzungen ab und hebt die Anmeldesperre des Kontos auf.
+    """Setzt ein neues Passwort, meldet alle Sitzungen ab und hebt die Anmeldebremse auf.
 
-    Die Sperre (app/routers/auth.py) zählt Fehlversuche ab der letzten erfolgreichen Anmeldung; ein Eintrag
-    „erfolgreich“ mit der Kennung „kommandozeile“ setzt den Zähler des Kontos zurück, ohne die Historie zu löschen.
-    Eine Sperre der IP-Adresse bleibt bestehen. Gibt die Zahl der Fehlversuche seit der letzten Anmeldung zurück.
+    Die Bremse zählt je IP-Adresse (app/anmeldebremse.py); freigegeben werden alle IP-Adressen, von denen für dieses
+    Konto in den letzten 24 Stunden Fehlversuche kamen. Gibt die Zahl der freigegebenen IP-Adressen zurück.
     """
     email = email.strip().lower()
     benutzer = db.scalars(select(Benutzer).where(func.lower(Benutzer.email) == email)).first()
     if benutzer is None:
         raise ValueError(f"Benutzer {email} nicht gefunden.")
-    passwort_hash = passwort_hashen(passwort)  # ValueError bei weniger als 12 Zeichen
-
-    jetzt = datetime.now(UTC)
-    letzter_erfolg = db.scalar(select(func.max(Anmeldeversuch.zeitpunkt)).where(
-        Anmeldeversuch.email == email, Anmeldeversuch.erfolgreich.is_(True)))
-    bedingung = [Anmeldeversuch.email == email, Anmeldeversuch.erfolgreich.is_(False)]
-    if letzter_erfolg is not None:
-        bedingung.append(Anmeldeversuch.zeitpunkt > letzter_erfolg)
-    fehlversuche = db.scalar(select(func.count()).where(*bedingung))
-
-    benutzer.passwort_hash = passwort_hash  # protokolliert als „passwort: geändert“ (app/protokoll.py)
+    benutzer.passwort_hash = passwort_hashen(passwort)  # ValueError bei weniger als 12 Zeichen; protokolliert
     benutzer.sitzungs_version += 1  # alle Geräte abmelden
-    db.add(Anmeldeversuch(zeitpunkt=jetzt, email=email, ip="kommandozeile", erfolgreich=True))
-    db.add(Protokoll(
-        zeitpunkt=jetzt, benutzer_id=None, projekt_id=None, objektart="Benutzer", objekt_id=benutzer.id,
-        aktion="sperre_aufgehoben",
-        aenderungen={"email": email, "anmeldesperre": "zurückgesetzt", "fehlversuche_vorher": fehlversuche,
-                     "ueber": "Kommandozeile passwort-setzen"},
-    ))
+    anzahl = freigeben(db, ips_mit_fehlversuchen(db, email), None, "Kommandozeile passwort-setzen")
     db.commit()
-    return fehlversuche
+    return anzahl
+
+
+def sperre_loesen(db: Session, email: str | None, ip: str | None) -> int:
+    """Anmeldebremse aufheben: für eine IP-Adresse oder für alle IP-Adressen mit Fehlversuchen zu einem Konto."""
+    ips = [ip] if ip else ips_mit_fehlversuchen(db, email or "")
+    anzahl = freigeben(db, ips, None, "Kommandozeile sperre-loesen")
+    db.commit()
+    return anzahl
 
 
 def benutzer_deaktivieren(email: str) -> None:
@@ -265,6 +258,11 @@ def main(argv: list[str] | None = None) -> None:
     p = befehle.add_parser("vorgaben-uebernehmen", help="neue zentrale Vorgaben in ein Projekt übernehmen")
     p.add_argument("--projekt", required=True, help="Projektnummer")
 
+    p = befehle.add_parser("sperre-loesen", help="Anmeldebremse aufheben (je IP-Adresse)")
+    gruppe = p.add_mutually_exclusive_group(required=True)
+    gruppe.add_argument("--email", help="alle IP-Adressen mit Fehlversuchen zu diesem Konto freigeben")
+    gruppe.add_argument("--ip")
+
     args = parser.parse_args(argv)
     if args.befehl == "admin-anlegen":
         benutzer_anlegen(args.email, args.name, ["admin"], args.passwort_stdin)
@@ -288,7 +286,11 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as fehler:
                 sys.exit(str(fehler))
         print(f"Passwort für {args.email.strip().lower()} gesetzt, alle Sitzungen abgemeldet, "
-              f"Anmeldesperre aufgehoben ({fehlversuche} Fehlversuche seit der letzten Anmeldung).")
+              f"Anmeldebremse für {fehlversuche} Gerät(e)/IP-Adresse(n) aufgehoben.")
+    elif args.befehl == "sperre-loesen":
+        with sitzungsfabrik()() as db:
+            anzahl = sperre_loesen(db, args.email, args.ip)
+        print(f"Anmeldebremse für {anzahl} Gerät(e)/IP-Adresse(n) aufgehoben.")
     elif args.befehl == "benutzer-deaktivieren":
         benutzer_deaktivieren(args.email)
     elif args.befehl == "email-aendern":
