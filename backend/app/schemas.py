@@ -254,6 +254,19 @@ class ModulPlatziert(BaseModel):
     gedreht: bool = False
 
 
+class TuerFenster(BaseModel):
+    """Tür oder Fenster im Deckenplan, nur zur Orientierung (keine Sperrfläche, kein Einfluss auf die Platzierung)."""
+
+    id: str = Field(min_length=1, max_length=40)
+    art: Literal["tuer", "fenster"]
+    wand: Literal["oben", "unten", "links", "rechts"]
+    # Abstand vom Wandanfang (oben/unten: linke Ecke, links/rechts: obere Ecke) bis zum Beginn der Öffnung, m
+    position: float = Field(ge=0, le=100)
+    breite: float = Field(gt=0, le=20)
+    aufschlag: Literal["innen", "aussen"] | None = None
+    band: Literal["links", "rechts"] | None = None
+
+
 class RaumNeu(BaseModel):
     bezeichnung: str = Field(min_length=1, max_length=200)
     raumtyp_id: int | None = None
@@ -269,6 +282,7 @@ class RaumNeu(BaseModel):
     luftwechsel: float | None = Field(default=None, ge=0)
     sperrflaechen: list[Sperrflaeche] = Field(default_factory=list, max_length=100)
     module: list[ModulPlatziert] = Field(default_factory=list, max_length=60)
+    tueren_fenster: list[TuerFenster] = Field(default_factory=list, max_length=40)
 
 
 class RaumAenderung(RaumNeu):
@@ -293,6 +307,7 @@ class RaumLesen(Lesbar):
     luftwechsel: float | None
     sperrflaechen: list[dict]
     module: list[dict]
+    tueren_fenster: list[dict]
 
 
 # ── Bauteilfläche ───────────────────────────────────────────────────────────

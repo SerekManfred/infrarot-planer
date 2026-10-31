@@ -431,3 +431,18 @@ def test_sperrflaechen_und_module_speichern_und_auswerten(client, projekt, fachp
     # im Offline-Paket enthalten
     paket = client.get(f"/api/offline/projekte/{projekt['projekt']['id']}").json()
     assert paket["objekte"][0]["geschosse"][0]["raeume"][0]["module"][0]["id"] == "m1"
+
+
+def test_tueren_und_fenster_ohne_einfluss_auf_die_planung(client, projekt):
+    """Tür und Fenster nur zur Orientierung (31.10.2026): gespeichert, im Offline-Paket, Auswertung unverändert."""
+    raum = _raum(client, projekt)
+    vorher = _auswertung(client, projekt)["raeume"][0]
+    tuer = {"id": "t1", "art": "tuer", "wand": "unten", "position": 0.5, "breite": 0.9, "aufschlag": "innen", "band": "links"}
+    fenster = {"id": "f1", "art": "fenster", "wand": "oben", "position": 1.5, "breite": 1.2}
+    r = _patch(client, f"/api/raeume/{raum['id']}", {"tueren_fenster": [tuer, fenster]})
+    assert [o["art"] for o in r["tueren_fenster"]] == ["tuer", "fenster"]
+    assert _auswertung(client, projekt)["raeume"][0] == vorher
+    paket = client.get(f"/api/offline/projekte/{projekt['projekt']['id']}").json()
+    assert paket["objekte"][0]["geschosse"][0]["raeume"][0]["tueren_fenster"][1]["breite"] == 1.2
+    assert client.patch(f"/api/raeume/{raum['id']}", json={"tueren_fenster": [{**tuer, "wand": "decke"}]}).status_code == 422
+    assert client.patch(f"/api/raeume/{raum['id']}", json={"tueren_fenster": [{**tuer, "breite": 0}]}).status_code == 422

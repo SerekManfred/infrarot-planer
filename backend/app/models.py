@@ -366,6 +366,8 @@ class Raum(Zeitstempel, Base):
         JsonDaten, default=list, server_default="[]",
         comment="platzierte Module mit Kopie der Katalogdaten, damit Katalogänderungen den Plan nicht verändern",
     )
+    # Türen und Fenster nur zur Orientierung (Festlegung 31.10.2026): keine Sperrflächen, ohne Einfluss auf die Planung
+    tueren_fenster: Mapped[list] = mapped_column(JsonDaten, default=list, server_default="[]")
 
     geschoss: Mapped[Geschoss] = relationship(back_populates="raeume")
     raumtyp: Mapped[BibRaumtyp | None] = relationship()

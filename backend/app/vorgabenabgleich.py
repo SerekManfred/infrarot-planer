@@ -29,7 +29,7 @@ def _kennwerte(raum: dict) -> tuple:
     """Was je Raum für die Sperre zählt (Hinweistexte ohne Ergebnisänderung zählen nicht)."""
     m = raum.get("modulplanung") or {}
     benoetigt = m.get("benoetigt_w")
-    warnungen = tuple(sorted(h for h in m.get("hinweise", []) if h.startswith("Installierte Leistung")))
+    warnungen = (m.get("leistung"), m.get("leistung_hinweis"))
     verstoesse = tuple(sorted((k, tuple(sorted(v))) for k, v in (m.get("verstoesse") or {}).items()))
     return (
         raum.get("phi_massgeblich_w"),
