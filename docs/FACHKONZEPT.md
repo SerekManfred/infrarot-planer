@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D mit verfeinerter Sperre bei geänderten Fachvorgaben (18.10.2026)
+Stand: Phase 1 Teil D, Deckenplan nach Praxistest überarbeitet (31.10.2026)
 
 ## Zweck und Beteiligte
 
@@ -186,6 +186,22 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 - **Verteilung:** Mehrere Module werden in einem Raster über die freie Fläche gleichmäßig verteilt.
 - **Manuelle Korrektur:** verschieben, drehen, tauschen, hinzufügen, löschen. Die Regelprüfung läuft live; Verstöße werden rot markiert und im Klartext begründet, z. B. „Abstand zur Wand 32 cm (mind. 50 cm)“.
 - **Thermostat:** eins je Raum mit Modulen (Regel „Thermostat je Raum“).
+- **Leistung:** Liegt die installierte Leistung unter der benötigten, erscheint eine deutliche rote Warnung „Unterdimensioniert“: in der Raumkarte, im Deckenplan und in der Raumliste. Bei Überdimensionierung erscheint eine gelbe Warnung. Der automatische Vorschlag unterdimensioniert nie; ein Prüflauf über 200 Zufallsräume sichert das ab.
+  - Die Unterdimensionierung im Praxistest (880 W benötigt, 840 W installiert) entstand durch Handkorrektur: Der Vorschlag hatte 1 × 900 W gesetzt, von Hand wurde daraus 2 × 420 W.
+
+### Deckenplan: Bedienung und Darstellung (Festlegung 31.10.2026)
+
+- **Zugang:** In jeder Raumkarte gibt es eine große Schaltfläche „Deckenplan öffnen“ mit kleiner Vorschau. Der Plan öffnet bildschirmfüllend; „Schließen“ oder Esc beendet ihn.
+- **Sperrflächen:**
+  - Anfasser an allen vier Ecken, Größe in jede Richtung änderbar, Trefferfläche 44 px.
+  - Beim Antippen lassen sich Typ, Breite × Tiefe (m) eingeben oder die Fläche löschen. Bei der Dachschräge sind es Wand und Tiefe.
+  - Während des Ziehens werden die aktuellen Maße angezeigt.
+- **Bemaßung wie im Bauplan:** Länge oben und unten, Breite links und rechts. Beim gewählten Modul stehen die Abstände zu den beiden nächstgelegenen Wänden in m daneben, je eine in x- und y-Richtung (`rechenkern/src/plan.ts`, `wandAbstaende`). Diese Abstände sind für den PDF-Platzierungsplan vorgesehen.
+- **Tür und Fenster** nur zur Orientierung:
+  - **Keine Sperrflächen**, ohne Einfluss auf Platzierung und Regelprüfung.
+  - Anlegen: „+ Tür“ oder „+ Fenster“ tippen, dann die Wand antippen. Die Lage wird als Abstand vom Wandanfang gespeichert (oben/unten von links, links/rechts von oben), dazu die Breite. Startwerte (Bedienkomfort, danach änderbar): Tür 0,90 m, Fenster 1,00 m.
+  - Tür: öffnet nach innen oder außen, Band links oder rechts (vom Raum aus gesehen); dargestellt mit Türblatt und Viertelkreis. Fenster: Doppellinie in der Wand.
+  - Mehrere je Raum möglich, offline-fähig, synchronisiert mit dem Projekt (`raum.tueren_fenster`).
 - **Raumliste** (Reiter im Projekt): je Raum Heizlast, benötigte Leistung, Module (Typ × Anzahl), installierte Leistung, Thermostat und Prüfergebnis, dazu die Summen.
 
 ## Noch nicht Bestandteil
