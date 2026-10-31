@@ -164,7 +164,19 @@ Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern
 - **Importdatei** `daten/IR-Planer_Importdaten_geprueft.xlsx`, eingelesen mit `python -m app.cli excel-importieren` (`backend/README.md`). Alles oder nichts, Probelauf möglich. Leere Zellen bleiben leer.
 - **Raumtypen:** W/m² je Raumtyp für Neubau und Effizienzhaus-Sanierung, Raumtemperatur, Luftwechsel und Quelle. Die Altbau-Spalte wird als **Richtwert für den Fachprüfer** gespeichert. Sie ist nur ein Platzhalter im Pauschalenfeld und wird nie automatisch gerechnet.
 - **Platzierungsregeln:** feste Liste (`backend/app/platzierungsregeln.py`), gepflegt werden Wert und Quelle. Nur Fachprüfer und Admins dürfen ändern. Die Regeln werden je Projekt eingefroren wie die übrigen Fachvorgaben; Änderungen erscheinen als Unterschied „Platzierungsregel“. „Maximale Raumhöhe ohne Rückfrage“ ist die zentrale Hinweis-Höhe (2,65 m seit 14.10.2026).
-- **Modulkatalog:** 21 Deckenmodule. Preise und Montagezeit sind leer, bis sie geliefert werden. Module, die nicht mehr in der Datei stehen, werden inaktiv und nicht mehr vorgeschlagen. Platzierte Module speichern eine Kopie ihrer Katalogdaten, damit spätere Katalogänderungen einen Plan nicht verändern.
+- **Modulkatalog:** 21 Deckenmodule. Preise und Montagezeit sind leer, bis sie geliefert werden. Module, die nicht mehr in der Datei stehen, werden inaktiv und nicht mehr vorgeschlagen. Platzierte Module speichern eine Kopie ihrer Katalogdaten (Stand zum Zeitpunkt der Planung).
+- **Katalogpflege** (Festlegung 31.10.2026, Seite „Modulkatalog“):
+  - Lesen dürfen alle; Admin und Fachprüfer pflegen. Jedes Feld lässt sich direkt in der Tabelle ändern, neue Module werden über ein Formular angelegt.
+  - Plausibilität im Server: Leistung, Länge und Breite > 0; Bauhöhe und Gewicht > 0, falls angegeben; Preise und Montagezeit ≥ 0; Schutzart im Format IPxx; „Bad geeignet“ nur ab IP44; Artikel-Nr. eindeutig; Quelle Pflicht.
+  - Löschen nur, wenn das Modul in keinem Projekt verwendet wird. Sonst deaktivieren: nicht mehr auswählbar, bestehende Planungen bleiben gültig.
+  - Jede Änderung wird je Feld (alt/neu) mit Benutzer und Zeitpunkt protokolliert. Export als Excel im Aufbau der Importdatei, mit der zusätzlichen Spalte „aktiv“.
+- **Moduldaten in laufenden Projekten** (`backend/app/modulabgleich.py`): gleiche Logik wie bei den Fachvorgaben.
+  - Ändern sich Daten eines im Projekt verwendeten Moduls, gleicht der Server alle nicht freigegebenen Projekte ab.
+  - Ohne Auswirkung auf Heizlast, installierte Leistung, Modulauswahl und Regelprüfung (z. B. nur Bezeichnung oder Preis) übernimmt das Projekt still, protokolliert, der Status bleibt.
+  - Mit Auswirkung wartet das Projekt auf den Fachprüfer: kein Prüfen, kein Angebot. Der Hinweis im Projekt zeigt die Unterschiede alt/neu je Modul und Feld sowie die Auswirkung (installierte Leistung, neue Regelverstöße).
+  - Übernehmen ersetzt die Moduldaten im Raum; Lage und Drehung bleiben. Ablehnen behält die bisherigen Daten; ändert sich das Modul erneut, ist es wieder offen.
+  - Beides geht einzeln oder in der Sammelansicht „Vorgaben-Abgleich“ (Spalte „Anlass: Moduldaten“).
+  - Freigegebene Projekte bleiben unverändert.
 
 ### Sperrflächen
 
