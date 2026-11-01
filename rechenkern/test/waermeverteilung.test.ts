@@ -109,6 +109,12 @@ describe('Raster im Raum', () => {
     const groesste = w.zellen.reduce((a, b) => (b.wert > a.wert ? b : a));
     expect(groesste.x + groesste.b / 2).toBeCloseTo(2.25, 5); // Modul 2,0 … 3,0 m: Zellmitten 2,25 und 2,75
     expect(w.max_w_m2).toBe(groesste.wert);
+    // Min und Mittelwert des Raums
+    const werte = w.zellen.map((z) => z.wert);
+    expect(w.min_w_m2).toBe(Math.min(...werte));
+    expect(w.mittel_w_m2).toBeCloseTo(werte.reduce((a, b) => a + b, 0) / werte.length, 10);
+    expect(w.min_w_m2).toBeLessThan(w.mittel_w_m2);
+    expect(w.mittel_w_m2).toBeLessThan(w.max_w_m2);
   });
 
   it('fehlende Katalogwerte: mit Vorgabewerten gerechnet und gekennzeichnet; ohne Vorgaben „Vorgabe fehlt“', () => {
@@ -145,5 +151,18 @@ describe('Raster im Raum', () => {
     const schrank = { id: 'h', typ: 'hochschrank' as const, x: 0, y: 0, b: 1, t: 0.6 };
     const w = waermeverteilung(eingabe({ sperrflaechen: [schrank], sperrhoehe: { hochschrank: 2 } }));
     expect(w.zellen.find((z) => z.x === 0 && z.y === 0)).toMatchObject({ flaeche: 'moebel', z: 2 });
+  });
+});
+
+describe('Prüfung der Darstellung (Praxistest 01.11.2026): Einfluss des Emissionsgrads', () => {
+  it('Wert direkt unter einem Modul 0,8 × 0,6 m in 2,5 m Höhe, 90 °C gegen 20 °C: proportional zum Emissionsgrad', () => {
+    const unter = (eps: number) => bestrahlung(0.4, 0.3, 2.5, [{ x0: 0, y0: 0, x1: 0.8, y1: 0.6, m: strahlungsdichte(90, 20, eps), winkel_grad: 120 }]);
+    // M(ε 0,3) = 170,2 W/m², Sichtfaktor direkt unter der Mitte F = 4 · F_Ecke(0,4; 0,3; 2,5) = 0,02381
+    expect(strahlungsdichte(90, 20, 0.3)).toBeCloseTo(170.2, 1);
+    expect(4 * sichtfaktorEcke(0.4, 0.3, 2.5)).toBeCloseTo(0.02381, 5);
+    // ε 0,3 → 4,05 W/m², ε 0,93 → 12,57 W/m² (Faktor 3,1 = 0,93 / 0,3)
+    expect(unter(0.3)).toBeCloseTo(4.05, 2);
+    expect(unter(0.93)).toBeCloseTo(12.57, 2);
+    expect(unter(0.93) / unter(0.3)).toBeCloseTo(0.93 / 0.3, 9);
   });
 });

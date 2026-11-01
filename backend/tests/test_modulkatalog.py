@@ -228,3 +228,102 @@ def test_vorgabewerte_und_hoehen_in_regeln(client, fachpruefer, aussendienst, pr
     assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [{**sitz, "hoehe": 9}]}).status_code == 422
     # neue Regeln ändern weder Heizlast noch Module: das Projekt bleibt ohne offene Vorgaben (still übernommen)
     assert client.get(f"/api/projekte/{projekt['projekt']['id']}").json()["vorgaben_offen"] is False
+
+
+# ── Excel-Reimport (02.11.2026) ──
+
+
+def _export_bearbeiten(client, aendern) -> bytes:
+    mappe = load_workbook(io.BytesIO(client.get("/api/bibliotheken/module/export.xlsx").content))
+    aendern(mappe["Modulkatalog"])
+    puffer = io.BytesIO()
+    mappe.save(puffer)
+    return puffer.getvalue()
+
+
+def _datei(inhalt):
+    return {"datei": ("Modulkatalog.xlsx", inhalt, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+
+def test_reimport_vorschau_und_uebernahme(client, db, fachpruefer):
+    m = _modul_anlegen(client, fachpruefer)
+
+    def bearbeiten(blatt):
+        blatt["L2"] = 499  # VK netto
+        blatt["C2"] = 950  # Leistung
+        blatt.append(["T-NEU", "TESTMODUL NEU", 400, 600, 600, None, None, "IP54", "ja", "", None, None, None, "TESTWERT", "", None, None, None, "ja"])
+
+    inhalt = _export_bearbeiten(client, bearbeiten)
+    v = client.post("/api/bibliotheken/module/import/vorschau", files=_datei(inhalt)).json()
+    assert (v["neu"], v["geaendert"], v["unveraendert"], v["fehler"]) == (["T-NEU"], ["T-900"], 0, [])
+    assert {(a["feldname"], a["alt"], a["neu"]) for a in v["aenderungen"]} == {("Leistung (W)", 900.0, 950.0), ("VK netto (€)", None, 499.0)}
+    # Vorschau speichert nichts
+    assert client.get("/api/bibliotheken/module").json()[0]["leistung_w"] == 900
+
+    e = client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": v["pruefsumme"]}).json()
+    assert (e["neu"], e["geaendert"], e["unveraendert"], e["sicherung"]) == (1, 1, 0, None)  # Testdatenbank: keine Sicherung
+    module = {x["artikel_nr"]: x for x in client.get("/api/bibliotheken/module").json()}
+    assert (module["T-900"]["leistung_w"], module["T-900"]["vk_netto"], module["T-NEU"]["bad_geeignet"]) == (950, 499, True)
+    eintrag = next(x for x in client.get("/api/fachvorgaben/protokoll").json() if x["objektart"] == "BibModul" and "leistung_w" in x["aenderungen"])
+    assert eintrag["aenderungen"]["leistung_w"] == [900.0, 950.0] and eintrag["benutzer_name"] == fachpruefer.name
+    assert m["id"] == module["T-900"]["id"]  # Zuordnung über die Artikel-Nr.
+
+
+def test_reimport_fehler_mit_zeilennummer_nichts_uebernommen(client, fachpruefer):
+    _modul_anlegen(client, fachpruefer)
+
+    def bearbeiten(blatt):
+        blatt["C2"] = None  # Leistung leer
+        blatt.append(["T-BAD", "BAD IP20", 400, 600, 600, None, None, "IP20", "ja", "", None, None, None, "TESTWERT", "", None, None, None, "ja"])
+        blatt.append(["T-BAD", "doppelt", 400, 600, 600, None, None, "IP44", "nein", "", None, None, None, "TESTWERT", "", None, None, None, "vielleicht"])
+
+    inhalt = _export_bearbeiten(client, bearbeiten)
+    v = client.post("/api/bibliotheken/module/import/vorschau", files=_datei(inhalt)).json()
+    assert [(f["zeile"], f["text"]) for f in v["fehler"]] == [
+        (2, "Leistung (W) ist leer"),
+        (3, "„Bad geeignet“ nur ab Schutzart IP44 (hier IP20)"),
+        (4, "Artikel-Nr. T-BAD doppelt (auch in Zeile 3)"),
+    ]
+    antwort = client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": v["pruefsumme"]})
+    assert antwort.status_code == 422 and "3 Fehler" in antwort.json()["detail"] and "Zeile 2" in antwort.json()["detail"]
+    assert client.get("/api/bibliotheken/module").json()[0]["leistung_w"] == 900
+
+
+def test_reimport_loescht_nie_deaktiviert_nur_und_prueft_datei(client, fachpruefer, aussendienst):
+    _modul_anlegen(client, fachpruefer)
+    _modul_anlegen(client, fachpruefer, artikel_nr="T-ZWEI")
+
+    def bearbeiten(blatt):
+        blatt.delete_rows(3)  # T-ZWEI fehlt in der Datei
+        blatt["S2"] = "nein"  # T-900 deaktivieren
+
+    inhalt = _export_bearbeiten(client, bearbeiten)
+    v = client.post("/api/bibliotheken/module/import/vorschau", files=_datei(inhalt)).json()
+    assert v["aenderungen"] == [{"zeile": 2, "artikel_nr": "T-900", "feld": "aktiv", "feldname": "aktiv", "alt": True, "neu": False}]
+    # andere Datei als in der Vorschau → abgelehnt
+    antwort = client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": "0" * 64})
+    assert antwort.status_code == 422 and "seit der Vorschau verändert" in antwort.json()["detail"]
+    client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": v["pruefsumme"]})
+    module = {x["artikel_nr"]: x for x in client.get("/api/bibliotheken/module").json()}
+    assert set(module) == {"T-900", "T-ZWEI"} and module["T-900"]["aktiv"] is False
+    # nur Admin und Fachprüfer
+    anmelden(client, aussendienst.email)
+    assert client.post("/api/bibliotheken/module/import/vorschau", files=_datei(inhalt)).status_code == 403
+    assert client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": v["pruefsumme"]}).status_code == 403
+    # keine Excel-Datei
+    anmelden(client, fachpruefer.email)
+    antwort = client.post("/api/bibliotheken/module/import/vorschau", files=_datei(b"kein excel"))
+    assert antwort.status_code == 422 and "nicht als Excel-Datei" in antwort.json()["detail"]
+
+
+def test_reimport_verwendetes_modul_wartet_im_projekt(client, projekt, aussendienst, fachpruefer):  # noqa: F811
+    m = _modul_anlegen(client, fachpruefer)
+    anmelden(client, aussendienst.email)
+    _platzieren(client, projekt, m)
+    anmelden(client, fachpruefer.email)
+    inhalt = _export_bearbeiten(client, lambda blatt: blatt.__setitem__("C2", 1200))
+    v = client.post("/api/bibliotheken/module/import/vorschau", files=_datei(inhalt)).json()
+    e = client.post("/api/bibliotheken/module/import", files=_datei(inhalt), data={"pruefsumme": v["pruefsumme"]}).json()
+    assert e["projekte_warten"] == 1
+    assert client.get(f"/api/projekte/{projekt['projekt']['id']}").json()["module_offen"] is True
+    assert any(x["art"] == "module" for x in client.get("/api/fachvorgaben/abgleich").json())

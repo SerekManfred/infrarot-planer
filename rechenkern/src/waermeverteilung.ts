@@ -112,6 +112,9 @@ export interface WaermeZelle {
 export interface Waermeverteilung {
   zellen: WaermeZelle[];
   max_w_m2: number;
+  min_w_m2: number;
+  /** Mittelwert über alle Rasterzellen (gleich große Zellen = flächengewichtet) */
+  mittel_w_m2: number;
   /** mindestens ein Kennwert kam aus den Vorgabewerten statt aus dem Modulkatalog */
   mit_vorgabewerten: boolean;
   /** Was fehlt, damit gerechnet werden kann (dann keine Zellen) */
@@ -169,7 +172,7 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
     const r = modulRechteck(m);
     strahler.push({ x0: r.x, y0: r.y, x1: r.x + r.b, y1: r.y + r.t, m: strahlungsdichte(t, e.raumtemperatur_c, eps), winkel_grad: w });
   }
-  if (fehlt.length > 0 || !e.hoehe_m) return { zellen: [], max_w_m2: 0, mit_vorgabewerten: mitVorgabe, fehlt };
+  if (fehlt.length > 0 || !e.hoehe_m) return { zellen: [], max_w_m2: 0, min_w_m2: 0, mittel_w_m2: 0, mit_vorgabewerten: mitVorgabe, fehlt };
 
   const raster = e.raster_m ?? 0.1;
   const nx = Math.max(1, Math.round(e.laenge_m / raster));
@@ -200,5 +203,7 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
       zellen.push({ x: i * bx, y: j * by, b: bx, t: by, wert, flaeche, z });
     }
   }
-  return { zellen, max_w_m2: max, mit_vorgabewerten: mitVorgabe, fehlt: [] };
+  const min = zellen.reduce((m, z) => Math.min(m, z.wert), Infinity);
+  const mittel = zellen.reduce((s, z) => s + z.wert, 0) / zellen.length;
+  return { zellen, max_w_m2: max, min_w_m2: min, mittel_w_m2: mittel, mit_vorgabewerten: mitVorgabe, fehlt: [] };
 }

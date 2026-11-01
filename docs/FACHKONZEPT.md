@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D, Wärmeverteilung im Deckenplan (01.11.2026)
+Stand: Phase 1 Teil D, Wärmeverteilung mit Autoskala, Katalog-Reimport (01.11.2026)
 
 ## Zweck und Beteiligte
 
@@ -169,7 +169,15 @@ Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern
   - Lesen dürfen alle; Admin und Fachprüfer pflegen. Jedes Feld lässt sich direkt in der Tabelle ändern, neue Module werden über ein Formular angelegt.
   - Plausibilität im Server: Leistung, Länge und Breite > 0; Bauhöhe und Gewicht > 0, falls angegeben; Preise und Montagezeit ≥ 0; Schutzart im Format IPxx; „Bad geeignet“ nur ab IP44; Artikel-Nr. eindeutig; Quelle Pflicht.
   - Löschen nur, wenn das Modul in keinem Projekt verwendet wird. Sonst deaktivieren: nicht mehr auswählbar, bestehende Planungen bleiben gültig.
-  - Jede Änderung wird je Feld (alt/neu) mit Benutzer und Zeitpunkt protokolliert. Export als Excel im Aufbau der Importdatei, mit der zusätzlichen Spalte „aktiv“.
+  - Jede Änderung wird je Feld (alt/neu) mit Benutzer und Zeitpunkt protokolliert. Export als Excel im Aufbau der Importdatei, mit den zusätzlichen Spalten der Strahlerkennwerte und „aktiv“.
+  - Die Tabelle hat einen eigenen Scrollbereich: Kopfzeile und Spalte „Artikel-Nr.“ bleiben beim Scrollen stehen, am Laptop, Tablet und Handy.
+- **Reimport aus Excel** (Festlegung 02.11.2026, nur Admin und Fachprüfer, `backend/app/modul_import.py`):
+  - Der exportierte Katalog wird nach Bearbeitung in Excel wieder eingelesen. Gleiche Spalten; fehlende Spalten bleiben unverändert.
+  - Zuordnung über die Artikel-Nr.; eine neue Artikel-Nr. ergibt ein neues Modul. Gelöscht wird über den Import nie, höchstens über „aktiv“ = nein deaktiviert.
+  - Erst die Vorschau: Anzahl geändert, neu und unverändert, Liste der Änderungen (Zeile, Artikel-Nr., Feld alt → neu) und Fehler mit Zeilennummer. Geprüft wird wie bei der Einzeländerung (z. B. Leistung leer, „Bad geeignet“ = ja bei IP20, doppelte Artikel-Nr., ja/nein-Spalten).
+  - Übernommen wird nur nach Bestätigung, nur eine fehlerfreie Datei und nur genau die geprüfte Datei (Prüfsumme).
+  - Vorher sichert der Server die Datenbank (`pg_dump` 16 nach `/app/uploads/sicherungen/`, im Volume `infrarot-uploads`, die 20 jüngsten bleiben). Schlägt die Sicherung fehl, wird nicht importiert.
+  - Jede Änderung wird je Feld protokolliert. Verwendete Module in Projekten werden wie bei Einzeländerungen abgeglichen (Hinweis im Projekt, übernehmen/ablehnen, Sammelansicht).
 - **Moduldaten in laufenden Projekten** (`backend/app/modulabgleich.py`): gleiche Logik wie bei den Fachvorgaben.
   - Ändern sich Daten eines im Projekt verwendeten Moduls, gleicht der Server alle nicht freigegebenen Projekte ab.
   - Ohne Auswirkung auf Heizlast, installierte Leistung, Modulauswahl und Regelprüfung (z. B. nur Bezeichnung oder Preis) übernimmt das Projekt still, protokolliert, der Status bleibt.
@@ -226,9 +234,12 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 
 **Vereinfachte Veranschaulichung der Strahlungsverteilung – keine Behaglichkeitsberechnung nach Norm.** Rechenmodell: `rechenkern/src/waermeverteilung.ts`. Es rechnet im Browser, auch offline, und aktualisiert sich nach jedem Verschieben oder Ändern.
 
-- **Schalter „Wärmeverteilung anzeigen“** im Deckenplan, gemerkt je Gerät. Dargestellt wird ein halbtransparenter Farbverlauf der Bestrahlungsstärke in W/m².
-  - Feste Skala, in allen Räumen gleich: Stufen zu 10 W/m², einfarbig hell → dunkel, ab 70 W/m² dunkelste Stufe.
-  - Die Legende nennt den Höchstwert des Raums und den Wert unter Zeiger bzw. Finger.
+- **Schalter „Wärmeverteilung anzeigen“** direkt unter dem Plan, gemerkt je Gerät. Dargestellt wird ein kräftiger Farbverlauf der Bestrahlungsstärke in W/m² (wenig transparent): 8 Stufen einer Farbfamilie, hell = wenig, kräftig rot = viel.
+  - **Skala automatisch** (Standard, Festlegung 02.11.2026): vom kleinsten bis zum größten Wert im Raum in 8 gleichen Stufen. Die Farben zeigen die Unterschiede im Raum, sind aber zwischen Räumen nicht vergleichbar.
+  - **Skala fest:** in allen Räumen gleich, Stufen zu 10 W/m² (0 … ≥ 70), für Vergleiche zwischen Räumen.
+  - Die Legende zeigt je Stufe die echten Zahlenwerte, darunter Min, Mittel und Max des Raums. Der Mittelwert ist über alle Rasterzellen gebildet, also flächengewichtet.
+  - Antippen bzw. Überfahren einer Stelle zeigt eine Markierung mit dem Wert im Plan und den Wert mit Lage in der Legende (am Boden bzw. auf der Möbeloberseite mit Höhe).
+  - Rechnet die App mit Vorgabewerten, steht ein deutlicher Hinweis „Mit Vorgabewerten berechnet …“ direkt unter dem Plan.
   - Die Farbschicht nimmt keine Eingaben an, Sperrflächen und Module bleiben bedienbar.
 - **Strahler:** Jedes Modul ist ein ebener, diffus (Lambert) nach unten abstrahlender Rechteckstrahler an der Decke (Raumhöhe H).
   - Spezifische Ausstrahlung M = ε · σ · (T_O⁴ − T_R⁴), mit Oberflächentemperatur T_O, Raumtemperatur T_R (Raumtemperatur des Raums bzw. Raumtyps), Emissionsgrad ε und σ = 5,670374419 · 10⁻⁸ W/(m²·K⁴). Ist das Modul nicht wärmer als der Raum, ist M = 0.

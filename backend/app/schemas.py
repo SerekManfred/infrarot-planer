@@ -763,3 +763,41 @@ class ModulAbgleich(BaseModel):
     # True: der Fachprüfer muss noch übernehmen oder ablehnen
     offen: bool
     auswirkung: VorgabenAuswirkung | None
+
+
+# ── Reimport des Modulkatalogs ─────────────────────────────────────────────
+
+
+class ImportAenderung(BaseModel):
+    zeile: int
+    artikel_nr: str
+    feld: str
+    feldname: str
+    alt: float | str | bool | None
+    neu: float | str | bool | None
+
+
+class ImportFehlerZeile(BaseModel):
+    zeile: int
+    artikel_nr: str
+    text: str
+
+
+class KatalogImportVorschau(BaseModel):
+    neu: list[str]
+    geaendert: list[str]
+    unveraendert: int
+    aenderungen: list[ImportAenderung]
+    fehler: list[ImportFehlerZeile]
+    # für die Übernahme genau dieser Datei
+    pruefsumme: str
+
+
+class KatalogImportErgebnis(BaseModel):
+    neu: int
+    geaendert: int
+    unveraendert: int
+    # Dateiname der Datenbanksicherung vor dem Import (None ohne PostgreSQL, z. B. in Tests)
+    sicherung: str | None
+    # Projekte, die wegen geänderter Moduldaten auf den Fachprüfer warten
+    projekte_warten: int

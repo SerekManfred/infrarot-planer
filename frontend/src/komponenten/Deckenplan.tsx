@@ -32,7 +32,16 @@ import {
 import { api, type AuswertungRaum, type Fachvorgaben, type KatalogModulDaten, type PlatziertesModul, type Raum, type Sperrflaeche } from '../api';
 import { HILFE, watt, zahl } from '../texte';
 import { Hilfe, Meldung, Schalter, Zahlfeld } from './Felder';
-import { berechnen as waermeBerechnen, HINWEIS_WAERME, sperrhoehen, WaermeLegende, WaermeSchicht } from './Waermeverteilung';
+import {
+  berechnen as waermeBerechnen,
+  HINWEIS_WAERME,
+  skala,
+  sperrhoehen,
+  WaermeLegende,
+  WaermeMarke,
+  WaermeSchicht,
+  type SkalaArt,
+} from './Waermeverteilung';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
 
@@ -187,6 +196,22 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const letzteWaerme = useRef(waerme);
   if (waerme) letzteWaerme.current = waerme;
   const waermeAnzeige = waermeAn ? (waerme ?? letzteWaerme.current) : null;
+  const [skalaArt, setSkalaArt] = useState<SkalaArt>(() => {
+    try {
+      return localStorage.getItem('deckenplan.waerme.skala') === 'fest' ? 'fest' : 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+  function skalaWaehlen(a: SkalaArt) {
+    setSkalaArt(a);
+    try {
+      localStorage.setItem('deckenplan.waerme.skala', a);
+    } catch {
+      /* ohne Speicher: gilt nur bis zum Schließen */
+    }
+  }
+  const waermeSkala = waermeAnzeige && waermeAnzeige.fehlt.length === 0 ? skala(waermeAnzeige, skalaArt) : null;
   function waermeUmschalten(an: boolean) {
     setWaermeAn(an);
     try {
@@ -515,7 +540,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
             );
           })}
 
-          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} />}
+          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} />}
 
           {module.map((x, i) => {
             const r = modulRechteck(x);
@@ -554,8 +579,28 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                 </g>
               );
             })}
+          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeMarke ergebnis={waermeAnzeige} zeiger={zeiger} px={px} />}
         </svg>
       </div>
+      <div className="waerme-schalter">
+        <label className="inline">
+          <input type="checkbox" checked={waermeAn} onChange={(e) => waermeUmschalten(e.target.checked)} /> Wärmeverteilung anzeigen
+        </label>
+        <Hilfe begriff="Wärmeverteilung" text={`${HILFE.waermeverteilung} ${HINWEIS_WAERME}`} />
+        {waermeAn && (
+          <Schalter
+            wert={skalaArt}
+            optionen={{ auto: 'Skala automatisch', fest: 'Skala fest' }}
+            onWahl={(a: SkalaArt) => skalaWaehlen(a)}
+          />
+        )}
+      </div>
+      {waermeAnzeige?.mit_vorgabewerten && waermeAnzeige.fehlt.length === 0 && (
+        <p className="waerme-vorgabe" role="status">
+          Mit Vorgabewerten berechnet – für mindestens ein Modul fehlen Oberflächentemperatur, Emissionsgrad oder Abstrahlwinkel im Modulkatalog.
+        </p>
+      )}
+      {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} skala={waermeSkala!} zeiger={zeiger} />}
       <p className="leise klein-text">
         {zahl(L)} × {zahl(B)} m{regeln.wand_m !== null && ` · gestrichelt: Wandabstand ${zahl(regeln.wand_m * 100, 0)} cm`} · Raster 5 cm · antippen =
         auswählen, ziehen = verschieben{!gesperrt && ', Eckpunkte ziehen = Größe ändern'}
@@ -662,13 +707,6 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
       )}
       {meldung && <Meldung art={meldung.art}>{meldung.text}</Meldung>}
 
-      <div className="waerme-schalter">
-        <label className="inline">
-          <input type="checkbox" checked={waermeAn} onChange={(e) => waermeUmschalten(e.target.checked)} /> Wärmeverteilung anzeigen
-        </label>
-        <Hilfe begriff="Wärmeverteilung" text={`${HILFE.waermeverteilung} ${HINWEIS_WAERME}`} />
-      </div>
-      {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} zeiger={zeiger} />}
 
       <PlanErgebnis planung={planung} module={module} />
     </div>

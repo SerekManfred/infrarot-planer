@@ -65,7 +65,8 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
       {module === null ? (
         <p>Wird geladen …</p>
       ) : (
-        <div className="tabelle-rahmen">
+        // Kopfzeile und Spalte „Artikel-Nr.“ bleiben beim Scrollen stehen (eigener Scrollbereich, CSS „sticky“)
+        <div className="tabelle-rahmen katalog-rahmen">
           <table className="tabelle modulkatalog">
             <thead>
               <tr>
@@ -181,6 +182,7 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
         </div>
       )}
       {darf && <NeuesModul onAngelegt={(nr) => aendern(async () => undefined, `Modul ${nr} angelegt.`)} />}
+      {darf && <KatalogImport onFertig={(text) => aendern(async () => undefined, text)} />}
     </section>
   );
 }
@@ -254,5 +256,155 @@ function NeuesModul({ onAngelegt }: { onAngelegt: (artikelNr: string) => void })
         Modul anlegen
       </button>
     </form>
+  );
+}
+
+interface ImportVorschau {
+  neu: string[];
+  geaendert: string[];
+  unveraendert: number;
+  aenderungen: { zeile: number; artikel_nr: string; feld: string; feldname: string; alt: number | string | boolean | null; neu: number | string | boolean | null }[];
+  fehler: { zeile: number; artikel_nr: string; text: string }[];
+  pruefsumme: string;
+}
+
+function importWert(w: number | string | boolean | null): string {
+  if (w === null || w === '') return '–';
+  if (typeof w === 'boolean') return w ? 'ja' : 'nein';
+  return typeof w === 'number' ? String(w).replace('.', ',') : w;
+}
+
+/**
+ * Excel-Reimport (02.11.2026): exportierten Katalog in Excel bearbeiten und wieder einlesen. Erst Vorschau (neu,
+ * geändert, unverändert, Änderungen, Fehler mit Zeile), Übernahme nur fehlerfrei und nach Bestätigung; der Server
+ * sichert vorher die Datenbank. Gelöscht wird über den Import nie.
+ */
+function KatalogImport({ onFertig }: { onFertig: (text: string) => void }) {
+  const [datei, setDatei] = useState<File | null>(null);
+  const [vorschau, setVorschau] = useState<ImportVorschau | null>(null);
+  const [fehler, setFehler] = useState('');
+  const [laeuft, setLaeuft] = useState(false);
+
+  async function pruefen(e: FormEvent) {
+    e.preventDefault();
+    if (!datei) return;
+    setFehler('');
+    setVorschau(null);
+    setLaeuft(true);
+    try {
+      const form = new FormData();
+      form.append('datei', datei);
+      setVorschau(await api.post<ImportVorschau>('/bibliotheken/module/import/vorschau', form));
+    } catch (err) {
+      setFehler((err as Error).message);
+    } finally {
+      setLaeuft(false);
+    }
+  }
+
+  async function uebernehmen() {
+    if (!datei || !vorschau) return;
+    const n = vorschau.neu.length + vorschau.geaendert.length;
+    if (!window.confirm(`${vorschau.geaendert.length} Modul(e) ändern und ${vorschau.neu.length} neu anlegen? Vorher wird die Datenbank gesichert; jede Änderung wird protokolliert.`)) return;
+    setLaeuft(true);
+    setFehler('');
+    try {
+      const form = new FormData();
+      form.append('datei', datei);
+      form.append('pruefsumme', vorschau.pruefsumme);
+      const e = await api.post<{ neu: number; geaendert: number; sicherung: string | null; projekte_warten: number }>('/bibliotheken/module/import', form);
+      setVorschau(null);
+      setDatei(null);
+      onFertig(
+        `Import übernommen: ${e.geaendert} geändert, ${e.neu} neu (${n} insgesamt).` +
+          (e.sicherung ? ` Sicherung vorher: ${e.sicherung}.` : '') +
+          (e.projekte_warten > 0 ? ` ${e.projekte_warten} Projekt(e) warten wegen geänderter Moduldaten auf den Fachprüfer.` : ''),
+      );
+    } catch (err) {
+      setFehler((err as Error).message);
+    } finally {
+      setLaeuft(false);
+    }
+  }
+
+  const ok = vorschau !== null && vorschau.fehler.length === 0 && vorschau.neu.length + vorschau.geaendert.length > 0;
+  return (
+    <div className="karte">
+      <h2>Katalog aus Excel importieren</h2>
+      <p className="leise">
+        Den exportierten Katalog in Excel bearbeiten und hier wieder einlesen. Zuordnung über die Artikel-Nr., neue Artikel-Nr. = neues Modul.
+        Gelöscht wird nie – deaktivieren über die Spalte „aktiv“ = nein. Erst prüfen, dann übernehmen.
+      </p>
+      <form className="knopfreihe" onSubmit={pruefen}>
+        <input
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(e) => {
+            setDatei(e.target.files?.[0] ?? null);
+            setVorschau(null);
+          }}
+        />
+        <button className="knopf-zweit" type="submit" disabled={!datei || laeuft}>
+          {laeuft && !vorschau ? 'Wird geprüft …' : 'Prüfen (Vorschau)'}
+        </button>
+      </form>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      {vorschau && (
+        <div className="import-vorschau">
+          <p className="waerme-kennzahlen">
+            <strong>{vorschau.geaendert.length}</strong> geändert · <strong>{vorschau.neu.length}</strong> neu · <strong>{vorschau.unveraendert}</strong>{' '}
+            unverändert · <strong className={vorschau.fehler.length ? 'verstoss-text' : ''}>{vorschau.fehler.length}</strong> Fehler
+          </p>
+          {vorschau.fehler.length > 0 && (
+            <>
+              <Meldung>Die Datei enthält Fehler – bitte in Excel korrigieren und erneut prüfen. Übernommen wird nur eine fehlerfreie Datei.</Meldung>
+              <ul className="verstoesse">
+                {vorschau.fehler.map((f) => (
+                  <li key={`${f.zeile}-${f.text}`}>
+                    Zeile {f.zeile}
+                    {f.artikel_nr && ` (${f.artikel_nr})`}: {f.text}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {vorschau.neu.length > 0 && <p>Neue Module: {vorschau.neu.join(', ')}</p>}
+          {vorschau.aenderungen.length > 0 && (
+            <div className="tabelle-rahmen">
+              <table className="tabelle">
+                <thead>
+                  <tr>
+                    <th>Zeile</th>
+                    <th>Artikel-Nr.</th>
+                    <th>Feld</th>
+                    <th>alt</th>
+                    <th>neu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vorschau.aenderungen.map((a) => (
+                    <tr key={`${a.zeile}-${a.feld}`}>
+                      <td>{a.zeile}</td>
+                      <td>{a.artikel_nr}</td>
+                      <td>{a.feldname}</td>
+                      <td>{importWert(a.alt)}</td>
+                      <td>
+                        <strong>{importWert(a.neu)}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {vorschau.fehler.length === 0 && vorschau.neu.length + vorschau.geaendert.length === 0 && (
+            <Meldung art="hinweis">Keine Änderungen gegenüber dem Katalog.</Meldung>
+          )}
+          <button className="knopf" disabled={!ok || laeuft} onClick={() => void uebernehmen()}>
+            {laeuft ? 'Wird übernommen …' : 'Änderungen übernehmen'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

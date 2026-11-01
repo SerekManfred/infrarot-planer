@@ -10,6 +10,11 @@ describe('Deckenplan-Stile', () => {
   it('alle Striche im Plan in Bildschirmpixeln', () => {
     expect(css).toMatch(/\.plan \* \{ vector-effect: non-scaling-stroke; \}/);
   });
+  it('Modulkatalog: Kopfzeile und Spalte Artikel-Nr. fixiert, eigener Scrollbereich', () => {
+    expect(css).toMatch(/\.katalog-rahmen \{[^}]*overflow: auto;/);
+    expect(css).toMatch(/\.modulkatalog thead th \{ position: sticky; top: 0;/);
+    expect(css).toMatch(/\.modulkatalog tbody td:first-child \{ position: sticky; left: 0;/);
+  });
   it('Wärmeverteilung nimmt keine Zeigereingaben an (Sperrflächen und Module bleiben bedienbar)', () => {
     expect(css).toMatch(/\.waerme-schicht \{[^}]*pointer-events: none;/);
   });

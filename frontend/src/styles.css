@@ -343,11 +343,20 @@ body.ohne-bildlauf { overflow: hidden; }
 .modulkatalog td { min-width: 6rem; }
 .modulkatalog td:nth-child(2), .modulkatalog td:nth-child(10), .modulkatalog td:nth-child(14), .modulkatalog td:nth-child(15) { min-width: 12rem; }
 .modulkatalog .zahlfeld input { min-width: 5rem; }
-.modulkatalog tr.inaktiv td { opacity: 0.6; }
+/* Fixierte Kopfzeile und erste Spalte: Scrollbereich in beide Richtungen (Laptop, Tablet, Handy) */
+.katalog-rahmen { max-height: calc(100vh - 12rem); min-height: 16rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rand); }
+.modulkatalog { border-collapse: separate; border-spacing: 0; border: 0; }
+.modulkatalog thead th { position: sticky; top: 0; z-index: 2; }
+.modulkatalog tbody td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 2px 0 0 var(--rand); }
+.modulkatalog thead th:first-child { left: 0; z-index: 3; box-shadow: 2px 0 0 var(--rand); }
+.modulkatalog tbody td:first-child input { min-width: 7rem; }
+/* inaktive Zeilen gedämpft, aber deckend (sonst scheint die fixierte Spalte durch) */
+.modulkatalog tr.inaktiv td { color: var(--leise); background: var(--grau); }
+.modulkatalog tr.inaktiv td input, .modulkatalog tr.inaktiv td select { color: var(--leise); }
 .modulkatalog td.aktionen { white-space: nowrap; }
 
 /* Wärmeverteilung (feste Skala, halbtransparent über dem Plan) */
-.waerme-schicht { opacity: 0.6; pointer-events: none; }
+.waerme-schicht { opacity: 0.85; pointer-events: none; }
 .waerme-schicht rect { stroke: none; }
 .waerme-schalter { display: flex; align-items: center; gap: 0.25rem; min-height: 44px; margin-top: 0.5rem; }
 .waerme-schalter input { width: 22px; height: 22px; min-height: 0; margin: 0 0.4rem 0 0; display: inline-block; }
@@ -357,3 +366,13 @@ body.ohne-bildlauf { overflow: hidden; }
 .waerme-farbe { display: block; width: 44px; height: 14px; border-radius: 2px; }
 .waerme-stufe:first-child .waerme-farbe { outline: 1px solid var(--rand); outline-offset: -1px; }
 .waerme-einheit { margin-left: 0.4rem; color: var(--leise); }
+
+.waerme-schalter { flex-wrap: wrap; gap: 0.5rem; }
+.waerme-vorgabe { margin: 0.25rem 0; padding: 0.5rem 0.75rem; border-radius: 8px; background: var(--warnung-hell); color: var(--warnung); font-weight: 700; border-left: 4px solid var(--orange); }
+.waerme-kennzahlen { margin: 0.4rem 0 0.2rem; font-size: 1rem; }
+.waerme-stufe small { white-space: nowrap; font-size: 0.75rem; }
+.waerme-farbe { width: 64px; height: 16px; }
+.waerme-marke { pointer-events: none; }
+.waerme-marke circle { fill: none; stroke: var(--text); stroke-width: 2px; }
+.waerme-marke rect { fill: var(--text); opacity: 0.9; }
+.waerme-marke text { fill: #fff; font-weight: 700; }

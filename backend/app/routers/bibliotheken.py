@@ -8,7 +8,7 @@ import io
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -21,7 +21,12 @@ from app.csv_import import importiere
 from app.db import get_db
 from app.models import BibBauteil, BibKlimadaten, BibModul
 from app.modulabgleich import abgleichen as module_abgleichen, verwendungen
-from app.schemas import BauteilLesen, ImportBericht, KlimadatenLesen, ModulAenderung, ModulLesen, ModulNeu
+from app.modul_import import ImportAbgelehnt, uebernehmen as katalog_uebernehmen, vorschau as katalog_vorschau
+from app.schemas import (
+    BauteilLesen, ImportBericht, KatalogImportErgebnis, KatalogImportVorschau, KlimadatenLesen, ModulAenderung, ModulLesen,
+    ModulNeu,
+)
+from app.sicherung import SicherungFehler, datenbank_sichern
 from app.vorgabenabgleich import abgleichen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
@@ -141,6 +146,41 @@ def module_export(db: Session = Depends(get_db)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="Modulkatalog_{date.today():%Y-%m-%d}.xlsx"'},
     )
+
+
+async def _excel_lesen(datei: UploadFile) -> bytes:
+    inhalt = await datei.read(MAX_CSV_BYTES + 1)
+    if len(inhalt) > MAX_CSV_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Die Datei ist größer als 5 MB")
+    return inhalt
+
+
+@router.post("/module/import/vorschau", response_model=KatalogImportVorschau, dependencies=[Depends(vorgaben_pflege)])
+async def module_import_vorschau(datei: UploadFile, db: Session = Depends(get_db)):
+    """Excel-Reimport, Schritt 1: prüfen und Änderungen zeigen – nichts wird gespeichert."""
+    try:
+        return katalog_vorschau(db, await _excel_lesen(datei))
+    except ImportAbgelehnt as fehler:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(fehler)) from None
+
+
+@router.post("/module/import", response_model=KatalogImportErgebnis, dependencies=[Depends(vorgaben_pflege)])
+async def module_import(datei: UploadFile, pruefsumme: str = Form(...), db: Session = Depends(get_db)):
+    """Excel-Reimport, Schritt 2: nach Bestätigung übernehmen – nur fehlerfrei, vorher Datenbanksicherung."""
+    inhalt = await _excel_lesen(datei)
+    try:
+        katalog_vorschau(db, inhalt)  # vor der Sicherung prüfen: fehlerhafte Dateien brauchen keine Sicherung
+        sicherung = datenbank_sichern("vor_katalogimport")
+        ergebnis = katalog_uebernehmen(db, inhalt, pruefsumme)
+    except ImportAbgelehnt as fehler:
+        db.rollback()
+        detail = str(fehler) + ("" if not fehler.fehler else " " + "; ".join(f"Zeile {f['zeile']}: {f['text']}" for f in fehler.fehler[:5]))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail) from None
+    except SicherungFehler as fehler:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"{fehler} – Import nicht durchgeführt.") from None
+    db.commit()
+    abgleich = module_abgleichen(db, db.info.get("benutzer_id"))
+    return KatalogImportErgebnis(**ergebnis, sicherung=sicherung, projekte_warten=len(abgleich["betroffen"]))
 
 
 @router.post("/{art}/import", response_model=ImportBericht, dependencies=[Depends(vorgaben_pflege)])
