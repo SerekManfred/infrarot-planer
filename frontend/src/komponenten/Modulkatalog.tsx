@@ -7,14 +7,10 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, fachansicht, hatRolle, type AbgleichProjekt, type Benutzer, type KatalogModulDaten } from '../api';
 import { BEGRIFF, HILFE } from '../texte';
 import { Dialog, Hilfe, Meldung } from './Felder';
+import { ExcelTabelle } from './ExcelTabelle';
+import { VTabelle, zahlText } from './VTabelle';
 
 type Feld = keyof Omit<KatalogModulDaten, 'id'>;
-
-/** Zahl deutsch formatiert (ohne unnötige Nachkommastellen); leer → Ersatztext */
-export function zahlText(w: number | null | undefined, einheit = '', leer = '–'): string {
-  if (w === null || w === undefined) return leer;
-  return `${w.toLocaleString('de-DE', { maximumFractionDigits: 2 })}${einheit}`;
-}
 
 /** Strahlerkennwerte kompakt: „90 °C · ε 0,3 · 120°“; fehlende als „Vorgabe“ */
 export function strahlerText(m: Pick<KatalogModulDaten, 'oberflaechentemperatur_c' | 'emissionsgrad' | 'abstrahlwinkel_grad'>): string {
@@ -42,7 +38,7 @@ const DIALOG_FELDER: { feld: Feld; name: string; art: 'text' | 'zahl' | 'janein'
   { feld: 'vk_netto', name: 'VK netto (€)', art: 'zahl' },
   { feld: 'montagezeit_min', name: 'Montagezeit (min)', art: 'zahl' },
   { feld: 'oberflaechentemperatur_c', name: 'Oberflächentemperatur (°C)', art: 'zahl', hilfe: HILFE.strahlerkennwerte },
-  { feld: 'emissionsgrad', name: 'Emissionsgrad (0–1)', art: 'zahl' },
+  { feld: 'emissionsgrad', name: 'Emissionsgrad (0–1, ohne Einheit)', art: 'zahl', hilfe: HILFE.emissionsgrad },
   { feld: 'abstrahlwinkel_grad', name: 'Abstrahlwinkel (°)', art: 'zahl' },
   { feld: 'quelle', name: `${BEGRIFF.quelle} (Produktseite)`, art: 'text', pflicht: true },
   { feld: 'bemerkung', name: 'Bemerkung', art: 'text' },
@@ -78,6 +74,9 @@ function ModulDialog({
       else if (art === 'zahl') {
         wert = t === '' ? null : Number(t.replace(',', '.'));
         if (typeof wert === 'number' && !Number.isFinite(wert)) return setFehler(`${name}: bitte eine Zahl eingeben.`);
+        if (feld === 'emissionsgrad' && typeof wert === 'number' && !(wert > 0 && wert <= 1)) {
+          return setFehler('Emissionsgrad: nur Werte größer als 0 bis höchstens 1 (Verhältniszahl ohne Einheit, z. B. 0,93).');
+        }
       } else wert = feld === 'schutzart' ? t.toUpperCase().replace(/\s/g, '') : t;
       if (pflicht && (wert === null || wert === '')) return setFehler(`${name} darf nicht leer sein.`);
       if (wert !== (modul[feld] ?? (art === 'text' ? '' : null))) aenderung[feld] = wert;
@@ -198,9 +197,11 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
       {fehler && <Meldung>{fehler}</Meldung>}
       {hinweis && <Meldung art="hinweis">{hinweis}</Meldung>}
       <div className="knopfreihe">
-        <a className="knopf-zweit" href="/api/bibliotheken/module/export.xlsx" download>
-          Als Excel exportieren
-        </a>
+        {!darf && (
+          <a className="knopf-zweit" href="/api/bibliotheken/module/export.xlsx" download>
+            Als Excel exportieren
+          </a>
+        )}
         <label className="inline">
           <input type="checkbox" checked={inaktiveZeigen} onChange={(e) => setInaktiveZeigen(e.target.checked)} /> inaktive Module zeigen
         </label>
@@ -208,61 +209,28 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
       {module === null ? (
         <p>Wird geladen …</p>
       ) : (
-        // Kopfzeile bleibt beim Scrollen stehen (eigener Scrollbereich, CSS „sticky“). Bauhöhe, Schutzart, Quelle und
-        // Bemerkung nur im Dialog und im Excel-Export (Praxistest 01.11.2026) – so passt die Tabelle auf den Laptop.
-        <div className="tabelle-rahmen katalog-rahmen">
-          <table className="tabelle modulkatalog">
-            <thead>
-              <tr>
-                <th>Artikel-Nr.</th>
-                <th>Bezeichnung</th>
-                <th className="zahl">Leistung</th>
-                <th className="zahl">L × B (mm)</th>
-                <th className="zahl">Gewicht</th>
-                <th>
-                  Bad
-                  <Hilfe begriff="Bad geeignet" text={HILFE.badGeeignet} />
-                </th>
-                <th>Oberfläche</th>
-                <th className="zahl">EK / VK netto</th>
-                <th className="zahl">Montage</th>
-                <th className="zahl">
-                  Strahler
-                  <Hilfe begriff="Strahlerkennwerte" text={HILFE.strahlerkennwerte} />
-                </th>
-                <th aria-label="Bearbeiten" />
-              </tr>
-            </thead>
-            <tbody>
-              {sichtbar.map((m) => (
-                <tr key={m.id} className={m.aktiv ? '' : 'inaktiv'}>
-                  <td>
-                    <strong>{m.artikel_nr}</strong>
-                    {!m.aktiv && <small className="inaktiv-marke">inaktiv</small>}
-                  </td>
-                  <td className="umbruch">{m.bezeichnung}</td>
-                  <td className="zahl">{zahlText(m.leistung_w, ' W')}</td>
-                  <td className="zahl">
-                    {zahlText(m.laenge_mm)} × {zahlText(m.breite_mm)}
-                  </td>
-                  <td className="zahl">{zahlText(m.gewicht_kg, ' kg')}</td>
-                  <td>{m.bad_geeignet ? 'ja' : 'nein'}</td>
-                  <td className="umbruch">{m.oberflaeche || '–'}</td>
-                  <td className="zahl">
-                    {zahlText(m.ek_netto, ' €', 'fehlt')} / {zahlText(m.vk_netto, ' €', 'fehlt')}
-                  </td>
-                  <td className="zahl">{zahlText(m.montagezeit_min, ' min', 'fehlt')}</td>
-                  <td className="zahl umbruch-zahl">{strahlerText(m)}</td>
-                  <td className="aktionen">
-                    <button className="knopf-leise klein" onClick={() => setBearbeiten(m)}>
-                      {darf ? 'Bearbeiten' : 'Details'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        // Einheitliche Tabelle (fixierte Kopfzeile, Kartenansicht am Handy). Bauhöhe, Schutzart, Quelle und Bemerkung nur
+        // im Dialog und im Excel-Export (Praxistest 01.11.2026) – so passt die Tabelle auf den Laptop.
+        <VTabelle
+          name="Modulkatalog"
+          zeilen={sichtbar}
+          schluessel={(m) => m.id}
+          inaktiv={(m) => !m.aktiv}
+          spalten={[
+            { kopf: 'Artikel-Nr.', wert: (m) => <><strong>{m.artikel_nr}</strong>{!m.aktiv && <small className="inaktiv-marke">inaktiv</small>}</> },
+            { kopf: 'Bezeichnung', wert: (m) => m.bezeichnung, umbruch: true },
+            { kopf: 'Leistung (W)', zahl: true, wert: (m) => zahlText(m.leistung_w) },
+            { kopf: 'L × B (mm)', zahl: true, wert: (m) => `${zahlText(m.laenge_mm)} × ${zahlText(m.breite_mm)}` },
+            { kopf: 'Gewicht (kg)', zahl: true, wert: (m) => zahlText(m.gewicht_kg) },
+            { kopf: 'Bad', wert: (m) => (m.bad_geeignet ? 'ja' : 'nein'), hilfe: { begriff: 'Bad geeignet', text: HILFE.badGeeignet } },
+            { kopf: 'Oberfläche', wert: (m) => m.oberflaeche || '–', umbruch: true },
+            { kopf: 'EK / VK (€)', zahl: true, wert: (m) => `${zahlText(m.ek_netto, '', 'fehlt')} / ${zahlText(m.vk_netto, '', 'fehlt')}` },
+            { kopf: 'Montage (min)', zahl: true, wert: (m) => zahlText(m.montagezeit_min, '', 'fehlt') },
+            { kopf: 'Strahler', zahl: true, umbruch: true, wert: (m) => strahlerText(m), hilfe: { begriff: 'Strahlerkennwerte', text: HILFE.strahlerkennwerte } },
+          ]}
+          aktion={setBearbeiten}
+          aktionText={darf ? 'Bearbeiten' : 'Details'}
+        />
       )}
       {bearbeiten && (
         <ModulDialog
@@ -276,7 +244,12 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
         />
       )}
       {darf && <NeuesModul onAngelegt={(nr) => aendern(async () => undefined, `Modul ${nr} angelegt.`)} />}
-      {darf && <KatalogImport onFertig={(text) => aendern(async () => undefined, text)} />}
+      {darf && (
+        <div className="karte">
+          <h2>Katalog als Excel</h2>
+          <ExcelTabelle name="module" titel="Modulkatalog" onFertig={(text) => aendern(async () => undefined, text)} />
+        </div>
+      )}
     </section>
   );
 }
@@ -353,152 +326,3 @@ function NeuesModul({ onAngelegt }: { onAngelegt: (artikelNr: string) => void })
   );
 }
 
-interface ImportVorschau {
-  neu: string[];
-  geaendert: string[];
-  unveraendert: number;
-  aenderungen: { zeile: number; artikel_nr: string; feld: string; feldname: string; alt: number | string | boolean | null; neu: number | string | boolean | null }[];
-  fehler: { zeile: number; artikel_nr: string; text: string }[];
-  pruefsumme: string;
-}
-
-function importWert(w: number | string | boolean | null): string {
-  if (w === null || w === '') return '–';
-  if (typeof w === 'boolean') return w ? 'ja' : 'nein';
-  return typeof w === 'number' ? String(w).replace('.', ',') : w;
-}
-
-/**
- * Excel-Reimport (02.11.2026): exportierten Katalog in Excel bearbeiten und wieder einlesen. Erst Vorschau (neu,
- * geändert, unverändert, Änderungen, Fehler mit Zeile), Übernahme nur fehlerfrei und nach Bestätigung; der Server
- * sichert vorher die Datenbank. Gelöscht wird über den Import nie.
- */
-function KatalogImport({ onFertig }: { onFertig: (text: string) => void }) {
-  const [datei, setDatei] = useState<File | null>(null);
-  const [vorschau, setVorschau] = useState<ImportVorschau | null>(null);
-  const [fehler, setFehler] = useState('');
-  const [laeuft, setLaeuft] = useState(false);
-
-  async function pruefen(e: FormEvent) {
-    e.preventDefault();
-    if (!datei) return;
-    setFehler('');
-    setVorschau(null);
-    setLaeuft(true);
-    try {
-      const form = new FormData();
-      form.append('datei', datei);
-      setVorschau(await api.post<ImportVorschau>('/bibliotheken/module/import/vorschau', form));
-    } catch (err) {
-      setFehler((err as Error).message);
-    } finally {
-      setLaeuft(false);
-    }
-  }
-
-  async function uebernehmen() {
-    if (!datei || !vorschau) return;
-    const n = vorschau.neu.length + vorschau.geaendert.length;
-    if (!window.confirm(`${vorschau.geaendert.length} Modul(e) ändern und ${vorschau.neu.length} neu anlegen? Vorher wird die Datenbank gesichert; jede Änderung wird protokolliert.`)) return;
-    setLaeuft(true);
-    setFehler('');
-    try {
-      const form = new FormData();
-      form.append('datei', datei);
-      form.append('pruefsumme', vorschau.pruefsumme);
-      const e = await api.post<{ neu: number; geaendert: number; sicherung: string | null; projekte_warten: number }>('/bibliotheken/module/import', form);
-      setVorschau(null);
-      setDatei(null);
-      onFertig(
-        `Import übernommen: ${e.geaendert} geändert, ${e.neu} neu (${n} insgesamt).` +
-          (e.sicherung ? ` Sicherung vorher: ${e.sicherung}.` : '') +
-          (e.projekte_warten > 0 ? ` ${e.projekte_warten} Projekt(e) warten wegen geänderter Moduldaten auf den Fachprüfer.` : ''),
-      );
-    } catch (err) {
-      setFehler((err as Error).message);
-    } finally {
-      setLaeuft(false);
-    }
-  }
-
-  const ok = vorschau !== null && vorschau.fehler.length === 0 && vorschau.neu.length + vorschau.geaendert.length > 0;
-  return (
-    <div className="karte">
-      <h2>Katalog aus Excel importieren</h2>
-      <p className="leise">
-        Den exportierten Katalog in Excel bearbeiten und hier wieder einlesen. Zuordnung über die Artikel-Nr., neue Artikel-Nr. = neues Modul.
-        Gelöscht wird nie – deaktivieren über die Spalte „aktiv“ = nein. Erst prüfen, dann übernehmen.
-      </p>
-      <form className="knopfreihe" onSubmit={pruefen}>
-        <input
-          type="file"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => {
-            setDatei(e.target.files?.[0] ?? null);
-            setVorschau(null);
-          }}
-        />
-        <button className="knopf-zweit" type="submit" disabled={!datei || laeuft}>
-          {laeuft && !vorschau ? 'Wird geprüft …' : 'Prüfen (Vorschau)'}
-        </button>
-      </form>
-      {fehler && <Meldung>{fehler}</Meldung>}
-      {vorschau && (
-        <div className="import-vorschau">
-          <p className="waerme-kennzahlen">
-            <strong>{vorschau.geaendert.length}</strong> geändert · <strong>{vorschau.neu.length}</strong> neu · <strong>{vorschau.unveraendert}</strong>{' '}
-            unverändert · <strong className={vorschau.fehler.length ? 'verstoss-text' : ''}>{vorschau.fehler.length}</strong> Fehler
-          </p>
-          {vorschau.fehler.length > 0 && (
-            <>
-              <Meldung>Die Datei enthält Fehler – bitte in Excel korrigieren und erneut prüfen. Übernommen wird nur eine fehlerfreie Datei.</Meldung>
-              <ul className="verstoesse">
-                {vorschau.fehler.map((f) => (
-                  <li key={`${f.zeile}-${f.text}`}>
-                    Zeile {f.zeile}
-                    {f.artikel_nr && ` (${f.artikel_nr})`}: {f.text}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {vorschau.neu.length > 0 && <p>Neue Module: {vorschau.neu.join(', ')}</p>}
-          {vorschau.aenderungen.length > 0 && (
-            <div className="tabelle-rahmen">
-              <table className="tabelle">
-                <thead>
-                  <tr>
-                    <th>Zeile</th>
-                    <th>Artikel-Nr.</th>
-                    <th>Feld</th>
-                    <th>alt</th>
-                    <th>neu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vorschau.aenderungen.map((a) => (
-                    <tr key={`${a.zeile}-${a.feld}`}>
-                      <td>{a.zeile}</td>
-                      <td>{a.artikel_nr}</td>
-                      <td>{a.feldname}</td>
-                      <td>{importWert(a.alt)}</td>
-                      <td>
-                        <strong>{importWert(a.neu)}</strong>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {vorschau.fehler.length === 0 && vorschau.neu.length + vorschau.geaendert.length === 0 && (
-            <Meldung art="hinweis">Keine Änderungen gegenüber dem Katalog.</Meldung>
-          )}
-          <button className="knopf" disabled={!ok || laeuft} onClick={() => void uebernehmen()}>
-            {laeuft ? 'Wird übernommen …' : 'Änderungen übernehmen'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}

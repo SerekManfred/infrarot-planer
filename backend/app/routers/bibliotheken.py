@@ -11,7 +11,6 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from openpyxl import Workbook
-from openpyxl.styles import Font
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +26,7 @@ from app.schemas import (
     ModulNeu,
 )
 from app.sicherung import SicherungFehler, datenbank_sichern
+from app.tabellen_excel import hinweisblatt, kopfzeile_formatieren
 from app.vorgabenabgleich import abgleichen
 
 router = APIRouter(prefix="/bibliotheken", tags=["Bibliotheken"], dependencies=[Depends(aktueller_benutzer)])
@@ -111,6 +111,18 @@ def modul_loeschen(modul_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+# Erklärung je Spalte für das Hinweisblatt (einheitlicher Aufbau aller Excel-Dateien, Paket L)
+MODUL_ERKLAERUNG = {
+    "artikel_nr": "eindeutig, Schlüssel für die Zuordnung", "leistung_w": "größer als 0", "laenge_mm": "größer als 0",
+    "breite_mm": "größer als 0", "schutzart": "z. B. IP44", "bad_geeignet": "ja/nein – nur ab IP44",
+    "quelle": "Pflicht, z. B. Link zur Produktseite", "ek_netto": "leer = fehlt (wird nicht geschätzt)",
+    "vk_netto": "leer = fehlt", "montagezeit_min": "leer = fehlt",
+    "oberflaechentemperatur_c": "nur Wärmeverteilung; leer = Vorgabewert",
+    "emissionsgrad": "Verhältniszahl ohne Einheit, größer als 0 und höchstens 1 (typisch 0,90–0,95, Herstellerdatenblatt)",
+    "abstrahlwinkel_grad": "voller Winkel, größer als 0 bis 180", "aktiv": "ja/nein – „nein“ deaktiviert (nie gelöscht)",
+}
+MODUL_PFLICHT = {"artikel_nr", "bezeichnung", "leistung_w", "laenge_mm", "breite_mm", "schutzart", "quelle"}
+
 EXPORT_SPALTEN = (
     ("Artikel-Nr.", "artikel_nr"), ("Bezeichnung", "bezeichnung"), ("Leistung (W)", "leistung_w"),
     ("Länge (mm)", "laenge_mm"), ("Breite (mm)", "breite_mm"), ("Bauhöhe (mm)", "bauhoehe_mm"),
@@ -118,7 +130,7 @@ EXPORT_SPALTEN = (
     ("Oberfläche / Farbe", "oberflaeche"), ("EK netto (€)", "ek_netto"), ("VK netto (€)", "vk_netto"),
     ("Montagezeit (min)", "montagezeit_min"), ("Quelle (Produktseite)", "quelle"), ("Bemerkung", "bemerkung"),
     # nach den Spalten der Importdatei: Strahlerkennwerte für die Wärmeverteilung
-    ("Oberflächentemperatur (°C)", "oberflaechentemperatur_c"), ("Emissionsgrad", "emissionsgrad"),
+    ("Oberflächentemperatur (°C)", "oberflaechentemperatur_c"), ("Emissionsgrad (0–1, ohne Einheit)", "emissionsgrad"),
     ("Abstrahlwinkel (°)", "abstrahlwinkel_grad"),
 )
 
@@ -130,15 +142,15 @@ def module_export(db: Session = Depends(get_db)):
     blatt = mappe.active
     blatt.title = "Modulkatalog"
     blatt.append([k for k, _ in EXPORT_SPALTEN] + ["aktiv"])
-    for zelle in blatt[1]:
-        zelle.font = Font(bold=True)
     for m in db.scalars(select(BibModul).order_by(BibModul.leistung_w, BibModul.artikel_nr)):
         werte = [getattr(m, f) for _, f in EXPORT_SPALTEN]
         werte[8] = "ja" if m.bad_geeignet else "nein"
         blatt.append(werte + ["ja" if m.aktiv else "nein"])
     for spalte, breite in zip("ABCDEFGHIJKLMNOPQRS", (12, 40, 12, 11, 11, 12, 12, 13, 12, 36, 12, 12, 16, 50, 40, 14, 12, 14, 8), strict=True):
         blatt.column_dimensions[spalte].width = breite
-    blatt.freeze_panes = "A2"
+    kopfzeile_formatieren(blatt)
+    hinweisblatt(mappe, "Modulkatalog", [(k, f in MODUL_PFLICHT, MODUL_ERKLAERUNG.get(f, "")) for k, f in (*EXPORT_SPALTEN, ("aktiv", "aktiv"))],
+                 "Artikel-Nr.")
     puffer = io.BytesIO()
     mappe.save(puffer)
     return Response(

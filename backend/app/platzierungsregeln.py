@@ -35,7 +35,7 @@ REGELN: tuple[Regel, ...] = (
     Regel("bevorzugte_ausrichtung", "Bevorzugte Ausrichtung", "Text", "text"),
     # Vorgabewerte für Module ohne Katalogangaben – nur für die Wärmeverteilung, bis zur Pflege „Vorgabe fehlt“
     Regel("strahler_temperatur_c", "Vorgabewert Oberflächentemperatur Modul (Wärmeverteilung)", "°C", "zahl"),
-    Regel("strahler_emissionsgrad", "Vorgabewert Emissionsgrad Modul (Wärmeverteilung)", "–", "zahl"),
+    Regel("strahler_emissionsgrad", "Vorgabewert Emissionsgrad Modul (Wärmeverteilung)", "0–1, ohne Einheit", "zahl"),
     Regel("strahler_abstrahlwinkel_grad", "Vorgabewert Abstrahlwinkel Modul (Wärmeverteilung)", "°", "zahl"),
 )
 

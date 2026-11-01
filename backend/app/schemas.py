@@ -869,3 +869,40 @@ class KatalogImportErgebnis(BaseModel):
     sicherung: str | None
     # Projekte, die wegen geänderter Moduldaten auf den Fachprüfer warten
     projekte_warten: int
+
+
+# ── Excel-Import aller Tabellen der Fachvorgaben (Paket L) ──
+
+
+class TabellenImportAenderung(BaseModel):
+    zeile: int
+    schluessel: str
+    feld: str
+    feldname: str
+    alt: float | str | bool | None
+    neu: float | str | bool | None
+
+
+class TabellenImportFehler(BaseModel):
+    zeile: int
+    schluessel: str
+    text: str
+
+
+class TabellenImportVorschau(BaseModel):
+    neu: list[str]
+    geaendert: list[str]
+    unveraendert: int
+    aenderungen: list[TabellenImportAenderung]
+    fehler: list[TabellenImportFehler]
+    pruefsumme: str
+    # Projekte, die nach der Übernahme auf den Fachprüfer warten würden (nur Tabellen der Fachvorgaben)
+    betroffen: list[dict] = []
+
+
+class TabellenImportErgebnis(BaseModel):
+    neu: int
+    geaendert: int
+    unveraendert: int
+    sicherung: str | None
+    projekte_warten: int

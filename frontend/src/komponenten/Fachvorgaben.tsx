@@ -7,6 +7,8 @@ import {
   type Fachvorgaben,
   type FachvorgabenWerte,
   type Gebaeudestandard,
+  type Bauteil,
+  type Klimadaten,
   type Platzierungsregel,
   type Raumtyp,
   type VorschauAnfrage,
@@ -14,7 +16,9 @@ import {
 } from '../api';
 import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, watt, zahl, zeitpunkt } from '../texte';
 import { ObjektbibliothekKarte } from './Objektbibliothek';
-import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
+import { Dialog, Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
+import { ExcelTabelle } from './ExcelTabelle';
+import { VTabelle, zahlText, type VSpalte } from './VTabelle';
 import { Protokoll } from './Protokoll';
 
 export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
@@ -75,6 +79,13 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
     }
     laden();
     setStand((s) => s + 1);
+  }
+
+  function importFertig(text: string) {
+    setFehler('');
+    setHinweis(text);
+    laden();
+    setStand((x) => x + 1);
   }
 
   if (!vorgaben) return fehler ? <Meldung>{fehler}</Meldung> : <p>Wird geladen …</p>;
@@ -141,72 +152,17 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
         <small className="leise">Zuletzt geändert: {zeitpunkt(w.geaendert_am ?? null)}</small>
       </div>
 
-      <div className="karte">
-        <h2>
-          Raumtypen und Pauschalen (W/m²)
-          <Hilfe begriff="Pauschale" text={HILFE.pauschale} />
-        </h2>
-        <p className="leise">
-          Leere Pauschale → Rückfallwert des Gebäudestandards. Für „{GEBAEUDESTANDARDS.sonstiger_bestand}“ gibt es keine Tabellenwerte; der
-          Fachprüfer legt die Pauschale je Raum fest. Raumtemperatur, Luftwechsel und Korrekturfaktor werden nur für die Kontrollrechnung
-          gebraucht.
-        </p>
-        <div className="tabelle-rahmen">
-          <table className="tabelle vorgaben">
-            <thead>
-              <tr>
-                <th>
-                  Raumtyp
-                  <Hilfe begriff="Raumtyp" text={HILFE.raumtyp} />
-                </th>
-                {standards.map((gs) => (
-                  <th key={gs}>
-                    {GEBAEUDESTANDARDS[gs]}
-                    {gs === 'sonstiger_bestand' && ' – Richtwert, je Raum'}
-                    <Hilfe
-                      begriff={GEBAEUDESTANDARDS[gs]}
-                      text={gs === 'sonstiger_bestand' ? `${HILFE_GEBAEUDESTANDARD[gs]} ${HILFE.richtwertAltbau}` : HILFE_GEBAEUDESTANDARD[gs]}
-                    />
-                  </th>
-                ))}
-                <th>
-                  {BEGRIFF.raumtemperatur}
-                  <Hilfe begriff="Raumtemperatur" text={HILFE.raumtemperatur} />
-                </th>
-                <th>
-                  {BEGRIFF.luftwechsel}
-                  <Hilfe begriff="Luftwechsel" text={HILFE.luftwechsel} />
-                </th>
-                <th>
-                  {BEGRIFF.korrekturfaktor}
-                  <Hilfe begriff="Korrekturfaktor angrenzender Raum" text={HILFE.korrekturfaktor} />
-                </th>
-                <th>
-                  {BEGRIFF.quelle}
-                  <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
-                </th>
-                {darf && <th />}
-              </tr>
-            </thead>
-            <tbody>
-              {vorgaben.raumtypen.map((t) => (
-                <RaumtypZeile key={t.id} typ={t} vorgaben={vorgaben} darf={darf} pruefen={mitVorschau} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {darf && <NeuerRaumtyp aendern={aendern} />}
-      </div>
-
-      <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} pruefen={mitVorschau} />
-      <ObjektbibliothekKarte objekte={vorgaben.objekte ?? []} raumtypen={vorgaben.raumtypen} darf={darf} pruefen={mitVorschau} />
+      <RaumtypenKarte vorgaben={vorgaben} darf={darf} pruefen={mitVorschau} aendern={aendern} fertig={importFertig} />
+      <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} pruefen={mitVorschau} fertig={importFertig} />
+      <ObjektbibliothekKarte objekte={vorgaben.objekte ?? []} raumtypen={vorgaben.raumtypen} darf={darf} pruefen={mitVorschau} fertig={importFertig} />
       <div className="karte">
         <h2>Modulkatalog</h2>
         <p>
-          Gepflegt wird der Katalog auf der eigenen Seite <a href="#/module">Modulkatalog</a> (anlegen, jedes Feld ändern, deaktivieren, Export
-          als Excel).
+          Gepflegt wird der Katalog auf der eigenen Seite <a href="#/module">Modulkatalog</a> (anlegen, bearbeiten, deaktivieren).
         </p>
+        {darf && <ExcelTabelle name="module" titel="Modulkatalog" onFertig={importFertig} />}
       </div>
+      <BibliothekKarten darf={darf} stand={stand} fertig={importFertig} />
 
       {darf && <CsvImport />}
 
@@ -220,83 +176,183 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
 
 type Pruefen = (anfrage: VorschauAnfrage, aktion: () => Promise<unknown>) => Promise<void>;
 
-function RaumtypZeile({
+type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
+
+const MIT_TABELLE = ['neubau', 'effizienzhaus_sanierung'] as const;
+
+/** Raumtypen und Pauschalen (Praxistest J): kompakte Tabelle, alles Weitere im Dialog */
+function RaumtypenKarte({
+  vorgaben,
+  darf,
+  pruefen,
+  aendern,
+  fertig,
+}: {
+  vorgaben: Fachvorgaben;
+  darf: boolean;
+  pruefen: Pruefen;
+  aendern: Aendern;
+  fertig: (text: string) => void;
+}) {
+  const [bearbeiten, setBearbeiten] = useState<Raumtyp | null>(null);
+  const pauschale = (t: Raumtyp, gs: string) => vorgaben.pauschalen.find((p) => p.raumtyp_id === t.id && p.gebaeudestandard === gs);
+  const spalten: VSpalte<Raumtyp>[] = [
+    { kopf: 'Raumtyp', wert: (t) => <strong>{t.bezeichnung}</strong>, hilfe: { begriff: 'Raumtyp', text: HILFE.raumtyp } },
+    ...MIT_TABELLE.map((gs) => ({
+      kopf: `${gs === 'neubau' ? 'Neubau' : 'EH-Sanierung'} (W/m²)`,
+      zahl: true,
+      hilfe: { begriff: GEBAEUDESTANDARDS[gs], text: HILFE_GEBAEUDESTANDARD[gs] },
+      wert: (t: Raumtyp) => {
+        const w = pauschale(t, gs)?.w_m2;
+        const rueckfall = vorgaben.werte[`rueckfall_${gs}_w_m2` as const];
+        return w !== undefined ? zahlText(w) : <span className="leise">({rueckfall === null ? 'fehlt' : zahlText(rueckfall)})</span>;
+      },
+    })),
+    {
+      kopf: 'Altbau-Richtwert (W/m²)', zahl: true, wert: (t) => zahlText(t.richtwert_altbau_w_m2),
+      hilfe: { begriff: 'Richtwert Altbau', text: HILFE.richtwertAltbau },
+    },
+    { kopf: 'θ int (°C)', zahl: true, wert: (t) => zahlText(t.theta_int, '', 'fehlt'), hilfe: { begriff: 'Raumtemperatur', text: HILFE.raumtemperatur } },
+    { kopf: 'n (1/h)', zahl: true, wert: (t) => zahlText(t.luftwechsel, '', 'fehlt'), hilfe: { begriff: 'Luftwechsel', text: HILFE.luftwechsel } },
+    { kopf: 'f (–)', zahl: true, wert: (t) => zahlText(t.reduktionsfaktor, '', 'fehlt'), hilfe: { begriff: 'Korrekturfaktor', text: HILFE.korrekturfaktor } },
+  ];
+  return (
+    <div className="karte">
+      <h2>
+        Raumtypen und Pauschalen
+        <Hilfe begriff="Pauschale" text={HILFE.pauschale} />
+      </h2>
+      <p className="leise">
+        In Klammern: leer → Rückfallwert des Gebäudestandards. Für „{GEBAEUDESTANDARDS.sonstiger_bestand}“ gibt es keine Tabellenwerte (nur
+        Richtwert); der Fachprüfer legt die Pauschale je Raum fest. θ int, n und f nur für die Kontrollrechnung. Quelle und Bemerkung im Dialog.
+      </p>
+      <VTabelle
+        name="Raumtypen und Pauschalen"
+        spalten={spalten}
+        zeilen={vorgaben.raumtypen}
+        schluessel={(t) => t.id}
+        aktion={setBearbeiten}
+        aktionText={darf ? 'Bearbeiten' : 'Details'}
+      />
+      {darf && <NeuerRaumtyp aendern={aendern} />}
+      {darf && <ExcelTabelle name="raumtypen" titel="Raumtypen" onFertig={fertig} />}
+      {bearbeiten && <RaumtypDialog typ={bearbeiten} vorgaben={vorgaben} darf={darf} pruefen={pruefen} onSchliessen={() => setBearbeiten(null)} />}
+    </div>
+  );
+}
+
+function feldText(w: number | null | undefined): string {
+  return w === null || w === undefined ? '' : String(w).replace('.', ',');
+}
+
+function leseFeld(t: string): number | null {
+  const x = t.trim().replace(',', '.');
+  return x === '' ? null : Number(x);
+}
+
+function RaumtypDialog({
   typ,
   vorgaben,
   darf,
   pruefen,
+  onSchliessen,
 }: {
   typ: Raumtyp;
   vorgaben: Fachvorgaben;
   darf: boolean;
   pruefen: Pruefen;
+  onSchliessen: () => void;
 }) {
-  const setzen = (feld: keyof Raumtyp) => (wert: unknown) =>
-    pruefen({ art: 'raumtyp_aendern', ziel: typ.id, daten: { [feld]: wert } }, () =>
-      api.patch(`/fachvorgaben/raumtypen/${typ.id}`, { [feld]: wert }),
-    );
+  const p = (gs: string) => vorgaben.pauschalen.find((x) => x.raumtyp_id === typ.id && x.gebaeudestandard === gs);
+  const [t, setT] = useState({
+    bezeichnung: typ.bezeichnung,
+    theta_int: feldText(typ.theta_int),
+    luftwechsel: feldText(typ.luftwechsel),
+    reduktionsfaktor: feldText(typ.reduktionsfaktor),
+    richtwert_altbau_w_m2: feldText(typ.richtwert_altbau_w_m2),
+    reihenfolge: String(typ.reihenfolge),
+    quelle: typ.quelle,
+    bemerkung: typ.bemerkung,
+    neubau: feldText(p('neubau')?.w_m2),
+    quelle_neubau: p('neubau')?.quelle ?? '',
+    effizienzhaus_sanierung: feldText(p('effizienzhaus_sanierung')?.w_m2),
+    quelle_effizienzhaus_sanierung: p('effizienzhaus_sanierung')?.quelle ?? '',
+  });
+  const [fehler, setFehler] = useState('');
+  const feld = (k: keyof typeof t, name: string, zahl = false, breit = false) => (
+    <label className={breit ? 'breit' : undefined}>
+      {name}
+      <input value={t[k]} disabled={!darf} inputMode={zahl ? 'decimal' : undefined} onChange={(e) => setT({ ...t, [k]: e.target.value })} />
+    </label>
+  );
+
+  async function speichern() {
+    const zahlen = { theta_int: leseFeld(t.theta_int), luftwechsel: leseFeld(t.luftwechsel), reduktionsfaktor: leseFeld(t.reduktionsfaktor),
+      richtwert_altbau_w_m2: leseFeld(t.richtwert_altbau_w_m2), reihenfolge: leseFeld(t.reihenfolge) ?? 0 };
+    if (Object.values(zahlen).some((w) => w !== null && !Number.isFinite(w))) return setFehler('Bitte Zahlen eingeben (z. B. 20 oder 0,5).');
+    if (!t.bezeichnung.trim()) return setFehler('Bitte eine Bezeichnung eingeben.');
+    const daten: Record<string, unknown> = { bezeichnung: t.bezeichnung.trim(), quelle: t.quelle.trim(), bemerkung: t.bemerkung, ...zahlen };
+    const aenderung = Object.fromEntries(Object.entries(daten).filter(([k, v]) => v !== (typ as unknown as Record<string, unknown>)[k]));
+    if (Object.keys(aenderung).length > 0) {
+      await pruefen({ art: 'raumtyp_aendern', ziel: typ.id, daten: aenderung }, () => api.patch(`/fachvorgaben/raumtypen/${typ.id}`, aenderung));
+    }
+    for (const gs of MIT_TABELLE) {
+      const w = leseFeld(t[gs]);
+      if (w !== null && !Number.isFinite(w)) return setFehler('Pauschale: bitte eine Zahl eingeben.');
+      const quelle = t[`quelle_${gs}`].trim();
+      const alt = p(gs);
+      if ((alt?.w_m2 ?? null) === w && (alt?.quelle ?? '') === quelle) continue;
+      if (w !== null && !quelle) return setFehler(`Bitte die Quelle der Pauschale ${GEBAEUDESTANDARDS[gs]} angeben.`);
+      const pd = { raumtyp_id: typ.id, gebaeudestandard: gs, w_m2: w, quelle };
+      await pruefen({ art: 'pauschale', daten: pd }, () => api.put('/fachvorgaben/pauschalen', pd));
+    }
+    onSchliessen();
+  }
+
   return (
-    <tr>
-      <td>
-        <Textfeld wert={typ.bezeichnung} pflicht gesperrt={!darf} onSpeichern={setzen('bezeichnung')} />
-      </td>
-      {(Object.keys(GEBAEUDESTANDARDS) as Gebaeudestandard[]).map((gs) => {
-        if (gs === 'sonstiger_bestand') {
-          // kein Tabellenwert: nur Richtwert als Orientierung für den Fachprüfer (Pauschale je Raum)
-          return (
-            <td key={gs}>
-              <Zahlfeld wert={typ.richtwert_altbau_w_m2} platzhalter="Richtwert" gesperrt={!darf} onSpeichern={setzen('richtwert_altbau_w_m2')} />
-            </td>
-          );
-        }
-        const bestehend = vorgaben.pauschalen.find((p) => p.raumtyp_id === typ.id && p.gebaeudestandard === gs);
-        const wert = bestehend?.w_m2 ?? null;
-        const rueckfall = vorgaben.werte[`rueckfall_${gs}_w_m2` as const];
-        return (
-          <td key={gs}>
-            <Zahlfeld
-              wert={wert}
-              platzhalter={rueckfall === null ? 'fehlt' : `(${zahl(rueckfall, 0)})`}
-              gesperrt={!darf}
-              onSpeichern={(w) => {
-                // eigene Quelle der Pauschale behalten (seit dem Import je Pauschale), sonst die allgemeine
-                const daten = { raumtyp_id: typ.id, gebaeudestandard: gs, w_m2: w, quelle: bestehend?.quelle || vorgaben.werte.quelle };
-                return pruefen({ art: 'pauschale', daten }, () => api.put('/fachvorgaben/pauschalen', daten));
-              }}
-            />
-          </td>
-        );
-      })}
-      <td>
-        <Zahlfeld wert={typ.theta_int} platzhalter="fehlt" gesperrt={!darf} onSpeichern={setzen('theta_int')} />
-      </td>
-      <td>
-        <Zahlfeld wert={typ.luftwechsel} platzhalter="fehlt" gesperrt={!darf} onSpeichern={setzen('luftwechsel')} />
-      </td>
-      <td>
-        <Zahlfeld wert={typ.reduktionsfaktor} platzhalter="fehlt" min={-1} gesperrt={!darf} onSpeichern={setzen('reduktionsfaktor')} />
-      </td>
-      <td>
-        <Textfeld wert={typ.quelle} gesperrt={!darf} onSpeichern={setzen('quelle')} />
-      </td>
-      {darf && (
-        <td>
+    <Dialog titel={`Raumtyp: ${typ.bezeichnung}`} onSchliessen={onSchliessen}>
+      <div className="raster">
+        {feld('bezeichnung', 'Bezeichnung', false, true)}
+        {feld('neubau', 'Pauschale Neubau (W/m²)', true)}
+        {feld('quelle_neubau', 'Quelle Pauschale Neubau')}
+        {feld('effizienzhaus_sanierung', 'Pauschale Effizienzhaus-Sanierung (W/m²)', true)}
+        {feld('quelle_effizienzhaus_sanierung', 'Quelle Pauschale EH-Sanierung')}
+        {feld('richtwert_altbau_w_m2', 'Richtwert Altbau (W/m², nur Orientierung)', true)}
+        {feld('theta_int', `${BEGRIFF.raumtemperatur} (°C)`, true)}
+        {feld('luftwechsel', `${BEGRIFF.luftwechsel} (1/h)`, true)}
+        {feld('reduktionsfaktor', `${BEGRIFF.korrekturfaktor} (–)`, true)}
+        {feld('reihenfolge', 'Reihenfolge', true)}
+        {feld('quelle', BEGRIFF.quelle, false, true)}
+        {feld('bemerkung', 'Bemerkung', false, true)}
+      </div>
+      <p className="leise klein-text">Leere Pauschale = Rückfallwert des Gebäudestandards.</p>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      <div className="knopfreihe">
+        {darf && (
+          <button className="knopf" onClick={() => void speichern()}>
+            Speichern
+          </button>
+        )}
+        <button className="knopf-leise" onClick={onSchliessen}>
+          {darf ? 'Abbrechen' : 'Schließen'}
+        </button>
+        {darf && (
           <button
-            className="knopf-leise klein"
+            className="knopf-gefahr"
             onClick={() =>
-              window.confirm(`Raumtyp „${typ.bezeichnung}“ löschen?`) &&
-              pruefen({ art: 'raumtyp_loeschen', ziel: typ.id }, () => api.loeschen(`/fachvorgaben/raumtypen/${typ.id}`))
+              window.confirm(`Raumtyp „${typ.bezeichnung}“ löschen? Das geht nur, wenn ihn kein Projekt verwendet.`) &&
+              void pruefen({ art: 'raumtyp_loeschen', ziel: typ.id }, () => api.loeschen(`/fachvorgaben/raumtypen/${typ.id}`)).then(onSchliessen)
             }
           >
             Löschen
           </button>
-        </td>
-      )}
-    </tr>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
-function NeuerRaumtyp({ aendern }: { aendern: (a: () => Promise<unknown>) => Promise<void> }) {
+function NeuerRaumtyp({ aendern }: { aendern: Aendern }) {
   const [name, setName] = useState('');
   function absenden(e: FormEvent) {
     e.preventDefault();
@@ -310,6 +366,78 @@ function NeuerRaumtyp({ aendern }: { aendern: (a: () => Promise<unknown>) => Pro
         + Raumtyp
       </button>
     </form>
+  );
+}
+
+/** U-Werte und Klimadaten (Bibliotheken, über ihre ID verwendet): Tabelle, Details im Dialog, Excel */
+function BibliothekKarten({ darf, stand, fertig }: { darf: boolean; stand: number; fertig: (text: string) => void }) {
+  const [bauteile, setBauteile] = useState<Bauteil[] | null>(null);
+  const [klima, setKlima] = useState<Klimadaten[] | null>(null);
+  const [details, setDetails] = useState<{ titel: string; zeilen: [string, string][] } | null>(null);
+  useEffect(() => {
+    api.get<Bauteil[]>('/bibliotheken/bauteile').then(setBauteile).catch(() => setBauteile([]));
+    api.get<Klimadaten[]>('/bibliotheken/klimadaten').then(setKlima).catch(() => setKlima([]));
+  }, [stand]);
+  return (
+    <>
+      <div className="karte">
+        <h2>U-Werte (Bauteile)</h2>
+        <p className="leise">Für die Kontrollrechnung (C). Über ihre ID verwendet, nicht je Projekt eingefroren. Quelle und Bemerkung unter „Details“.</p>
+        {bauteile && (
+          <VTabelle
+            name="U-Werte"
+            zeilen={bauteile}
+            schluessel={(b) => b.id}
+            spalten={[
+              { kopf: 'Kategorie', wert: (b) => b.kategorie },
+              { kopf: 'Bezeichnung', wert: (b) => b.bezeichnung, umbruch: true },
+              { kopf: 'Baualtersklasse', wert: (b) => b.baualtersklasse || '–' },
+              { kopf: 'U (W/(m²K))', zahl: true, wert: (b) => zahlText(b.u_wert) },
+            ]}
+            aktionText="Details"
+            aktion={(b) => setDetails({ titel: b.bezeichnung, zeilen: [[BEGRIFF.quelle, b.quelle], ['Bemerkung', b.bemerkung || '–']] })}
+            leer="Noch keine U-Werte – per Excel-Import oder CSV anlegen."
+          />
+        )}
+        {darf && <ExcelTabelle name="bauteile" titel="U-Werte" onFertig={fertig} />}
+      </div>
+      <div className="karte">
+        <h2>Klimadaten (Norm-Außentemperatur)</h2>
+        <p className="leise">Nach DIN/TS 12831-1, über ihre ID verwendet. Quelle unter „Details“.</p>
+        {klima && (
+          <VTabelle
+            name="Klimadaten"
+            zeilen={klima}
+            schluessel={(k) => k.id}
+            spalten={[
+              { kopf: 'PLZ', wert: (k) => k.plz || '–' },
+              { kopf: 'Ort', wert: (k) => k.ort, umbruch: true },
+              { kopf: 'θe (°C)', zahl: true, wert: (k) => zahlText(k.theta_e) },
+              { kopf: 'θm,e (°C)', zahl: true, wert: (k) => zahlText(k.theta_m_e) },
+            ]}
+            aktionText="Details"
+            aktion={(k) => setDetails({ titel: `${k.plz} ${k.ort}`.trim(), zeilen: [[BEGRIFF.quelle, k.quelle]] })}
+            leer="Noch keine Klimadaten – per Excel-Import oder CSV anlegen."
+          />
+        )}
+        {darf && <ExcelTabelle name="klimadaten" titel="Klimadaten" onFertig={fertig} />}
+      </div>
+      {details && (
+        <Dialog titel={details.titel} onSchliessen={() => setDetails(null)}>
+          <dl className="details">
+            {details.zeilen.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <button className="knopf-leise" onClick={() => setDetails(null)}>
+            Schließen
+          </button>
+        </Dialog>
+      )}
+    </>
   );
 }
 
@@ -355,19 +483,9 @@ function CsvImport() {
   );
 }
 
-function RegelnKarte({
-  regeln,
-  darf,
-  pruefen,
-}: {
-  regeln: Platzierungsregel[];
-  darf: boolean;
-  pruefen: Pruefen;
-}) {
-  const setzen = (schluessel: string, feld: 'wert' | 'wert_text' | 'quelle') => (wert: unknown) =>
-    pruefen({ art: 'regel', ziel: schluessel, daten: { [feld]: wert } }, () =>
-      api.patch(`/fachvorgaben/regeln/${schluessel}`, { [feld]: wert }),
-    );
+/** Platzierungsregeln (feste Liste): Regel, Wert mit Einheit; Wert und Quelle im Dialog */
+function RegelnKarte({ regeln, darf, pruefen, fertig }: { regeln: Platzierungsregel[]; darf: boolean; pruefen: Pruefen; fertig: (text: string) => void }) {
+  const [bearbeiten, setBearbeiten] = useState<Platzierungsregel | null>(null);
   return (
     <div className="karte">
       <h2>
@@ -375,45 +493,89 @@ function RegelnKarte({
         <Hilfe begriff="Platzierungsregeln" text={HILFE.regeln} />
       </h2>
       <p className="leise">
-        Projekte rechnen mit ihrem eingefrorenen Stand; geänderte Regeln erscheinen dort als Unterschied. Die Hinweis-Raumhöhe steht oben bei
-        den zentralen Werten.
+        Projekte rechnen mit ihrem eingefrorenen Stand. Abstände und Höhen je Objekt stehen in der Objektbibliothek, die Hinweis-Raumhöhe oben
+        bei den zentralen Werten. Quelle und Erläuterung im Dialog.
       </p>
-      <div className="tabelle-rahmen">
-        <table className="tabelle vorgaben">
-          <thead>
-            <tr>
-              <th>Regel</th>
-              <th>Wert</th>
-              <th>Einheit</th>
-              <th>
-                {BEGRIFF.quelle}
-                <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {regeln.map((r) => (
-              <tr key={r.schluessel}>
-                <td>
-                  {r.bezeichnung}
-                  {r.erlaeuterung && <Hilfe begriff={r.bezeichnung} text={r.erlaeuterung} />}
-                </td>
-                <td>
-                  {r.einheit === 'ja/nein' || r.einheit === 'Text' || r.einheit === 'min. Schutzart' ? (
-                    <Textfeld wert={r.wert_text} platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'wert_text')} />
-                  ) : (
-                    <Zahlfeld wert={r.wert} platzhalter="Vorgabe fehlt" gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'wert')} />
-                  )}
-                </td>
-                <td>{r.einheit}</td>
-                <td>
-                  <Textfeld wert={r.quelle} gesperrt={!darf} onSpeichern={setzen(r.schluessel, 'quelle')} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VTabelle
+        name="Platzierungsregeln"
+        zeilen={regeln}
+        schluessel={(r) => r.schluessel}
+        spalten={[
+          {
+            kopf: 'Regel',
+            umbruch: true,
+            wert: (r) => (
+              <>
+                {r.bezeichnung}
+                {r.schluessel === 'strahler_emissionsgrad' && <Hilfe begriff="Emissionsgrad" text={HILFE.emissionsgrad} />}
+              </>
+            ),
+          },
+          { kopf: 'Wert', zahl: true, wert: (r) => regelWertText(r) },
+          { kopf: 'Einheit', wert: (r) => r.einheit },
+        ]}
+        aktion={setBearbeiten}
+        aktionText={darf ? 'Bearbeiten' : 'Details'}
+      />
+      {darf && <ExcelTabelle name="regeln" titel="Platzierungsregeln" onFertig={fertig} />}
+      {bearbeiten && <RegelDialog regel={bearbeiten} darf={darf} pruefen={pruefen} onSchliessen={() => setBearbeiten(null)} />}
     </div>
+  );
+}
+
+const TEXTREGEL = (r: Platzierungsregel) => r.einheit === 'ja/nein' || r.einheit === 'Text' || r.einheit === 'min. Schutzart';
+
+function regelWertText(r: Platzierungsregel): string {
+  if (TEXTREGEL(r)) return r.wert_text || 'Vorgabe fehlt';
+  return r.wert === null ? 'Vorgabe fehlt' : zahlText(r.wert);
+}
+
+function RegelDialog({ regel, darf, pruefen, onSchliessen }: { regel: Platzierungsregel; darf: boolean; pruefen: Pruefen; onSchliessen: () => void }) {
+  const text = TEXTREGEL(regel);
+  const [wert, setWert] = useState(text ? regel.wert_text : feldText(regel.wert));
+  const [quelle, setQuelle] = useState(regel.quelle);
+  const [fehler, setFehler] = useState('');
+  async function speichern() {
+    const daten: Record<string, unknown> = {};
+    if (text) {
+      if (wert.trim() !== regel.wert_text) daten.wert_text = wert.trim();
+    } else {
+      const w = leseFeld(wert);
+      if (w !== null && !Number.isFinite(w)) return setFehler('Bitte eine Zahl eingeben.');
+      if (regel.schluessel === 'strahler_emissionsgrad' && w !== null && !(w > 0 && w <= 1)) return setFehler('Emissionsgrad: nur Werte größer als 0 bis höchstens 1.');
+      if (w !== regel.wert) daten.wert = w;
+    }
+    if (quelle.trim() !== regel.quelle) daten.quelle = quelle.trim();
+    if (Object.keys(daten).length === 0) return onSchliessen();
+    await pruefen({ art: 'regel', ziel: regel.schluessel, daten }, () => api.patch(`/fachvorgaben/regeln/${regel.schluessel}`, daten));
+    onSchliessen();
+  }
+  return (
+    <Dialog titel={regel.bezeichnung} onSchliessen={onSchliessen}>
+      <div className="raster">
+        <label>
+          Wert{regel.einheit && ` (${regel.einheit})`}
+          {regel.schluessel === 'strahler_emissionsgrad' && <Hilfe begriff="Emissionsgrad" text={HILFE.emissionsgrad} />}
+          <input value={wert} disabled={!darf} placeholder="Vorgabe fehlt" inputMode={text ? undefined : 'decimal'} onChange={(e) => setWert(e.target.value)} />
+        </label>
+        <label className="breit">
+          {BEGRIFF.quelle}
+          <input value={quelle} disabled={!darf} onChange={(e) => setQuelle(e.target.value)} />
+        </label>
+      </div>
+      {regel.erlaeuterung && <p>{regel.erlaeuterung}</p>}
+      <p className="leise klein-text">Leerer Wert = „Vorgabe fehlt“ – dann prüft bzw. plant die App das nicht.</p>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      <div className="knopfreihe">
+        {darf && (
+          <button className="knopf" onClick={() => void speichern()}>
+            Speichern
+          </button>
+        )}
+        <button className="knopf-leise" onClick={onSchliessen}>
+          {darf ? 'Abbrechen' : 'Schließen'}
+        </button>
+      </div>
+    </Dialog>
   );
 }

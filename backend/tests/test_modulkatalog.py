@@ -209,7 +209,7 @@ def test_strahlerkennwerte_im_katalog(client, fachpruefer):
     assert _patch(client, f"/api/bibliotheken/module/{m['id']}", {"emissionsgrad": None})["emissionsgrad"] is None
     blatt = load_workbook(io.BytesIO(client.get("/api/bibliotheken/module/export.xlsx").content))["Modulkatalog"]
     kopf = next(blatt.iter_rows(values_only=True))
-    assert kopf[15:18] == ("Oberflächentemperatur (°C)", "Emissionsgrad", "Abstrahlwinkel (°)")
+    assert kopf[15:18] == ("Oberflächentemperatur (°C)", "Emissionsgrad (0–1, ohne Einheit)", "Abstrahlwinkel (°)")
 
 
 def test_vorgabewerte_und_hoehen_in_regeln(client, fachpruefer, aussendienst, projekt):  # noqa: F811

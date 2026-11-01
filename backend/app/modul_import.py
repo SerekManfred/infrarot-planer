@@ -25,10 +25,12 @@ SPALTEN: dict[str, str] = {
     "Breite (mm)": "breite_mm", "Bauhöhe (mm)": "bauhoehe_mm", "Gewicht (kg)": "gewicht_kg", "Schutzart (IP)": "schutzart",
     "Bad geeignet": "bad_geeignet", "Oberfläche / Farbe": "oberflaeche", "EK netto (€)": "ek_netto", "VK netto (€)": "vk_netto",
     "Montagezeit (min)": "montagezeit_min", "Quelle (Produktseite)": "quelle", "Bemerkung": "bemerkung",
-    "Oberflächentemperatur (°C)": "oberflaechentemperatur_c", "Emissionsgrad": "emissionsgrad",
+    "Oberflächentemperatur (°C)": "oberflaechentemperatur_c", "Emissionsgrad (0–1, ohne Einheit)": "emissionsgrad",
     "Abstrahlwinkel (°)": "abstrahlwinkel_grad", "aktiv": "aktiv",
 }
 FELDNAME = {feld: kopf for kopf, feld in SPALTEN.items()}
+# frühere Überschriften (Export bis 01.11.2026) werden weiter erkannt
+SPALTEN["Emissionsgrad"] = "emissionsgrad"
 JA_NEIN = ("bad_geeignet", "aktiv")
 TEXT = ("artikel_nr", "bezeichnung", "schutzart", "oberflaeche", "quelle", "bemerkung")
 

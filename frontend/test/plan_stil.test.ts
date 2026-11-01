@@ -10,10 +10,11 @@ describe('Deckenplan-Stile', () => {
   it('alle Striche im Plan in Bildschirmpixeln', () => {
     expect(css).toMatch(/\.plan \* \{ vector-effect: non-scaling-stroke; \}/);
   });
-  it('Modulkatalog: Kopfzeile und Spalte Artikel-Nr. fixiert, eigener Scrollbereich', () => {
-    expect(css).toMatch(/\.katalog-rahmen \{[^}]*overflow: auto;/);
-    expect(css).toMatch(/\.modulkatalog thead th \{ position: sticky; top: 0;/);
-    expect(css).toMatch(/\.modulkatalog tbody td:first-child \{ position: sticky; left: 0;/);
+  it('Tabellen der Fachvorgaben und Modulkatalog: Kopfzeile fixiert, eigener Scrollbereich, Zahlen rechtsbündig, Karten am Handy', () => {
+    expect(css).toMatch(/\.vtabelle-rahmen \{[^}]*overflow: auto;/);
+    expect(css).toMatch(/\.vtabelle thead th \{ position: sticky; top: 0;/);
+    expect(css).toMatch(/\.vtabelle \.zahl \{ text-align: right;/);
+    expect(css).toMatch(/@media \(max-width: 760px\) \{[^@]*\.vtabelle td::before \{ content: attr\(data-label\);/);
   });
   it('Wärmeverteilung nimmt keine Zeigereingaben an (Sperrflächen und Module bleiben bedienbar)', () => {
     expect(css).toMatch(/\.waerme-schicht \{[^}]*pointer-events: none;/);
@@ -39,8 +40,8 @@ describe('Deckenplan-Stile', () => {
     const l = 0.2126 * kanal(0) + 0.7152 * kanal(2) + 0.0722 * kanal(4);
     expect(1.05 / (l + 0.05)).toBeGreaterThanOrEqual(7);
   });
-  it('Modulkatalog ohne Mindestbreiten je Spalte (passt am Laptop), Kopfzeile fixiert', () => {
-    expect(css).not.toMatch(/\.modulkatalog td \{ min-width/);
-    expect(css).toMatch(/\.modulkatalog th, \.modulkatalog td \{[^}]*white-space: nowrap;/);
+  it('Tabellen ohne Mindestbreiten je Spalte (passen am Laptop)', () => {
+    expect(css).not.toMatch(/\.vtabelle td \{ min-width/);
+    expect(css).toMatch(/\.vtabelle th, \.vtabelle td \{[^}]*white-space: nowrap;/);
   });
 });

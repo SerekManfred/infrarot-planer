@@ -99,6 +99,18 @@ Pflegbar durch Fachprüfer und Admins; jede Änderung wird protokolliert.
 - Vom Auftraggeber festgelegt (Quelle „Festlegung Auftraggeber 10.10.2026“): Rückfallwerte 40/70 W/m², Grenzhöhe 2,80 m (seit 12.10.2026 nur noch für den Hinweis), ΔU_WB 0,05 W/(m²·K).
 - Klimadaten und Pauschal-U-Werte werden nur für die Gegenprobe C gebraucht und haben niedrige Priorität.
 
+### Tabellen, Bearbeiten und Excel (Festlegung 01.11.2026, Pakete J–L)
+
+- **Darstellung:** Alle Tabellen der Fachvorgaben (Raumtypen und Pauschalen, Platzierungsregeln, Objektbibliothek, U-Werte, Klimadaten) und der Modulkatalog haben ein einheitliches Erscheinungsbild: kurze Überschriften mit Einheit, Zahlen rechtsbündig, fixierte Kopfzeile, kontrastreiche Schrift. Sie passen am Laptop (etwa 1 400 px) ohne waagrechtes Scrollen; am Tablet/Handy erscheint jede Zeile als Karte.
+- **Bearbeiten:** im Dialog je Zeile; dort stehen auch die selten gebrauchten Felder (Quelle, Bemerkung, Reihenfolge, Quellen der Pauschalen, Erläuterung). U-Werte und Klimadaten zeigen Quelle und Bemerkung unter „Details“; gepflegt werden sie per Excel (oder CSV).
+- **Excel-Export und -Import** je Tabelle, nur Fachprüfer und Admin:
+  - Datei: Blatt mit dem Tabellennamen, erste Zeile Überschriften mit Einheit, alle Felder, Blatt „Hinweise“ mit Erklärung jeder Spalte.
+  - Zuordnung über einen eindeutigen Schlüssel: Raumtyp; Regel (feste Liste, neue Regeln werden abgelehnt); Objektname; Kategorie + Bezeichnung + Baualtersklasse (U-Werte); PLZ + Ort (Klimadaten); Artikel-Nr. (Module). Fehlende Spalten bleiben unverändert.
+  - Erst Vorschau: geändert / neu / unverändert, Änderungen alt → neu, Fehler mit Zeilennummer und verständlicher Begründung, betroffene Projekte. Übernahme nur fehlerfrei, nach Bestätigung und nur für genau die geprüfte Datei (Prüfsumme).
+  - Nie löschen: Fehlt eine Zeile, bleibt der Eintrag; Objekte und Module lassen sich über „aktiv“ = nein ausblenden. Eine leere Pauschale bedeutet „kein Tabellenwert“ (Rückfallwert), wie in der Oberfläche.
+  - Vor jeder Übernahme sichert der Server die Datenbank; jede Änderung wird je Feld mit Benutzer und Zeitpunkt protokolliert. Danach werden die Projekte mit der bekannten Logik abgeglichen (nur betroffene warten, übernehmen/ablehnen, Sammelansicht).
+- **Emissionsgrad** (Modulkatalog und Vorgabewert): Verhältniszahl ohne Einheit, Beschriftung „Emissionsgrad (0–1, ohne Einheit)“, zulässig größer als 0 bis höchstens 1. Hilfetext: „Verhältniszahl ohne Einheit: wie viel Wärme die Oberfläche im Vergleich zu einem idealen Strahler abgibt. Pulverbeschichtete Metall- und Glasoberflächen typisch 0,90–0,95; genauen Wert aus dem Herstellerdatenblatt übernehmen.“
+
 ### Fachvorgaben je Projekt eingefroren
 
 Festlegung 12.10.2026:

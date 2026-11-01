@@ -4,9 +4,11 @@
 import { useMemo, useState } from 'react';
 import { OBJEKT_FORMEN, OBJEKT_GRUPPEN, OBJEKT_KATEGORIEN, type ObjektForm, type ObjektGruppe, type ObjektKategorie } from '@infrarot/rechenkern';
 import { api, type BibliotheksObjekt, type Raumtyp, type VorschauAnfrage } from '../api';
-import { BEGRIFF, HILFE, zahl } from '../texte';
+import { HILFE, zahl } from '../texte';
 import { masseText, objekteFuerRaum, regelText, zuletztLesen, zuletztMerken } from '../objekte';
 import { Dialog, Hilfe, Meldung } from './Felder';
+import { ExcelTabelle } from './ExcelTabelle';
+import { VTabelle } from './VTabelle';
 
 type Pruefen = (anfrage: VorschauAnfrage, aktion: () => Promise<unknown>) => Promise<void>;
 
@@ -17,15 +19,16 @@ export function ObjektbibliothekKarte({
   raumtypen,
   darf,
   pruefen,
+  fertig,
 }: {
   objekte: BibliotheksObjekt[];
   raumtypen: Raumtyp[];
   darf: boolean;
   pruefen: Pruefen;
+  fertig: (text: string) => void;
 }) {
   const [bearbeiten, setBearbeiten] = useState<BibliotheksObjekt | 'neu' | null>(null);
   const namen = new Map(raumtypen.map((t) => [t.id, t.bezeichnung]));
-  const gruppen = Object.keys(OBJEKT_GRUPPEN) as ObjektGruppe[];
   return (
     <div className="karte">
       <h2>
@@ -34,7 +37,7 @@ export function ObjektbibliothekKarte({
       </h2>
       <p className="leise">
         Maße B × T × H in m, Abstand in cm. tabu = kein Modul darüber, Abstand = Modul erlaubt mit Mindestabstand zur Kante, neutral = nur
-        Darstellung und Wärmeverteilung.
+        Darstellung und Wärmeverteilung. Quelle im Dialog.
       </p>
       {darf && (
         <div className="knopfreihe">
@@ -43,51 +46,25 @@ export function ObjektbibliothekKarte({
           </button>
         </div>
       )}
-      <div className="tabelle-rahmen">
-        <table className="tabelle objektbibliothek">
-          <thead>
-            <tr>
-              <th>Objekt</th>
-              <th>Maße</th>
-              <th>Regel</th>
-              <th>passende Raumtypen</th>
-              <th>
-                {BEGRIFF.quelle}
-                <Hilfe begriff={BEGRIFF.quelle} text={HILFE.quelle} />
-              </th>
-              {darf && <th aria-label="Bearbeiten" />}
-            </tr>
-          </thead>
-          {gruppen.map((g) => (
-            <tbody key={g}>
-              <tr className="gruppenzeile">
-                <th colSpan={darf ? 6 : 5}>{OBJEKT_GRUPPEN[g]}</th>
-              </tr>
-              {objekte
-                .filter((o) => o.gruppe === g)
-                .map((o) => (
-                  <tr key={o.schluessel} className={o.aktiv ? undefined : 'inaktiv'}>
-                    <td>
-                      <strong>{o.name}</strong>
-                      {!o.aktiv && ' (inaktiv)'}
-                    </td>
-                    <td>{masseText(o)}</td>
-                    <td>{regelText(o)}</td>
-                    <td>{o.raumtyp_ids.length === 0 ? 'alle' : o.raumtyp_ids.map((i) => namen.get(i) ?? `Raumtyp ${i}`).join(', ')}</td>
-                    <td className="klein-text">{o.quelle}</td>
-                    {darf && (
-                      <td>
-                        <button className="knopf-leise klein" onClick={() => setBearbeiten(o)}>
-                          Bearbeiten
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-            </tbody>
-          ))}
-        </table>
-      </div>
+      <VTabelle
+        name="Objektbibliothek"
+        zeilen={(Object.keys(OBJEKT_GRUPPEN) as ObjektGruppe[]).flatMap((g) => objekte.filter((o) => o.gruppe === g))}
+        schluessel={(o) => o.schluessel}
+        gruppe={(o) => OBJEKT_GRUPPEN[o.gruppe]}
+        inaktiv={(o) => !o.aktiv}
+        spalten={[
+          { kopf: 'Objekt', wert: (o) => <><strong>{o.name}</strong>{!o.aktiv && ' (inaktiv)'}</> },
+          { kopf: 'Maße B × T × H', zahl: true, wert: (o) => masseText(o) },
+          { kopf: 'Regel', wert: (o) => regelText(o) },
+          {
+            kopf: 'Passende Raumtypen',
+            umbruch: true,
+            wert: (o) => (o.raumtyp_ids.length === 0 ? 'alle' : o.raumtyp_ids.map((i) => namen.get(i) ?? `Raumtyp ${i}`).join(', ')),
+          },
+        ]}
+        aktion={darf ? setBearbeiten : undefined}
+      />
+      {darf && <ExcelTabelle name="objekte" titel="Objektbibliothek" onFertig={fertig} />}
       {bearbeiten && (
         <ObjektDialog
           objekt={bearbeiten === 'neu' ? null : bearbeiten}

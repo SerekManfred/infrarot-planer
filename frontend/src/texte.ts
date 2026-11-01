@@ -116,6 +116,8 @@ export const HILFE = {
     'Zeigt, wie stark die Module welche Stelle anstrahlen (W/m²): am Boden und auf der Oberseite von Möbeln. Berechnet aus Lage, Größe, Oberflächentemperatur, Emissionsgrad und Abstrahlwinkel der Module.',
   strahlerkennwerte:
     'Oberflächentemperatur, Emissionsgrad (0–1) und voller Abstrahlwinkel des Moduls – nur für die Darstellung der Wärmeverteilung. Leer: Es gilt der Vorgabewert aus den Fachvorgaben, die Darstellung zeigt dann „mit Vorgabewerten berechnet“.',
+  emissionsgrad:
+    'Verhältniszahl ohne Einheit: wie viel Wärme die Oberfläche im Vergleich zu einem idealen Strahler abgibt. Pulverbeschichtete Metall- und Glasoberflächen typisch 0,90–0,95; genauen Wert aus dem Herstellerdatenblatt übernehmen.',
   badGeeignet: 'Darf im Bad eingesetzt werden. Nur bei Schutzart IP44 oder höher möglich; die Schutzbereiche prüft eine Elektrofachkraft.',
   tuerFenster:
     'Nur zur Orientierung im Plan: Tür (mit Aufschlag) und Fenster liegen in der Wand. Sie sind keine Sperrflächen und beeinflussen die Platzierung der Module nicht. Antippen, dann auf die Wand tippen.',

@@ -9,6 +9,9 @@ FELDER = {
     "u_wert": "U-Wert", "flaeche_brutto_m2": "Fläche", "anzahl": "Anzahl", "position": "Abstand von der Wandecke",
     "breite": "Breite", "leistung_w": "Leistung", "sperrflaechen": "Sperrflächen", "module": "Module",
     "tueren_fenster": "Türen und Fenster", "plz": "PLZ", "ort": "Ort", "strasse": "Straße", "geraet": "Gerätename",
+    "emissionsgrad": "Emissionsgrad", "oberflaechentemperatur_c": "Oberflächentemperatur", "abstrahlwinkel_grad": "Abstrahlwinkel",
+    "reduktionsfaktor": "Korrekturfaktor", "richtwert_altbau_w_m2": "Richtwert Altbau", "abstand_cm": "Mindestabstand",
+    "tiefe_m": "Tiefe", "laenge_mm": "Länge", "breite_mm": "Breite", "schutzart": "Schutzart", "artikel_nr": "Artikel-Nr.",
     "status": "Status", "aktion": "Aktion", "projekt_ids": "Projektauswahl", "benutzer_id": "Benutzer",
 }
 

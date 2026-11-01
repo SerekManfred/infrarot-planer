@@ -433,3 +433,37 @@ body.ohne-bildlauf { overflow: hidden; }
   .dialog-hintergrund { padding: 0; }
   .dialog { border-radius: 0; min-height: 100%; }
 }
+
+/* Einheitliche Tabellen der Fachvorgaben (Praxistest J, 01.11.2026): kompakt, Zahlen rechtsbündig, Kopfzeile fixiert,
+   kontrastreich; am Tablet/Handy als Karten */
+.inhalt:has(.vtabelle) { max-width: 1400px; }
+.vtabelle-rahmen { max-height: calc(100vh - 14rem); min-height: 6rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rand); border-radius: 6px; background: #fff; }
+.vtabelle { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.93rem; color: var(--text); background: #fff; }
+.vtabelle thead th { position: sticky; top: 0; z-index: 2; background: var(--blau); color: #fff; font-weight: 600; text-align: left; white-space: nowrap; }
+.vtabelle th, .vtabelle td { padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--rand); vertical-align: middle; white-space: nowrap; }
+.vtabelle td.umbruch { white-space: normal; min-width: 8rem; }
+.vtabelle .zahl { text-align: right; font-variant-numeric: tabular-nums; }
+.vtabelle td.aktionen { width: 1%; text-align: right; }
+.vtabelle td.aktionen .klein { margin: 0; }
+.vtabelle tr.gruppenzeile th { position: static; background: var(--blau-hell); color: var(--blau); }
+.vtabelle tr.inaktiv td { background: var(--grau); }
+.vtabelle tbody tr:hover td { background: var(--blau-hell); }
+.vtabelle .hilfe-knopf { color: inherit; }
+.vtabelle .inaktiv-marke { display: block; font-weight: 600; }
+.excel-tabelle { margin-top: 0.5rem; }
+.import-bereich { margin-top: 0.25rem; padding: 0.6rem 0.75rem; border: 1px solid var(--rand); border-radius: 8px; background: var(--grau); }
+.details { display: grid; gap: 0.5rem; margin: 0 0 1rem; }
+.details dt { font-weight: 600; }
+.details dd { margin: 0; word-break: break-word; }
+@media (max-width: 760px) {
+  .vtabelle-rahmen { max-height: none; border: 0; background: transparent; }
+  .vtabelle thead { display: none; }
+  .vtabelle, .vtabelle tbody { display: block; }
+  .vtabelle tr { display: block; margin-bottom: 0.6rem; border: 1px solid var(--rand); border-radius: 8px; background: #fff; overflow: hidden; }
+  .vtabelle tr.gruppenzeile { border: 0; background: transparent; }
+  .vtabelle tr.gruppenzeile th { display: block; padding: 0.5rem 0.25rem 0; background: transparent; }
+  .vtabelle td { display: flex; justify-content: space-between; gap: 1rem; white-space: normal; text-align: right; }
+  .vtabelle td::before { content: attr(data-label); font-weight: 600; text-align: left; flex: 0 0 45%; }
+  .vtabelle td.aktionen { width: auto; justify-content: flex-end; }
+  .vtabelle td.aktionen::before { content: none; }
+}

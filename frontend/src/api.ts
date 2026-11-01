@@ -201,6 +201,7 @@ export interface Bauteil {
   baualtersklasse: string;
   u_wert: number;
   quelle: string;
+  bemerkung?: string;
 }
 
 export interface Klimadaten {
