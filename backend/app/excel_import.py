@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import BibModul, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel
-from app.platzierungsregeln import HINWEIS_HOEHE_BEZEICHNUNG, NACH_BEZEICHNUNG, REGELN
+from app.platzierungsregeln import HINWEIS_HOEHE_BEZEICHNUNG, IN_OBJEKTBIBLIOTHEK, NACH_BEZEICHNUNG, REGELN
 
 KOPF_RAUMTYPEN = (
     "Raumtyp", "Neubau (W/m²)", "Effizienzhaus-Sanierung (W/m²)", "Altbau – Richtwert für Fachprüfer (W/m²)",
@@ -214,6 +214,11 @@ def _regeln(db: Session, zeilen: list[dict], bericht: Bericht, fehler: list[str]
                     f"Hinweis-Raumhöhe (Fachvorgaben): {vorgaben.hoehe_hinweis_m} → {hoehe} m"
                 )
                 vorgaben.hoehe_hinweis_m = hoehe
+            continue
+        if name in IN_OBJEKTBIBLIOTHEK:
+            bericht.auffaelligkeiten.append(
+                f"{ort}: „{name}“ steht seit 01.11.2026 in der Objektbibliothek – Zeile übersprungen"
+            )
             continue
         definition = NACH_BEZEICHNUNG.get(name)
         if definition is None:

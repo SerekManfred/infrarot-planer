@@ -12,7 +12,7 @@
 
 import { berechneAuswertung, type AuswertungEingabe, type AuswertungRaumEingabe, type AuswertungRaumErgebnis, type Heizlastquelle } from './auswertung';
 import type { PauschalEingabe } from './pauschal';
-import { raumModulplanung, regelnAufloesen, type PlatziertesModul, type RaumModulplanung, type Regel, type Sperrflaeche } from './platzierung';
+import { raumModulplanung, regelnAufloesen, type BibObjekt, type PlatziertesModul, type RaumModulplanung, type Regel, type Sperrflaeche } from './platzierung';
 import type { Angrenzung, BauteilflaecheEingabe, OeffnungEingabe, RaumEingabe } from './typen';
 
 export type Gebaeudestandard = 'neubau' | 'effizienzhaus_sanierung' | 'sonstiger_bestand';
@@ -117,6 +117,8 @@ export interface ObjektPlanung {
   bauteile: { id: number; u_wert: number }[];
   /** Platzierungsregeln im Stand des Projekts; fehlen sie, gilt jede Regel als „Vorgabe fehlt“ */
   regeln?: Regel[];
+  /** Objektbibliothek im Stand des Projekts (Festlegung 01.11.2026); fehlt sie, gilt jedes Objekt als unbekannt */
+  objekte?: BibObjekt[];
   /** in der Reihenfolge der Anzeige */
   geschosse: PlanungGeschoss[];
 }
@@ -345,7 +347,7 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
     raeume: raeumeEingabe,
   };
   const ergebnis = berechneAuswertung(eingabe);
-  const regeln = regelnAufloesen(planung.regeln);
+  const regeln = regelnAufloesen(planung.regeln, planung.objekte);
   const planungsRaeume = planung.geschosse.flatMap((g) => g.raeume);
   const raeume = infos.map((info, i): ObjektRaumAuswertung => {
     const { id: _id, bezeichnung: _b, quelle: _q, fehler, ...rest } = ergebnis.raeume[i];

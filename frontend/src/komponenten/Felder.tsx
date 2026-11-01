@@ -239,3 +239,25 @@ export function PasswortFeld({
     </span>
   );
 }
+
+/** Dialog über der Seite (Bearbeiten-Masken): Esc oder „Schließen“ schließt; auf dem Handy fast bildschirmfüllend */
+export function Dialog({ titel, onSchliessen, children }: { titel: string; onSchliessen: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const taste = (e: KeyboardEvent) => e.key === 'Escape' && onSchliessen();
+    document.addEventListener('keydown', taste);
+    return () => document.removeEventListener('keydown', taste);
+  }, [onSchliessen]);
+  return (
+    <div className="dialog-hintergrund" onPointerDown={(e) => e.target === e.currentTarget && onSchliessen()}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={titel}>
+        <div className="dialog-kopf">
+          <h2>{titel}</h2>
+          <button className="knopf-leise" onClick={onSchliessen} aria-label="Schließen">
+            ✕
+          </button>
+        </div>
+        <div className="dialog-inhalt">{children}</div>
+      </div>
+    </div>
+  );
+}

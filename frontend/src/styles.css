@@ -9,7 +9,8 @@
   --grau: #f3f5f8;
   --rand: #d5dbe5;
   --text: #1b1f27;
-  --leise: #5d6878;
+  /* Hilfetexte: dunkel und kontrastreich (Tageslicht am Tablet, Praxistest 01.11.2026) */
+  --leise: #333b47;
   --fehler: #b42318;
   --fehler-hell: #fdecea;
   --warnung: #8a5a00;
@@ -43,6 +44,7 @@ h1 { font-size: 1.4rem; margin: 0 0 1rem; }
 h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
 h3 { font-size: 1rem; margin: 0.5rem 0; }
 .leise { color: var(--leise); }
+::placeholder { color: #4a5260; opacity: 1; }
 
 /* ── Karten und Formulare ── */
 .karte { background: #fff; border: 1px solid var(--rand); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
@@ -241,18 +243,23 @@ tr.inaktiv { color: var(--leise); }
 .plan-rahmen { background: var(--grau); border-radius: 8px; padding: 0.5rem; }
 .plan { display: block; width: 100%; max-height: 65vh; touch-action: none; user-select: none; -webkit-user-select: none; }
 .plan-wandabstand { fill: none; stroke: var(--leise); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-.plan text { fill: var(--text); pointer-events: none; }
-.plan-sperr rect:not(.plan-halo), .plan-modul rect { stroke-width: 1.5px; vector-effect: non-scaling-stroke; cursor: grab; }
-.plan-sperr rect:not(.plan-halo) { fill: rgba(93, 104, 120, 0.25); stroke: var(--leise); }
-.plan-sitzplatz rect:not(.plan-halo), .plan-bett rect:not(.plan-halo) { fill: rgba(180, 35, 24, 0.18); stroke: var(--fehler); }
-.plan-dachschraege rect:not(.plan-halo) { fill: rgba(138, 90, 0, 0.18); stroke: var(--warnung); }
-.plan-dusche rect:not(.plan-halo) { fill: rgba(31, 58, 110, 0.15); stroke: var(--blau); }
-.plan-halo { fill: none; stroke: var(--leise); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* Alle Beschriftungen schwarz mit weißem Rand – lesbar auch über der Wärmeverteilung (Praxistest 01.11.2026) */
+.plan text {
+  fill: #000; font-weight: 600; pointer-events: none;
+  paint-order: stroke fill; stroke: #fff; stroke-width: 3.5px; stroke-linejoin: round;
+}
+/* Objekte nach Kategorie der Objektbibliothek, mit kräftigem Umriss */
+.plan-sperr rect:not(.plan-halo):not(.plan-halo-innen), .plan-modul rect { stroke-width: 2.5px; vector-effect: non-scaling-stroke; cursor: grab; }
+.plan-sperr rect:not(.plan-halo):not(.plan-halo-innen) { fill: rgba(51, 59, 71, 0.2); stroke: #1b1f27; }
+.plan-sperr.kat-tabu rect:not(.plan-halo):not(.plan-halo-innen) { fill: rgba(180, 35, 24, 0.2); stroke: #8f1a12; }
+.plan-sperr.kat-abstand rect:not(.plan-halo):not(.plan-halo-innen) { fill: rgba(138, 90, 0, 0.18); stroke: #6b4500; }
+.plan-sperr.kat-neutral rect:not(.plan-halo):not(.plan-halo-innen) { fill: rgba(51, 59, 71, 0.12); stroke: #1b1f27; stroke-dasharray: 6 3; }
+.plan-halo { fill: none; stroke: #1b1f27; stroke-width: 1.5px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.plan-halo-innen { fill: none; stroke: #6b4500; stroke-width: 1.5px; stroke-dasharray: 2 3; pointer-events: none; }
 .plan-tippflaeche { fill: transparent; cursor: grab; }
-.plan-punkt-kern { fill: var(--warnung); stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
-.plan-rauchmelder .plan-punkt-kern { fill: var(--fehler); }
-.plan-modul rect { fill: rgba(31, 58, 110, 0.75); stroke: var(--blau); }
-.plan-modul text { fill: #fff; font-weight: 700; }
+.plan-punkt-kern { fill: var(--warnung); stroke: #000; stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.plan-punkt.kat-neutral .plan-punkt-kern { fill: #fff; }
+.plan-modul rect { fill: rgba(31, 58, 110, 0.75); stroke: #0f1f3d; }
 .plan-modul.verstoss rect { fill: rgba(180, 35, 24, 0.8); stroke: var(--fehler); }
 /* Auswahl nur an den sichtbaren Formen, nie an Tippflächen oder Ausschnitten */
 .plan-sperr.gewaehlt > rect:not(.plan-halo), .plan-modul.gewaehlt > rect, .plan-punkt.gewaehlt .plan-punkt-kern { stroke: var(--orange); stroke-width: 3px; }
@@ -280,8 +287,8 @@ tr.inaktiv { color: var(--leise); }
 .deckenplan-knopf small { color: var(--leise); font-size: 0.85rem; }
 .plan-vorschau { flex: 0 0 auto; width: 110px; height: 80px; background: #fff; border-radius: 6px; }
 .plan-vorschau .plan-raum { stroke: var(--text); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
-.vorschau-sperr { fill: rgba(93, 104, 120, 0.3); }
-.vorschau-sitzplatz, .vorschau-bett { fill: rgba(180, 35, 24, 0.3); }
+.vorschau-sperr { fill: rgba(51, 59, 71, 0.3); }
+.vorschau-streifen { fill: rgba(138, 90, 0, 0.3); }
 .vorschau-modul { fill: var(--blau); }
 .vorschau-punkt { fill: var(--warnung); }
 .vorschau-tuer, .vorschau-fenster { stroke-width: 4px; vector-effect: non-scaling-stroke; }
@@ -298,11 +305,9 @@ body.ohne-bildlauf { overflow: hidden; }
 .vollbild .plan { max-height: 62vh; }
 .plan-wand { fill: var(--text); }
 .plan-raum { fill: #fff; stroke: none; }
-.plan-bemassung line { stroke: var(--leise); stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.plan-bemassung text, .plan-modulmass text { fill: var(--leise); }
-.plan-modulmass line { stroke: var(--orange); stroke-width: 1.5px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-.plan-modulmass text { fill: #9a3d0b; font-weight: 600; }
-.plan-mass-live { fill: #9a3d0b !important; font-weight: 600; }
+.plan-bemassung line { stroke: #1b1f27; stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.plan-modulmass line { stroke: var(--orange); stroke-width: 2px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.plan-mass-live { font-weight: 700; }
 .plan-griff { cursor: nwse-resize; }
 .plan-griff-punkt { fill: var(--orange); stroke: #fff; stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .plan-oeffnung { cursor: grab; }
@@ -339,25 +344,27 @@ body.ohne-bildlauf { overflow: hidden; }
 .passwort-auge:hover, .passwort-auge[aria-pressed='true'] { color: var(--blau); }
 .passwort-auge:focus-visible { outline: 2px solid var(--blau); outline-offset: -2px; border-radius: 8px; }
 
-/* Modulkatalog: kompakte Eingaben in der breiten Tabelle */
-.modulkatalog td { min-width: 6rem; }
-.modulkatalog td:nth-child(2), .modulkatalog td:nth-child(10), .modulkatalog td:nth-child(14), .modulkatalog td:nth-child(15) { min-width: 12rem; }
-.modulkatalog .zahlfeld input { min-width: 5rem; }
+/* Modulkatalog: kompakte Werte, Bearbeiten im Dialog – passt am Laptop ohne waagrechtes Scrollen (Praxistest 01.11.2026) */
+.modulkatalog { font-size: 0.92rem; }
+.modulkatalog th, .modulkatalog td { padding: 0.4rem 0.5rem; white-space: nowrap; }
+.modulkatalog td.umbruch { white-space: normal; min-width: 8rem; }
+.modulkatalog td.umbruch-zahl { white-space: normal; min-width: 6rem; }
+.modulkatalog .inaktiv-marke { display: block; font-weight: 600; }
+/* Katalogseite darf am Laptop breiter sein als die übrigen Seiten */
+.inhalt:has(.katalog-rahmen) { max-width: 1400px; }
 /* Fixierte Kopfzeile und erste Spalte: Scrollbereich in beide Richtungen (Laptop, Tablet, Handy) */
 .katalog-rahmen { max-height: calc(100vh - 12rem); min-height: 16rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--rand); }
 .modulkatalog { border-collapse: separate; border-spacing: 0; border: 0; }
 .modulkatalog thead th { position: sticky; top: 0; z-index: 2; }
 .modulkatalog tbody td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 2px 0 0 var(--rand); }
 .modulkatalog thead th:first-child { left: 0; z-index: 3; box-shadow: 2px 0 0 var(--rand); }
-.modulkatalog tbody td:first-child input { min-width: 7rem; }
 /* inaktive Zeilen gedämpft, aber deckend (sonst scheint die fixierte Spalte durch) */
 .modulkatalog tr.inaktiv td { color: var(--leise); background: var(--grau); }
-.modulkatalog tr.inaktiv td input, .modulkatalog tr.inaktiv td select { color: var(--leise); }
 .modulkatalog td.aktionen { white-space: nowrap; }
 
 /* Wärmeverteilung (feste Skala, halbtransparent über dem Plan) */
-.waerme-schicht { opacity: 0.85; pointer-events: none; }
-.waerme-schicht rect { stroke: none; }
+.waerme-schicht { pointer-events: none; }
+.waerme-schicht image { image-rendering: auto; }
 .waerme-schalter { display: flex; align-items: center; gap: 0.25rem; min-height: 44px; margin-top: 0.5rem; }
 .waerme-schalter input { width: 22px; height: 22px; min-height: 0; margin: 0 0.4rem 0 0; display: inline-block; }
 .waerme-legende { margin-top: 0.25rem; }
@@ -373,6 +380,56 @@ body.ohne-bildlauf { overflow: hidden; }
 .waerme-stufe small { white-space: nowrap; font-size: 0.75rem; }
 .waerme-farbe { width: 64px; height: 16px; }
 .waerme-marke { pointer-events: none; }
-.waerme-marke circle { fill: none; stroke: var(--text); stroke-width: 2px; }
-.waerme-marke rect { fill: var(--text); opacity: 0.9; }
-.waerme-marke text { fill: #fff; font-weight: 700; }
+.waerme-marke circle { fill: none; stroke: #000; stroke-width: 2.5px; }
+.waerme-marke rect { fill: #fff; stroke: #000; stroke-width: 1.5px; }
+.waerme-marke text { font-weight: 700; }
+
+/* Wärmeverteilung: Deckkraft-Regler und stufenloser Farbbalken (Praxistest I, 01.11.2026) */
+.waerme-deckkraft { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; margin: 0; }
+.waerme-deckkraft input[type='range'] { width: 9rem; min-height: 44px; margin: 0; padding: 0; }
+.waerme-balken { height: 18px; border-radius: 3px; outline: 1px solid var(--rand); outline-offset: -1px; }
+.waerme-achse { position: relative; height: 1.3rem; font-size: 0.8rem; }
+.waerme-achse span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.waerme-achse span:first-child { transform: none; }
+.waerme-achse span:last-child { transform: translateX(-100%); }
+.waerme-verlauf { max-width: 560px; }
+
+/* Objektbibliothek: Auswahl im Deckenplan (Festlegung 01.11.2026) */
+.objekt-auswahl { margin-bottom: 0.5rem; padding: 0.6rem 0.75rem; border: 1px solid var(--rand); border-radius: 10px; background: #fff; }
+.objekt-auswahl h4 { margin: 0.6rem 0 0.3rem; font-size: 0.95rem; }
+.objekt-suche { flex: 1 1 14rem; margin: 0; }
+.objekt-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 0.4rem; }
+.objekt-knopf {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 52px; margin: 0;
+  padding: 0.35rem 0.6rem; background: #fff; color: var(--text); border: 1px solid var(--rand); border-left: 6px solid var(--leise);
+  border-radius: 8px; text-align: left; font-weight: 600;
+}
+.objekt-knopf:hover { background: var(--blau-hell); }
+.objekt-knopf.kat-tabu { border-left-color: var(--fehler); }
+.objekt-knopf.kat-abstand { border-left-color: var(--warnung); }
+.objekt-info { font-size: 0.8rem; font-weight: 400; color: var(--leise); }
+/* Objekthöhe: verständliche Beschriftung, Feld breit genug – auch am Handy (Praxistest E) */
+.hoehe-feld { display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 17rem; }
+.hoehe-text { font-weight: 600; }
+.hoehe-feld .knopfreihe { margin: 0; flex-wrap: nowrap; }
+.auswahl-leiste .hoehe-feld .zahlfeld input { width: 6.5rem; }
+/* Objektbibliothek in den Fachvorgaben */
+.objektbibliothek .gruppenzeile th { background: var(--blau-hell); color: var(--blau); }
+.objektbibliothek td.klein-text { margin: 0; min-width: 12rem; }
+.raumtypwahl { display: flex; flex-wrap: wrap; gap: 0 1rem; margin-top: 0.75rem; border: 1px solid var(--rand); border-radius: 8px; }
+.raumtypwahl label.inline { min-height: 44px; display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; }
+
+/* Dialog (Bearbeiten-Masken) */
+.dialog-hintergrund {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center;
+  padding: 2rem 1rem; overflow: auto; background: rgba(0, 0, 0, 0.45);
+}
+.dialog { width: min(780px, 100%); background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
+.dialog-kopf { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--rand); }
+.dialog-kopf h2 { margin: 0; font-size: 1.15rem; }
+.dialog-inhalt { padding: 0.75rem 1rem 1rem; }
+.dialog .raster label.breit { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .dialog-hintergrund { padding: 0; }
+  .dialog { border-radius: 0; min-height: 100%; }
+}

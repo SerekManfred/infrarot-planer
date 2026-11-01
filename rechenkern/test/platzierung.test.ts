@@ -15,8 +15,10 @@ import {
   type KatalogModul,
   type PlatziertesModul,
   type PlatzierungsRaum,
+  type BibObjekt,
   type Regel,
   type Sperrflaeche,
+  kantenAbstand,
 } from '../src';
 
 function regel(schluessel: string, wert: number | null, wert_text = ''): Regel {
@@ -27,16 +29,7 @@ function regel(schluessel: string, wert: number | null, wert_text = ''): Regel {
 function regelTabelle(aenderung: Record<string, number | string | null> = {}): Regel[] {
   const basis: Record<string, number | string | null> = {
     abstand_wand_cm: 50,
-    abstand_leuchte_cm: 50,
-    abstand_rauchmelder_cm: 50,
     abstand_modul_cm: 40,
-    abstand_sitzplatz_cm: 30,
-    bett_sperrflaeche: 'ja',
-    abstand_bett_cm: 30,
-    abstand_hochschrank_cm: 30,
-    abstand_dachschraege_cm: 40,
-    abstand_dusche_cm: null,
-    abstand_sonstiges_cm: null,
     mindesthoehe_m: 2,
     leistungsreserve_prozent: 10,
     ueberdimensionierung_prozent: 20,
@@ -47,7 +40,23 @@ function regelTabelle(aenderung: Record<string, number | string | null> = {}): R
   return Object.entries(basis).map(([s, w]) => (typeof w === 'string' ? regel(s, null, w) : regel(s, w)));
 }
 
-const R = regelnAufloesen(regelTabelle());
+/** Objektbibliothek mit TESTWERTEN (Maße in m, Abstand in cm) */
+function obj(schluessel: string, name: string, form: BibObjekt['form'], kategorie: BibObjekt['kategorie'], abstand_cm: number | null, hoehe_m: number | null = null): BibObjekt {
+  return { schluessel, name, gruppe: form === 'punkt' ? 'decke' : 'moebel', raumtyp_ids: [], form, breite_m: 1, tiefe_m: 1, hoehe_m, kategorie, abstand_cm };
+}
+const OBJEKTE: BibObjekt[] = [
+  obj('sitzplatz', 'TEST Sitzplatz', 'rechteck', 'tabu', 30, 0.45),
+  obj('bett', 'TEST Bett', 'rechteck', 'tabu', 30, 0.5),
+  obj('hochschrank', 'TEST Hochschrank', 'rechteck', 'abstand', 30, 2),
+  obj('dachschraege', 'TEST Dachschräge', 'streifen', 'abstand', 40),
+  obj('dusche', 'TEST Dusche', 'rechteck', 'tabu', null, 0),
+  obj('leuchte', 'TEST Leuchte', 'punkt', 'tabu', 50),
+  obj('rauchmelder', 'TEST Rauchmelder', 'punkt', 'tabu', 50),
+  obj('couchtisch', 'TEST Couchtisch', 'rechteck', 'neutral', null, 0.45),
+  obj('kleiderschrank', 'TEST Kleiderschrank', 'rechteck', 'abstand', 30, 2.2),
+  obj('lautsprecher', 'TEST Lautsprecher', 'punkt', 'tabu', null),
+];
+const R = regelnAufloesen(regelTabelle(), OBJEKTE);
 
 const KATALOG: KatalogModul[] = [
   { id: 1, artikel_nr: 'T-A', bezeichnung: 'TESTMODUL A', leistung_w: 250, laenge_mm: 600, breite_mm: 300, schutzart: 'IP54', bad_geeignet: true },
@@ -68,8 +77,8 @@ function raum(laenge_m: number, breite_m: number, teil: Partial<PlatzierungsRaum
   return { laenge_m, breite_m, hoehe_m: 2.5, ist_bad: false, ...teil };
 }
 
-function sperr(typ: Sperrflaeche['typ'], x: number, y: number, b = 0, t = 0): Sperrflaeche {
-  return { id: `${typ}-${x}-${y}`, typ, x, y, b, t };
+function sperr(objekt: string, x: number, y: number, b = 0, t = 0): Sperrflaeche {
+  return { id: `${objekt}-${x}-${y}`, objekt, x, y, b, t };
 }
 
 function ohneVerstoss(r: PlatzierungsRaum, s: Sperrflaeche[], module: PlatziertesModul[]) {
@@ -81,8 +90,8 @@ describe('Regeln auflösen', () => {
   it('cm → m, ja/nein, Schutzart; fehlende Werte bleiben null', () => {
     expect(R.wand_m).toBe(0.5);
     expect(R.modul_m).toBe(0.4);
-    expect(R.flaeche_m.bett).toBe(0.3);
-    expect(R.flaeche_m.dusche).toBeNull();
+    expect(R.objekte.bett).toEqual({ name: 'TEST Bett', form: 'rechteck', kategorie: 'tabu', abstand_m: 0.3, hoehe_m: 0.5 });
+    expect(R.objekte.dusche.abstand_m).toBeNull();
     expect(R.thermostat_je_raum).toBe(true);
     expect(R.bad_min_ip).toBe(44);
     expect(regelnAufloesen(undefined).wand_m).toBeNull();
@@ -187,11 +196,11 @@ describe('Modulauswahl und Platzierung', () => {
   });
 
   it('fehlende Regeln: keine automatische Planung, nichts geschätzt', () => {
-    const ohneWand = regelnAufloesen(regelTabelle({ abstand_wand_cm: null }));
+    const ohneWand = regelnAufloesen(regelTabelle({ abstand_wand_cm: null }), OBJEKTE);
     expect(vorschlagen(raum(4, 4), [], KATALOG, ohneWand, 500, ids()).meldung).toBe(
       'Vorgabe fehlt: TEST abstand_wand_cm – keine automatische Platzierung.',
     );
-    const ohneReserve = regelnAufloesen(regelTabelle({ leistungsreserve_prozent: null }));
+    const ohneReserve = regelnAufloesen(regelTabelle({ leistungsreserve_prozent: null }), OBJEKTE);
     expect(vorschlagen(raum(4, 4), [], KATALOG, ohneReserve, 500, ids()).meldung).toContain('Vorgabe fehlt: TEST leistungsreserve_prozent');
     expect(vorschlagen(raum(4, 4), [], KATALOG, R, null, ids()).meldung).toContain('Keine Heizlast');
   });
@@ -211,14 +220,14 @@ describe('Regelprüfung (manuelle Korrektur)', () => {
     const module = [modul(0.3, 0.6, 'a'), modul(1.2, 0.6, 'b'), modul(2.6, 1.6, 'c'), modul(3.5, 0.6, 'd')];
     const p = pruefeModule(r, s, module, R);
     expect(p.verstoesse.a).toEqual(['Abstand zur Wand 30 cm (mind. 50 cm)', 'Abstand zu Modul 2 (T-C) 10 cm (mind. 40 cm)']);
-    expect(p.verstoesse.b).toEqual(['liegt über einer Leuchte', 'Abstand zu Modul 1 (T-C) 10 cm (mind. 40 cm)']);
-    expect(p.verstoesse.c[0]).toBe('liegt über einem Sitzplatz – über Sitzplätzen und Betten unzulässig');
+    expect(p.verstoesse.b).toEqual(['liegt über TEST Leuchte', 'Abstand zu Modul 1 (T-C) 10 cm (mind. 40 cm)']);
+    expect(p.verstoesse.c[0]).toBe('liegt über TEST Sitzplatz – dort ist kein Modul zulässig');
     expect(p.verstoesse.d).toEqual(['ragt über den Raum hinaus']);
   });
 
   it('Leuchte unter dem Modul und Abstand zur Leuchte', () => {
     const p = pruefeModule(r, [sperr('leuchte', 1.5, 1.0)], [modul(1.2, 0.8, 'a'), modul(2.6, 0.6, 'b')], R);
-    expect(p.verstoesse.a).toEqual(['liegt über einer Leuchte']);
+    expect(p.verstoesse.a).toEqual(['liegt über TEST Leuchte']);
     expect(p.verstoesse.b).toEqual([]);
   });
 
@@ -226,8 +235,47 @@ describe('Regelprüfung (manuelle Korrektur)', () => {
     const s = [sperr('dusche', 2.5, 0.5, 1.0, 1.0)];
     const p = pruefeModule(r, s, [modul(0.6, 0.6, 'a'), modul(2.6, 1.0, 'b')], R);
     expect(p.verstoesse.a).toEqual([]);
-    expect(p.verstoesse.b).toEqual(['liegt über Sperrfläche Dusche/Wanne']);
-    expect(p.hinweise).toContain('Vorgabe fehlt: TEST abstand_dusche_cm – geprüft wird nur, dass kein Modul darüber liegt');
+    expect(p.verstoesse.b).toEqual(['liegt über TEST Dusche – dort ist kein Modul zulässig']);
+    expect(p.hinweise).toContain('Vorgabe fehlt: Mindestabstand zu TEST Dusche (Objektbibliothek) – geprüft wird nur, dass kein Modul darüber liegt');
+  });
+
+  it('Kategorie „abstand“: Modul darf über dem Objekt liegen, braucht aber Abstand zur Kante', () => {
+    // Kleiderschrank 3 × 2 m (TESTWERT, absichtlich groß), Abstand 30 cm; Modul 0,8 × 0,6 m
+    const s = [sperr('kleiderschrank', 0.5, 0.5, 3.0, 2.0)];
+    const innen = modul(1.5, 1.2, 'a'); // Kanten 1,0 / 0,7 / 1,7 / 0,7 m entfernt
+    const nahInnen = modul(0.6, 1.2, 'b'); // 10 cm zur linken Kante
+    const ueberKante = modul(0.2, 1.2, 'c'); // ragt über die Kante
+    const p = pruefeModule(raum(4.5, 3.5), s, [innen], R);
+    expect(p.verstoesse.a).toEqual([]);
+    expect(pruefeModule(raum(4.5, 3.5), s, [nahInnen], R).verstoesse.b).toEqual(['Abstand zur Kante TEST Kleiderschrank 10 cm (mind. 30 cm)']);
+    expect(pruefeModule(raum(4.5, 3.5), s, [ueberKante], R).verstoesse.c).toContain('Abstand zur Kante TEST Kleiderschrank 0 cm (mind. 30 cm)');
+  });
+
+  it('Kategorie „neutral“: keine Regel; unbekanntes Objekt gilt als tabu', () => {
+    const p = pruefeModule(r, [sperr('couchtisch', 1.0, 0.5, 2.0, 2.0)], [modul(1.6, 1.2, 'a')], R);
+    expect(p.verstoesse.a).toEqual([]);
+    expect(p.hinweise).toEqual([]);
+    const u = pruefeModule(r, [sperr('gibtsnicht', 1.0, 0.5, 2.0, 2.0)], [modul(1.6, 1.2, 'a')], R);
+    expect(u.verstoesse.a).toEqual(['liegt über Objekt „gibtsnicht“ – dort ist kein Modul zulässig']);
+    expect(u.hinweise).toContain('Vorgabe fehlt: Objekt „gibtsnicht“ ist nicht in der Objektbibliothek des Projekts – geprüft wird nur, dass kein Modul darüber liegt');
+  });
+
+  it('ältere Daten mit festem Typ werden über den gleichnamigen Objektschlüssel geprüft', () => {
+    const alt: Sperrflaeche = { id: 'x', typ: 'sitzplatz', x: 2.5, y: 1.5, b: 1.0, t: 1.0 };
+    expect(pruefeModule(r, [alt], [modul(2.6, 1.6, 'c')], R).verstoesse.c[0]).toBe('liegt über TEST Sitzplatz – dort ist kein Modul zulässig');
+  });
+
+  it('Punkt ohne Mindestabstand: keine automatische Platzierung', () => {
+    const v = vorschlagen(raum(4, 4), [sperr('lautsprecher', 2, 2)], KATALOG, R, 500, ids());
+    expect(v.module).toBeNull();
+    expect(v.meldung).toContain('Vorgabe fehlt: Mindestabstand zu TEST Lautsprecher (Objektbibliothek)');
+  });
+
+  it('Kantenabstand: außen, innen, über die Kante', () => {
+    const o = { x: 1, y: 1, b: 3, t: 2 };
+    expect(kantenAbstand({ x: 0, y: 1, b: 0.5, t: 0.5 }, o)).toBeCloseTo(0.5);
+    expect(kantenAbstand({ x: 1.2, y: 1.5, b: 1, t: 0.5 }, o)).toBeCloseTo(0.2);
+    expect(kantenAbstand({ x: 0.8, y: 1.5, b: 1, t: 0.5 }, o)).toBe(0);
   });
 
   it('Mindesthöhe unterschritten: jedes Modul bemängelt', () => {

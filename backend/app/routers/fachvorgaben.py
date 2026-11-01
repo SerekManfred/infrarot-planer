@@ -14,16 +14,17 @@ from sqlalchemy.orm import Session, selectinload
 from app.abhaengigkeiten import aktueller_benutzer, hole_oder_404, nur_fachpruefer, vorgaben_pflege
 from app.auswertung import fachvorgaben_laden
 from app.db import get_db
-from app.models import Benutzer, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Protokoll
+from app.models import Benutzer, BibObjekt, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Protokoll
 from app.routers.projekte import (
     module_ablehnen, module_uebernehmen, protokoll_lesen, vorgaben_ablehnen, vorgaben_uebernehmen,
 )
 from app.schemas import (
     GEBAEUDESTANDARD_TEXT, FachvorgabenGesamt, FachvorgabenLesen, FachvorgabenWerte, PauschaleLesen,
-    AbgleichProjekt, PauschaleSetzen, ProtokollLesen, RaumtypAenderung, RaumtypLesen, RaumtypNeu, RegelAenderung,
+    AbgleichProjekt, BibObjektAenderung, BibObjektLesen, BibObjektNeu, PauschaleSetzen, ProtokollLesen, RaumtypAenderung, RaumtypLesen, RaumtypNeu, RegelAenderung,
     RegelLesen, SammelEntscheidung, SammelErgebnis, VorgabenAblehnen, VorschauAnfrage, VorschauErgebnis,
 )
 from app.modulabgleich import betroffene as module_betroffene
+from app.objektbibliothek import schluessel_aus_name
 from app.platzierungsregeln import GRENZEN
 from app.vorgabenabgleich import abgleichen, betroffene, vorschau as vorschau_berechnen
 
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/fachvorgaben", tags=["Fachvorgaben"], dependencies=[
 
 VORGABEN_OBJEKTARTEN = (
     "Fachvorgaben", "BibRaumtyp", "HeizlastPauschale", "Platzierungsregel", "BibBauteil", "BibKlimadaten", "BibModul",
+    "BibObjekt",
 )
 
 
@@ -44,6 +46,7 @@ def lesen(db: Session = Depends(get_db)):
         raumtypen=db.scalars(select(BibRaumtyp).order_by(BibRaumtyp.reihenfolge, BibRaumtyp.bezeichnung)).all(),
         pauschalen=db.scalars(select(HeizlastPauschale)).all(),
         regeln=db.scalars(select(Platzierungsregel).order_by(Platzierungsregel.reihenfolge)).all(),
+        objekte=db.scalars(select(BibObjekt).order_by(BibObjekt.reihenfolge, BibObjekt.name)).all(),
         gebaeudestandards=GEBAEUDESTANDARD_TEXT,
     )
 
@@ -67,6 +70,65 @@ def regel_aendern(schluessel: str, daten: RegelAenderung, db: Session = Depends(
     _abgleichen(db)
     db.refresh(regel)
     return regel
+
+
+# ── Objektbibliothek (Festlegung 01.11.2026) ──
+
+
+def _objekt_pruefen(db: Session, daten: dict, ausser: int | None = None) -> dict:
+    """Name eindeutig, Raumtypen vorhanden, Maße passend zur Form; gibt bereinigte Daten zurück."""
+    if "name" in daten:
+        vorhanden = db.scalar(select(BibObjekt.id).where(BibObjekt.name == daten["name"]))
+        if vorhanden is not None and vorhanden != ausser:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Das Objekt „{daten['name']}“ gibt es bereits")
+    if daten.get("raumtyp_ids"):
+        ids = sorted(set(daten["raumtyp_ids"]))
+        bekannt = set(db.scalars(select(BibRaumtyp.id).where(BibRaumtyp.id.in_(ids))))
+        if fehlend := [i for i in ids if i not in bekannt]:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unbekannte Raumtypen: {fehlend}")
+        daten["raumtyp_ids"] = ids
+    return daten
+
+
+def _objekt_form_pruefen(objekt: BibObjekt) -> None:
+    if objekt.form == "rechteck" and (objekt.breite_m is None or objekt.tiefe_m is None):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Rechteck: Standardbreite und -tiefe angeben")
+    if objekt.form == "streifen" and objekt.breite_m is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Streifen: Standardbreite (Tiefe ab der Wand) angeben")
+    if objekt.form == "punkt":
+        objekt.breite_m = objekt.tiefe_m = objekt.hoehe_m = None
+
+
+@router.post("/objekte", response_model=BibObjektLesen, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(vorgaben_pflege)])
+def objekt_anlegen(daten: BibObjektNeu, db: Session = Depends(get_db)):
+    werte = _objekt_pruefen(db, daten.model_dump())
+    vergeben = set(db.scalars(select(BibObjekt.schluessel)))
+    objekt = BibObjekt(**werte, schluessel=schluessel_aus_name(werte["name"], vergeben))
+    if not werte.get("reihenfolge"):
+        objekt.reihenfolge = (max(db.scalars(select(BibObjekt.reihenfolge)), default=0) or 0) + 1
+    _objekt_form_pruefen(objekt)
+    db.add(objekt)
+    db.commit()
+    _abgleichen(db)
+    db.refresh(objekt)
+    return objekt
+
+
+@router.patch("/objekte/{objekt_id}", response_model=BibObjektLesen, dependencies=[Depends(vorgaben_pflege)])
+def objekt_aendern(objekt_id: int, daten: BibObjektAenderung, db: Session = Depends(get_db)):
+    """Objekt ändern; gelöscht wird nicht (Projekte verweisen darauf) – stattdessen „aktiv“ ausschalten."""
+    objekt = hole_oder_404(db, BibObjekt, objekt_id)
+    werte = _objekt_pruefen(db, daten.model_dump(exclude_unset=True), objekt_id)
+    for name, wert in werte.items():
+        if wert is None and name in ("name", "gruppe", "form", "kategorie", "quelle", "aktiv", "raumtyp_ids", "reihenfolge"):
+            continue
+        setattr(objekt, name, wert)
+    _objekt_form_pruefen(objekt)
+    db.commit()
+    _abgleichen(db)
+    db.refresh(objekt)
+    return objekt
 
 
 @router.put("/werte", response_model=FachvorgabenLesen, dependencies=[Depends(vorgaben_pflege)])
@@ -168,7 +230,7 @@ def _abgleichen(db: Session) -> dict:
 
 _VORSCHAU_SCHEMAS = {
     "werte": FachvorgabenWerte, "raumtyp_neu": RaumtypNeu, "raumtyp_aendern": RaumtypAenderung,
-    "pauschale": PauschaleSetzen, "regel": RegelAenderung,
+    "pauschale": PauschaleSetzen, "regel": RegelAenderung, "objekt_neu": BibObjektNeu, "objekt_aendern": BibObjektAenderung,
 }
 
 
@@ -180,7 +242,10 @@ def vorschau(anfrage: VorschauAnfrage, db: Session = Depends(get_db)):
         daten = schema.model_validate(anfrage.daten).model_dump(exclude_unset=anfrage.art != "werte") if schema else {}
     except ValidationError as fehler:  # wie ungültige Eingaben einer Anfrage melden (422, verständlicher Text)
         raise RequestValidationError(fehler.errors()) from None
-    return vorschau_berechnen(db, anfrage.art, anfrage.ziel, daten)
+    ziel = anfrage.ziel
+    if anfrage.art == "objekt_aendern":  # Projektstände kennen Objekte nur über den Schlüssel
+        ziel = hole_oder_404(db, BibObjekt, int(ziel)).schluessel if ziel is not None else None
+    return vorschau_berechnen(db, anfrage.art, ziel, daten)
 
 
 @router.get("/abgleich", response_model=list[AbgleichProjekt], dependencies=[Depends(nur_fachpruefer)])

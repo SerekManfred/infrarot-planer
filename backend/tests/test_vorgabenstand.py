@@ -288,12 +288,12 @@ def test_cli_regel_setzen_und_uebernehmen(db, client, aussendienst):
     from app.cli import regel_setzen, vorgaben_uebernehmen_cli
 
     pa, pb = _zwei_projekte(client, aussendienst)
-    text = regel_setzen(db, "abstand_dusche_cm", 30, None, "TESTQUELLE")
-    assert "Mindestabstand zu Dusche/Wanne: 30 cm" in text and "2 ohne Auswirkung übernommen" in text
+    text = regel_setzen(db, "mindesthoehe_m", 2, None, "TESTQUELLE")
+    assert "Mindestraumhöhe für Deckenmontage: 2 m" in text and "2 ohne Auswirkung übernommen" in text
     with pytest.raises(ValueError):
         regel_setzen(db, "gibtsnicht", 1, None, "Q")
     with pytest.raises(ValueError):
-        regel_setzen(db, "abstand_dusche_cm", 30, None, " ")
+        regel_setzen(db, "mindesthoehe_m", 2, None, " ")
     from app.models import Projekt
 
     assert "Status entwurf" in vorgaben_uebernehmen_cli(db, db.get(Projekt, pa).nummer)

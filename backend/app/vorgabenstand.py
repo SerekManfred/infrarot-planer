@@ -14,7 +14,7 @@ und werden über ihre ID verwendet.
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Projekt
+from app.models import BibObjekt, BibRaumtyp, Fachvorgaben, HeizlastPauschale, Platzierungsregel, Projekt
 from app.schemas import GEBAEUDESTANDARD_TEXT
 
 WERTE = ("rueckfall_neubau_w_m2", "rueckfall_effizienzhaus_sanierung_w_m2", "hoehe_hinweis_m", "delta_u_wb", "quelle")
@@ -23,6 +23,16 @@ RAUMTYP_FELDER = (
     "richtwert_altbau_w_m2",
 )
 REGEL_FELDER = ("schluessel", "bezeichnung", "wert", "wert_text", "einheit", "quelle")
+OBJEKT_FELDER = (
+    "schluessel", "name", "gruppe", "raumtyp_ids", "form", "breite_m", "tiefe_m", "hoehe_m", "kategorie", "abstand_cm",
+    "quelle", "aktiv", "reihenfolge",
+)
+# Was beim Vergleich zählt (Quelle und Reihenfolge nicht)
+OBJEKT_TEXT = {
+    "name": "Name", "gruppe": "Gruppe", "raumtyp_ids": "passende Raumtypen", "form": "Form", "breite_m": "Standardbreite (m)",
+    "tiefe_m": "Standardtiefe (m)", "hoehe_m": "Standardhöhe (m)", "kategorie": "Kategorie", "abstand_cm": "Mindestabstand (cm)",
+    "aktiv": "aktiv",
+}
 
 WERTE_TEXT = {
     "rueckfall_neubau_w_m2": "Rückfallwert Neubau (W/m²)",
@@ -55,6 +65,12 @@ def schnappschuss(db: Session) -> dict:
         "regeln": [
             {n: getattr(r, n) for n in REGEL_FELDER}
             for r in db.scalars(select(Platzierungsregel).order_by(Platzierungsregel.reihenfolge))
+        ],
+        # Objektbibliothek (Festlegung 01.11.2026): ebenfalls je Projekt eingefroren, inaktive Objekte eingeschlossen
+        # (sie können im Projekt noch vorkommen)
+        "objekte": [
+            {n: getattr(o, n) for n in OBJEKT_FELDER}
+            for o in db.scalars(select(BibObjekt).order_by(BibObjekt.reihenfolge, BibObjekt.name))
         ],
     }
 
@@ -122,7 +138,32 @@ def unterschiede(alt: dict, neu: dict) -> list[dict]:
         n = _regelwert(r)
         if a != n:
             neu_eintrag("Platzierungsregel", f"{r['bezeichnung']}" + (f" ({r['einheit']})" if r["einheit"] else ""), a, n)
+
+    # Objektbibliothek: über den Schlüssel verglichen; ältere Stände ohne Bibliothek: alles „neu“
+    o_alt = {o["schluessel"]: o for o in alt.get("objekte", [])}
+    o_neu = {o["schluessel"]: o for o in neu.get("objekte", [])}
+    for schluessel, o in o_neu.items():
+        vorher = o_alt.get(schluessel)
+        if vorher is None:
+            neu_eintrag("Objektbibliothek", o["name"], None, "neu")
+            continue
+        for feld, text in OBJEKT_TEXT.items():
+            if vorher.get(feld) != o.get(feld):
+                neu_eintrag("Objektbibliothek", f"{vorher['name']}: {text}", _objektwert(vorher.get(feld), namen),
+                            _objektwert(o.get(feld), namen))
+    for schluessel, o in o_alt.items():
+        if schluessel not in o_neu:
+            neu_eintrag("Objektbibliothek", o["name"], "vorhanden", "entfernt")
     return ergebnis
+
+
+def _objektwert(wert, namen: dict) -> float | str | None:
+    """Für die Anzeige: Raumtyp-Listen als Namen, ja/nein als Text."""
+    if isinstance(wert, bool):
+        return "ja" if wert else "nein"
+    if isinstance(wert, list):
+        return ", ".join(namen.get(i, f"Raumtyp {i}") for i in wert) or "alle"
+    return wert
 
 
 def _regelwert(regel: dict) -> float | str | None:

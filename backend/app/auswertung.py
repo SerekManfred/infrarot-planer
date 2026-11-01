@@ -71,6 +71,8 @@ def objekt_planung(
         "bauteile": [{"id": b.id, "u_wert": b.u_wert} for b in db.scalars(select(BibBauteil).order_by(BibBauteil.id))],
         # Platzierungsregeln im Stand des Projekts (ältere Stände ohne Regeln: alles „Vorgabe fehlt“)
         "regeln": stand.get("regeln", []),
+        # Objektbibliothek im Stand des Projekts (ältere Stände ohne Bibliothek: Objekte unbekannt → tabu)
+        "objekte": stand.get("objekte", []),
         "geschosse": [
             {
                 "id": g.id, "bezeichnung": g.bezeichnung,

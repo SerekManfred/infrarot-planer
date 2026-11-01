@@ -185,6 +185,15 @@ def stand_mit_aenderung(stand: dict, art: str, ziel: int | str | None, daten: di
         if daten.get("w_m2") is not None:
             neu["pauschalen"].append({"raumtyp_id": daten["raumtyp_id"], "gebaeudestandard": daten["gebaeudestandard"],
                                       "w_m2": daten["w_m2"], "quelle": daten.get("quelle", "")})
+    elif art == "objekt_aendern":
+        for o in neu.get("objekte", []):
+            if o["schluessel"] == ziel:
+                o.update(daten)
+    elif art == "objekt_neu":
+        neu.setdefault("objekte", []).append({
+            "schluessel": "__neu__", "raumtyp_ids": [], "breite_m": None, "tiefe_m": None, "hoehe_m": None,
+            "abstand_cm": None, "quelle": "", "aktiv": True, "reihenfolge": 0, **daten,
+        })
     elif art == "regel":
         for r in neu.get("regeln", []):
             if r["schluessel"] == ziel:

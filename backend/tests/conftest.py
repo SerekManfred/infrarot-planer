@@ -13,7 +13,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Benutzer, Fachvorgaben, Platzierungsregel
+from app.models import Benutzer, BibObjekt, Fachvorgaben, Platzierungsregel
+from app.objektbibliothek import START
 from app.platzierungsregeln import REGELN
 from app.sicherheit import passwort_hashen
 
@@ -36,6 +37,13 @@ def db():
         sitzung.add_all(
             Platzierungsregel(schluessel=r.schluessel, bezeichnung=r.bezeichnung, einheit=r.einheit, reihenfolge=i)
             for i, r in enumerate(REGELN)
+        )
+        # Wie nach der Migration: Startausstattung der Objektbibliothek (ohne Raumtypen, Quelle TESTWERT)
+        sitzung.add_all(
+            BibObjekt(schluessel=o.schluessel, name=o.name, gruppe=o.gruppe, raumtyp_ids=[], form=o.form,
+                      breite_m=o.breite_m, tiefe_m=o.tiefe_m, hoehe_m=o.hoehe_m, kategorie=o.kategorie,
+                      abstand_cm=o.abstand_cm, quelle="TESTWERT", aktiv=True, reihenfolge=i)
+            for i, o in enumerate(START)
         )
         sitzung.commit()
         yield sitzung

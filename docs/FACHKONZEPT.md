@@ -186,15 +186,25 @@ Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern
   - Beides geht einzeln oder in der Sammelansicht „Vorgaben-Abgleich“ (Spalte „Anlass: Moduldaten“).
   - Freigegebene Projekte bleiben unverändert.
 
-### Sperrflächen
+### Objekte im Raum: Objektbibliothek (Festlegung 01.11.2026)
 
-Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichnet: Ursprung linke obere Ecke, x entlang der Länge, Raster 5 cm.
+Die festen Sperrflächen-Typen sind durch eine **Objektbibliothek** ersetzt. Sie gehört zu den Fachvorgaben: Fachprüfer und Admins pflegen sie (Seite „Fachvorgaben“, Karte „Objektbibliothek“, Bearbeiten im Dialog), jede Änderung wird protokolliert. Jedes Projekt rechnet mit seiner **eingefrorenen Kopie** (wie Regeln und Raumtypen). Zentrale Änderungen erscheinen im Projekt als Unterschied (Bereich „Objektbibliothek“) und laufen über die verfeinerte Sperre: ohne Auswirkung still übernommen, mit Auswirkung wartet das Projekt auf den Fachprüfer.
 
-- **Rechtecke:** Sitzplatz, Bett, Hochschrank, Dusche/Wanne, Sonstiges, dazu die Dachschräge als Streifen entlang einer Wand.
-- **Punkte:** Leuchte/Spot und Rauchmelder.
-- **Mindestabstand** je Typ aus der Regeltabelle, gemessen als kürzeste Entfernung zwischen den Kanten.
-- **Sitzplatz und Bett:** Über ihnen ist ein Modul **immer unzulässig**.
-- **Fehlender Abstand:** Fehlt die Abstandsregel eines Typs, wird nur geprüft, dass kein Modul darüber liegt, mit dem Hinweis „Vorgabe fehlt“. Seit dem 18.10.2026 sind alle Abstände belegt (Dusche/Wanne und Sonstiges je 30 cm).
+- **Felder je Objekt:** Name, Gruppe (Möbel / Deckeneinbauten / Bauliches), passende Raumtypen (keine = alle), Form (Rechteck / Punkt / Streifen entlang Wand), Standardbreite, -tiefe, -höhe in m, Kategorie, Mindestabstand in cm, Quelle, aktiv. Projekte verweisen über einen festen Schlüssel auf das Objekt. Gelöscht wird nicht; nicht mehr gebrauchte Objekte werden inaktiv gesetzt und bleiben in bestehenden Projekten gültig.
+- **Kategorien** (Rechenkern `rechenkern/src/platzierung.ts`):
+  - **tabu:** Kein Modul darüber, dazu der Mindestabstand zum Objekt (kürzeste Entfernung zwischen den Kanten). Fehlt der Abstand, wird nur geprüft, dass kein Modul darüber liegt („Vorgabe fehlt“).
+  - **Abstand:** Ein Modul darf auch über dem Objekt liegen, muss aber den Mindestabstand zur Kante einhalten. Liegt das Modul außerhalb, zählt die kürzeste Entfernung, liegt es ganz darüber, der kleinste Abstand zu den Objektkanten. Ein Modul, das über die Kante ragt, verstößt immer. Bei den Standardmaßen passt praktisch nie ein Modul mit Abstand ganz über ein solches Objekt; die Kategorie wirkt daher meist wie ein Mindestabstand von außen. **Auslegung von „Modul erlaubt, aber Mindestabstand zur Kante“ – bitte von Serek bestätigen.**
+  - **neutral:** nur Darstellung und Wärmeverteilung (Höhe), keine Regel.
+  - **Punkte** (Deckeneinbauten) werden nie überdeckt; ihr Abstand zählt zur nächsten Modulkante. Fehlt ihr Abstand, plant die App nicht automatisch.
+  - Ein Objekt, das im Projektstand nicht vorkommt, gilt vorsichtshalber als tabu ohne Mindestabstand, mit Hinweis.
+- **Startausstattung** (Maße B × T × H in m, Abstand in cm). Abstand, Höhe und Quelle der früheren Typen (Sitzplatz, Bett, Hochschrank, Dachschräge, Dusche, Sonstige, Leuchte, Rauchmelder) stammen aus den bisherigen Platzierungsregeln; alles Neue hat die Quelle „Vorgabe – von Serek prüfen, Stand 01.11.2026“:
+  - Möbel: Sitzplatz (allgemein) 2,00 × 0,90 × 0,45 tabu 30 · Sofa 2,20 × 0,90 × 0,45 tabu 30 · Sessel 0,85 × 0,85 × 0,45 tabu 30 · Esstisch 1,60 × 0,90 × 0,75 tabu 30 · Schreibtisch 1,40 × 0,70 × 0,75 tabu 30 · Bett 1,80 × 2,00 × 0,50 tabu 30 · Couchtisch 1,10 × 0,60 × 0,45 neutral · TV-Board 1,80 × 0,45 × 0,50 neutral · Nachttisch 0,50 × 0,40 × 0,55 neutral · Regal 1,00 × 0,40 × 2,00 Abstand 30 · Kleiderschrank 2,00 × 0,60 × 2,20 Abstand 30 · Hochschrank 0,60 × 0,60 × 2,00 Abstand 30 · Küchenzeile 2,40 × 0,60 × 0,90 neutral · Hängeschränke 2,40 × 0,35 × 2,15 Abstand 30 · Kühlschrank/Hochschrank Küche 0,60 × 0,60 × 2,15 Abstand 30 · Dunstabzug 0,90 × 0,50 × 2,20 Abstand 30 · Dusche 0,90 × 0,90 × 0,00 tabu 30 · Badewanne 1,70 × 0,75 × 0,55 tabu 30 · Waschtisch 0,80 × 0,50 × 0,85 neutral · WC 0,40 × 0,65 × 0,40 neutral · Spiegelschrank 0,80 × 0,15 × 2,00 Abstand 30 · Sonstige Sperrfläche 1,00 × 1,00 × 0,75 tabu 30
+  - Deckeneinbauten (Punkte, tabu): Leuchte 50 · Spot 50 · Rauchmelder 50 · Lautsprecher 30 · Lüftungsauslass 30
+  - Bauliches: Dachschräge (Streifen, Breite 1,00) Abstand 40 · Dachfenster 0,80 × 1,20 tabu 30 · Unterzug (Streifen, Breite 0,25) Abstand 30
+  - Passende Raumtypen der Startausstattung (nur für die Vorsortierung der Auswahl, pflegbar): z. B. Bad: Dusche, Badewanne, Waschtisch, WC, Spiegelschrank, Hochschrank; Küche: Küchenzeile, Hängeschränke, Kühlschrank, Dunstabzug, Esstisch; Wohnen: Sofa, Sessel, Couchtisch, TV-Board, Esstisch, Sitzplatz, Regal, Hochschrank. Deckeneinbauten, Bauliches und „Sonstige Sperrfläche“ passen in alle Räume.
+- **Abgelöste Regeln:** Die bisherigen Platzierungsregeln je Sperrflächen-Typ (Abstände, Höhen, „Bett als Sperrfläche“) entfallen. Beim Excel-Import werden diese Zeilen mit Hinweis übersprungen.
+- **Umstellung bestehender Projekte** (Migration `b7d1e5a3c2f8`): Jede Sperrfläche zeigt auf das gleichnamige Objekt (Dusche/Wanne → Dusche, Leuchte/Spot → Leuchte), Maße und Positionen unverändert. Eingefrorene Projektstände erhielten die Bibliothek mit den Werten ihres eigenen Stands; dadurch entstand kein offener Unterschied. Ältere Geräte, die noch den festen Typ senden, werden vom Server automatisch zugeordnet.
+- **Formen im Deckenplan:** Rechteck (Ecken ziehen), Punkt, Streifen: von Wand zu Wand durchgehend, parallel zu einer Wand; Abstand zur Wand und Breite eingebbar, ziehen verschiebt quer, der Anfasser an der Kante ändert die Breite. Die Dachschräge beginnt an der Wand, der Unterzug mittig.
 
 ### Modulauswahl
 
@@ -207,7 +217,7 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 
 ### Platzierung und Regelprüfung
 
-- **Zulässig** ist eine Position nur, wenn alle Mindestabstände eingehalten sind: zur Wand, zu anderen Modulen, Leuchten, Rauchmeldern und Sperrflächen. Mit Sperrflächen ist die Bewegungsfläche automatisch bevorzugt; bei gleicher Lage gewinnt die Position mit mehr Abstand zu Möbeln.
+- **Zulässig** ist eine Position nur, wenn alle Mindestabstände eingehalten sind: zur Wand, zu anderen Modulen und zu den Objekten im Raum, je nach Kategorie aus der Objektbibliothek (neutrale Objekte zählen nicht). Mit Sperrflächen ist die Bewegungsfläche automatisch bevorzugt; bei gleicher Lage gewinnt die Position mit mehr Abstand zu Möbeln.
 - **Ausrichtung:** Die Längsseite des Moduls liegt parallel zur langen Raumseite. Nur wenn das nicht passt, wird quer gelegt, mit Hinweis.
 - **Verteilung:** Mehrere Module werden in einem Raster über die freie Fläche gleichmäßig verteilt.
 - **Manuelle Korrektur:** verschieben, drehen, tauschen, hinzufügen, löschen. Die Regelprüfung läuft live; Verstöße werden rot markiert und im Klartext begründet, z. B. „Abstand zur Wand 32 cm (mind. 50 cm)“.
@@ -218,9 +228,12 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 ### Deckenplan: Bedienung und Darstellung (Festlegung 31.10.2026)
 
 - **Zugang:** In jeder Raumkarte gibt es eine große Schaltfläche „Deckenplan öffnen“ mit kleiner Vorschau. Der Plan öffnet bildschirmfüllend; „Schließen“ oder Esc beendet ihn.
-- **Sperrflächen:**
+- **Objekte (Möbel, Einbauten, Bauliches):**
+  - „+ Objekt hinzufügen“ öffnet eine Auswahl mit Suche: oben die zuletzt verwendeten (je Gerät, bis zu 6), dann „Passend für <Raumtyp>“ (die speziellsten zuerst, im Bad also Dusche, Badewanne, Waschtisch, WC …), dann „Für alle Räume“, auf Wunsch die Objekte anderer Räume. Neue Objekte erscheinen mittig mit den Standardmaßen.
   - Anfasser an allen vier Ecken, Größe in jede Richtung änderbar, Trefferfläche 44 px.
-  - Beim Antippen lassen sich Typ, Breite × Tiefe (m) eingeben oder die Fläche löschen. Bei der Dachschräge sind es Wand und Tiefe.
+  - Beim Antippen lassen sich ein anderes Objekt gleicher Form wählen, Breite × Tiefe (m) und Höhe eingeben oder das Objekt löschen; beim Streifen Wand, Abstand zur Wand und Breite.
+  - **Höhe verständlich beschriftet** (Praxistest 01.11.2026): „Höhe: 0,45 m (Standard für Sofa)“, nach einer Änderung „Höhe: 0,50 m (angepasst)“, mit Knopf „Standard“ zum Zurücksetzen. Das Feld ist auch am Handy breit genug.
+  - Darstellung nach Kategorie: tabu rot, Abstand braun, neutral gestrichelt grau; gestrichelter Rand außen = Mindestabstand, bei „Abstand“ innen die Linie, innerhalb derer ein Modul liegen darf.
   - Während des Ziehens werden die aktuellen Maße angezeigt.
 - **Bemaßung wie im Bauplan:** Länge oben und unten, Breite links und rechts. Beim gewählten Modul stehen die Abstände zu den beiden nächstgelegenen Wänden in m daneben, je eine in x- und y-Richtung (`rechenkern/src/plan.ts`, `wandAbstaende`). Diese Abstände sind für den PDF-Platzierungsplan vorgesehen.
 - **Tür und Fenster** nur zur Orientierung:
@@ -234,10 +247,13 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 
 **Vereinfachte Veranschaulichung der Strahlungsverteilung – keine Behaglichkeitsberechnung nach Norm.** Rechenmodell: `rechenkern/src/waermeverteilung.ts`. Es rechnet im Browser, auch offline, und aktualisiert sich nach jedem Verschieben oder Ändern.
 
-- **Schalter „Wärmeverteilung anzeigen“** direkt unter dem Plan, gemerkt je Gerät. Dargestellt wird ein kräftiger Farbverlauf der Bestrahlungsstärke in W/m² (wenig transparent): 8 Stufen einer Farbfamilie, hell = wenig, kräftig rot = viel.
+- **Schalter „Wärmeverteilung anzeigen“** direkt unter dem Plan, gemerkt je Gerät. Dargestellt wird ein Farbverlauf der Bestrahlungsstärke in W/m², eine Farbfamilie von hell = wenig bis kräftig rot = viel.
+  - **Weich** (Praxistest 01.11.2026): Gerechnet wird auf einem Raster mit höchstens etwa 72 Punkten je Richtung; dazwischen werden die Werte bilinear interpoliert und die Farben stufenlos gemischt, ohne Treppenstufen. Die Legende ist ein stufenloser Farbbalken mit Zahlenwerten (Autoskala: Min bis Max in fünf Werten, feste Skala: 0, 10 … ≥ 70).
+  - **Deckkraft** der Farbfläche per Regler einstellbar (20–100 %, Standard 75 %), gemerkt je Gerät.
+  - Die Farbfläche liegt **unter** Objekten und Modulen; alle Beschriftungen im Plan (Objektnamen, Modulnummern, Maße) sind schwarz mit weißem Rand und bleiben so lesbar.
   - **Skala automatisch** (Standard, Festlegung 02.11.2026): vom kleinsten bis zum größten Wert im Raum in 8 gleichen Stufen. Die Farben zeigen die Unterschiede im Raum, sind aber zwischen Räumen nicht vergleichbar.
   - **Skala fest:** in allen Räumen gleich, Stufen zu 10 W/m² (0 … ≥ 70), für Vergleiche zwischen Räumen.
-  - Die Legende zeigt je Stufe die echten Zahlenwerte, darunter Min, Mittel und Max des Raums. Der Mittelwert ist über alle Rasterzellen gebildet, also flächengewichtet.
+  - Die Legende zeigt die echten Zahlenwerte, darunter Min, Mittel und Max des Raums. Der Mittelwert ist über alle Rasterzellen gebildet, also flächengewichtet.
   - Antippen bzw. Überfahren einer Stelle zeigt eine Markierung mit dem Wert im Plan und den Wert mit Lage in der Legende (am Boden bzw. auf der Möbeloberseite mit Höhe).
   - Rechnet die App mit Vorgabewerten, steht ein deutlicher Hinweis „Mit Vorgabewerten berechnet …“ direkt unter dem Plan.
   - Die Farbschicht nimmt keine Eingaben an, Sperrflächen und Module bleiben bedienbar.
@@ -252,8 +268,8 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
 - **Empfangsflächen:**
   - der Boden (z = 0) und die Oberseiten der Sperrflächen auf ihrer Höhe; unter Möbeln wird der Boden nicht dargestellt;
   - bei mehreren Sperrflächen übereinander zählt die höchste;
-  - Dachschräge, Leuchte und Rauchmelder sind keine Empfangsflächen.
-- **Höhe je Sperrfläche:** Feld „Höhe“ beim Antippen einer Sperrfläche. Leer bedeutet die Vorgabe des Typs aus den Fachvorgaben (Platzierungsregeln), Festlegung 01.11.2026: Sitzplatz 0,45 m, Bett 0,50 m, Hochschrank 2,00 m, Dusche/Wanne 0 m, Sonstiges 0,75 m.
+  - Punkte (Deckeneinbauten), Streifen (Dachschräge, Unterzug) und Objekte ohne Höhe sind keine Empfangsflächen.
+- **Höhe je Objekt:** Standardhöhe aus der Objektbibliothek; am einzelnen Objekt kann eine eigene Höhe eingetragen werden („angepasst“).
 - **Strahlerkennwerte im Modulkatalog:** Oberflächentemperatur (°C), Emissionsgrad (0–1) und Abstrahlwinkel (°).
   - Sind sie leer, gelten die Vorgabewerte aus den Fachvorgaben, und die Darstellung zeigt „Mit Vorgabewerten berechnet“.
   - Sind auch die Vorgabewerte leer, steht „Vorgabe fehlt“, und es wird nichts dargestellt. Werte werden nicht erfunden.

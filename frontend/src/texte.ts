@@ -103,7 +103,11 @@ export const HILFE = {
     'Das Projekt rechnet mit den Fachvorgaben vom Tag des Anlegens. Spätere Änderungen gelten erst nach „Neue Vorgaben übernehmen“.',
   auschecken: 'Projekt auf dieses Gerät holen, damit es ohne Internet bearbeitet werden kann. Andere können es so lange nicht ändern.',
   sperrflaeche:
-    'Stelle an der Decke, an die kein Modul darf, z. B. über Sitzplatz, Bett oder Hochschrank, an Dachschrägen, Leuchten und Rauchmeldern. Der gestrichelte Rand zeigt den Mindestabstand.',
+    'Möbel, Deckeneinbauten und Bauliches im Raum. „tabu“ (z. B. Sofa, Bett): kein Modul darüber. „Abstand“ (z. B. Schrank, Dachschräge): Modul erlaubt, aber mit Mindestabstand zur Kante. „neutral“ (z. B. Couchtisch): nur Darstellung und Wärmeverteilung. Der gestrichelte Rand zeigt den Mindestabstand.',
+  objektbibliothek:
+    'Liste der Objekte für den Deckenplan mit Standardmaßen, Kategorie und Mindestabstand. Projekte rechnen mit ihrem eingefrorenen Stand; Änderungen erscheinen dort als Unterschied. Nicht mehr gebrauchte Objekte auf „inaktiv“ setzen – sie bleiben in bestehenden Projekten erhalten.',
+  objektHoehe:
+    'Höhe der Oberseite über dem Fußboden – nur für die Wärmeverteilung (dort wird die Oberseite angestrahlt). Standard aus der Objektbibliothek; ein eigener Wert gilt nur für dieses Objekt.',
   modulvorschlag:
     'Die App wählt möglichst wenige Module, die zusammen die benötigte Leistung bringen und mit allen Mindestabständen an die Decke passen. Danach lassen sie sich von Hand verschieben, drehen oder tauschen.',
   benoetigteLeistung: 'Heizlast des Raums plus Leistungsreserve. So viel Leistung sollen die Module zusammen mindestens haben.',

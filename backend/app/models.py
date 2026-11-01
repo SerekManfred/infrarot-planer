@@ -182,6 +182,35 @@ class Platzierungsregel(Zeitstempel, Base):
     reihenfolge: Mapped[int] = mapped_column(default=0)
 
 
+class BibObjekt(Zeitstempel, Base):
+    """Objekt der Objektbibliothek (Festlegung 01.11.2026, app/objektbibliothek.py): Möbel, Deckeneinbauten, Bauliches.
+
+    Gehört zu den Fachvorgaben und wird je Projekt eingefroren. Projekte verweisen über den Schlüssel darauf.
+    """
+
+    __tablename__ = "bib_objekt"
+    __table_args__ = (
+        CheckConstraint("gruppe IN ('moebel', 'decke', 'baulich')", name="ck_bib_objekt_gruppe"),
+        CheckConstraint("form IN ('rechteck', 'punkt', 'streifen')", name="ck_bib_objekt_form"),
+        CheckConstraint("kategorie IN ('tabu', 'abstand', 'neutral')", name="ck_bib_objekt_kategorie"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    schluessel: Mapped[str] = mapped_column(String(50), unique=True, comment="stabil, wird in Projekten gespeichert")
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    gruppe: Mapped[str] = mapped_column(String(20))
+    raumtyp_ids: Mapped[list] = mapped_column(JsonDaten, default=list, comment="passende Raumtypen; leer = alle")
+    form: Mapped[str] = mapped_column(String(20))
+    breite_m: Mapped[float | None] = mapped_column(Float, comment="Standardbreite; Streifen: Tiefe ab der Wand")
+    tiefe_m: Mapped[float | None] = mapped_column(Float)
+    hoehe_m: Mapped[float | None] = mapped_column(Float, comment="Höhe der Oberseite (Wärmeverteilung)")
+    kategorie: Mapped[str] = mapped_column(String(20))
+    abstand_cm: Mapped[float | None] = mapped_column(Float, comment="Mindestabstand; leer = Vorgabe fehlt")
+    quelle: Mapped[str] = mapped_column(String(500), default="")
+    aktiv: Mapped[bool] = mapped_column(default=True, comment="inaktive Objekte erscheinen nicht mehr in der Auswahl")
+    reihenfolge: Mapped[int] = mapped_column(default=0)
+
+
 class BibModul(Zeitstempel, Base):
     """Infrarot-Deckenmodul aus dem Modulkatalog. Fehlende Preise/Montagezeiten bleiben leer (nicht geschätzt)."""
 

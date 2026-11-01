@@ -1,5 +1,5 @@
-// Deckenplan eines Raums (Festlegungen 14.10. und 31.10.2026): maßstäbliche Draufsicht mit Sperrflächen, Modulen,
-// Türen und Fenstern, bemaßt wie im Bauplan.
+// Deckenplan eines Raums (Festlegungen 14.10., 31.10. und 01.11.2026): maßstäbliche Draufsicht mit Objekten aus der
+// Objektbibliothek (Möbel, Deckeneinbauten, Bauliches), Modulen, Türen und Fenstern, bemaßt wie im Bauplan.
 // Bedienung per Finger: antippen = auswählen, ziehen = verschieben, Eckpunkte ziehen = Größe ändern (jede Richtung).
 // Regelprüfung live mit dem Rechenkern (gleiche Regeln wie Server und Raumliste); gespeichert wird beim Loslassen.
 // Türen und Fenster dienen nur der Orientierung – keine Sperrflächen, ohne Einfluss auf die Platzierung.
@@ -9,14 +9,16 @@ import {
   bevorzugtGedreht,
   FENSTER_BREITE_M,
   istBad,
+  istPunkt,
   modulRechteck,
   naechsteWand,
+  objektName,
+  objektRegel,
+  objektSchluessel,
   oeffnungStrecke,
   platziertesModul,
-  PUNKT_TYPEN,
   raumModulplanung,
   regelnAufloesen,
-  SPERR_TYPEN,
   TUER_BREITE_M,
   tuerGeometrie,
   vorschlagen,
@@ -25,18 +27,18 @@ import {
   zulaessigeModule,
   type KatalogModul,
   type PlatzierungsRaum,
-  type SperrTyp,
   type TuerFenster,
   type Wand,
 } from '@infrarot/rechenkern';
-import { api, type AuswertungRaum, type Fachvorgaben, type KatalogModulDaten, type PlatziertesModul, type Raum, type Sperrflaeche } from '../api';
+import { api, type AuswertungRaum, type BibliotheksObjekt, type Fachvorgaben, type KatalogModulDaten, type PlatziertesModul, type Raum, type Sperrflaeche } from '../api';
 import { HILFE, watt, zahl } from '../texte';
 import { Hilfe, Meldung, Schalter, Zahlfeld } from './Felder';
+import { ObjektAuswahl } from './Objektbibliothek';
+import { hoeheText, streifenLage, streifenRechteck } from '../planhilfen';
 import {
   berechnen as waermeBerechnen,
   HINWEIS_WAERME,
   skala,
-  sperrhoehen,
   WaermeLegende,
   WaermeMarke,
   WaermeSchicht,
@@ -55,23 +57,14 @@ interface Props {
 
 const RASTER = 0.05;
 const MIN_GROESSE = 0.1;
-/** Startgrößen neuer Sperrflächen in m (nur Bedienkomfort, danach per Finger oder Eingabe anpassen) */
-const STARTGROESSE: Record<Exclude<SperrTyp, 'leuchte' | 'rauchmelder' | 'dachschraege'>, [number, number]> = {
-  sitzplatz: [2.0, 1.0],
-  bett: [1.6, 2.0],
-  hochschrank: [1.2, 0.6],
-  dusche: [0.9, 0.9],
-  sonstiges: [1.0, 1.0],
-};
-const RECHTECK_TYPEN = ['sitzplatz', 'bett', 'hochschrank', 'dusche', 'sonstiges'] as const;
 const WAENDE: Record<Wand, string> = { oben: 'oben', unten: 'unten', links: 'links', rechts: 'rechts' };
 const WANDANFANG: Record<Wand, string> = { oben: 'von links', unten: 'von links', links: 'von oben', rechts: 'von oben' };
 
 type Ecke = 'nw' | 'ne' | 'sw' | 'se';
 type Art = 'sperr' | 'modul' | 'oeffnung';
 type Auswahl = { art: Art; id: string } | null;
-/** schieben; Sperrfläche: Ecke ziehen; Tür/Fenster: Anfang oder Ende ziehen (Breite ändern) */
-type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'anfang' | 'ende'; dx: number; dy: number; bewegt: boolean };
+/** schieben; Rechteck: Ecke ziehen; Streifen: Kante ziehen (Breite); Tür/Fenster: Anfang oder Ende ziehen (Breite) */
+type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'kante' | 'anfang' | 'ende'; dx: number; dy: number; bewegt: boolean };
 
 export function neueId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -80,18 +73,6 @@ export function neueId(): string {
 const rasten = (w: number) => Math.round(w / RASTER) * RASTER;
 const begrenzen = (w: number, min: number, max: number) => Math.min(Math.max(w, min), Math.max(min, max));
 const m = (w: number) => `${zahl(w)} m`;
-
-/** Dachschräge als Streifen entlang einer Wand mit der Tiefe t (bzw. b bei links/rechts) */
-function schraegeStreifen(wand: Wand, tiefe: number, L: number, B: number): Pick<Sperrflaeche, 'x' | 'y' | 'b' | 't'> {
-  if (wand === 'oben') return { x: 0, y: 0, b: L, t: tiefe };
-  if (wand === 'unten') return { x: 0, y: B - tiefe, b: L, t: tiefe };
-  if (wand === 'links') return { x: 0, y: 0, b: tiefe, t: B };
-  return { x: L - tiefe, y: 0, b: tiefe, t: B };
-}
-
-function schraegeTiefe(s: Sperrflaeche): number {
-  return s.wand === 'links' || s.wand === 'rechts' ? s.b : s.t;
-}
 
 function katalogFuerRechenkern(k: KatalogModulDaten[]): KatalogModul[] {
   return k.map(({ id, artikel_nr, bezeichnung, leistung_w, laenge_mm, breite_mm, schutzart, bad_geeignet, aktiv }) => ({
@@ -170,7 +151,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     return () => beobachter.disconnect();
   }, [vbBreite, B, rand]);
 
-  const regeln = useMemo(() => regelnAufloesen(vorgaben.regeln), [vorgaben.regeln]);
+  const objekte = useMemo(() => vorgaben.objekte ?? [], [vorgaben.objekte]);
+  const regeln = useMemo(() => regelnAufloesen(vorgaben.regeln, objekte), [vorgaben.regeln, objekte]);
+  const objektVon = (s: Sperrflaeche) => objekte.find((o) => o.schluessel === objektSchluessel(s));
   const raumtyp = vorgaben.raumtypen.find((t) => t.id === raum.raumtyp_id)?.bezeichnung ?? null;
   const geometrie: PlatzierungsRaum = { laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, ist_bad: istBad(raumtyp) };
   const heizlast = ergebnis?.phi_massgeblich_w ?? null;
@@ -189,9 +172,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const waerme = useMemo(
     () =>
       waermeAn && zieht === null && L > 0 && B > 0
-        ? waermeBerechnen({ laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, raumtemperatur_c: raumtemperatur, module, sperrflaechen: sperr, katalog, regeln: vorgaben.regeln })
+        ? waermeBerechnen({ laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, raumtemperatur_c: raumtemperatur, module, sperrflaechen: sperr, katalog, regeln: vorgaben.regeln, objekte })
         : null,
-    [waermeAn, zieht, L, B, raum.hoehe_m, raumtemperatur, module, sperr, katalog, vorgaben.regeln],
+    [waermeAn, zieht, L, B, raum.hoehe_m, raumtemperatur, module, sperr, katalog, vorgaben.regeln, objekte],
   );
   const letzteWaerme = useRef(waerme);
   if (waerme) letzteWaerme.current = waerme;
@@ -211,7 +194,27 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
       /* ohne Speicher: gilt nur bis zum Schließen */
     }
   }
-  const waermeSkala = waermeAnzeige && waermeAnzeige.fehlt.length === 0 ? skala(waermeAnzeige, skalaArt) : null;
+  const waermeSkala = useMemo(
+    () => (waermeAnzeige && waermeAnzeige.fehlt.length === 0 ? skala(waermeAnzeige, skalaArt) : null),
+    [waermeAnzeige, skalaArt],
+  );
+  // Deckkraft der Farbfläche (Praxistest I): je Gerät gemerkt
+  const [deckkraft, setDeckkraft] = useState(() => {
+    try {
+      const w = Number(localStorage.getItem('deckenplan.waerme.deckkraft'));
+      return w >= 0.2 && w <= 1 ? w : 0.75;
+    } catch {
+      return 0.75;
+    }
+  });
+  function deckkraftSetzen(w: number) {
+    setDeckkraft(w);
+    try {
+      localStorage.setItem('deckenplan.waerme.deckkraft', String(w));
+    } catch {
+      /* ohne Speicher: gilt nur bis zum Schließen */
+    }
+  }
   function waermeUmschalten(an: boolean) {
     setWaermeAn(an);
     try {
@@ -304,13 +307,14 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     setSperr((alt) =>
       alt.map((s) => {
         if (s.id !== z.id) return s;
-        if (s.typ === 'dachschraege') {
-          // nur die Tiefe ändert sich; der Streifen bleibt an seiner Wand
-          const w = s.wand ?? 'oben';
-          const tiefe = rasten(
-            begrenzen(w === 'oben' ? p.y : w === 'unten' ? B - p.y : w === 'links' ? p.x : L - p.x, RASTER * 2, w === 'oben' || w === 'unten' ? B : L),
-          );
-          return { ...s, ...schraegeStreifen(w, tiefe, L, B) };
+        if (s.wand) {
+          // Streifen bleibt von Wand zu Wand: Kante ziehen = Breite ändern, sonst quer zur Wand verschieben
+          const w = s.wand;
+          const lage = streifenLage(s, L, B);
+          const ab = w === 'oben' ? p.y : w === 'unten' ? B - p.y : w === 'links' ? p.x : L - p.x;
+          if (z.modus === 'kante') return { ...s, ...streifenRechteck(w, lage.abstand, rasten(ab - lage.abstand), L, B) };
+          const versatz = w === 'oben' ? z.dy : w === 'unten' ? s.t - z.dy : w === 'links' ? z.dx : s.b - z.dx;
+          return { ...s, ...streifenRechteck(w, rasten(ab - versatz), lage.breite, L, B) };
         }
         if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') return { ...s, ...eckeZiehen(s, z.modus, p, L, B) };
         return { ...s, x: rasten(begrenzen(p.x - z.dx, 0, L - s.b)), y: rasten(begrenzen(p.y - z.dy, 0, B - s.t)) };
@@ -363,17 +367,19 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     void speichernOeffnungen([...oeffnungen, neu]);
   }
 
-  function sperrNeu(typ: SperrTyp) {
+  /** Neues Objekt mit den Standardmaßen der Bibliothek, mittig (Streifen an der oberen Wand) */
+  function sperrNeu(o: BibliotheksObjekt) {
     let neu: Sperrflaeche;
-    if (PUNKT_TYPEN.includes(typ)) {
-      neu = { id: neueId(), typ, x: rasten(L / 2), y: rasten(B / 2), b: 0, t: 0 };
-    } else if (typ === 'dachschraege') {
-      neu = { id: neueId(), typ, wand: 'oben', ...schraegeStreifen('oben', rasten(Math.min(1, B / 3)), L, B) };
+    if (o.form === 'punkt') {
+      neu = { id: neueId(), objekt: o.schluessel, x: rasten(L / 2), y: rasten(B / 2), b: 0, t: 0 };
+    } else if (o.form === 'streifen') {
+      const breite = rasten(Math.min(o.breite_m ?? 1, B / 2));
+      const abstand = o.schluessel === 'dachschraege' ? 0 : rasten((B - breite) / 2);
+      neu = { id: neueId(), objekt: o.schluessel, wand: 'oben', ...streifenRechteck('oben', abstand, breite, L, B) };
     } else {
-      const [b, t] = STARTGROESSE[typ as keyof typeof STARTGROESSE];
-      const bb = Math.min(b, L);
-      const tt = Math.min(t, B);
-      neu = { id: neueId(), typ, x: rasten((L - bb) / 2), y: rasten((B - tt) / 2), b: bb, t: tt };
+      const bb = Math.min(o.breite_m ?? 1, L);
+      const tt = Math.min(o.tiefe_m ?? 1, B);
+      neu = { id: neueId(), objekt: o.schluessel, x: rasten((L - bb) / 2), y: rasten((B - tt) / 2), b: bb, t: tt };
     }
     setAuswahl({ art: 'sperr', id: neu.id });
     void speichernSperr([...sperr, neu]);
@@ -459,6 +465,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
             d={`M${-wandStaerke},${-wandStaerke}H${L + wandStaerke}V${B + wandStaerke}H${-wandStaerke}Z M0,0V${B}H${L}V0Z`}
           />
           <rect x={0} y={0} width={L} height={B} className="plan-raum" />
+          {/* Wärmeverteilung unter Objekten und Modulen: Umrisse und Beschriftungen bleiben obenauf lesbar */}
+          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} deckkraft={deckkraft} />}
           {regeln.wand_m !== null && L > 2 * regeln.wand_m && B > 2 * regeln.wand_m && (
             <rect x={regeln.wand_m} y={regeln.wand_m} width={L - 2 * regeln.wand_m} height={B - 2 * regeln.wand_m} className="plan-wandabstand" />
           )}
@@ -481,15 +489,23 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           ))}
 
           {sperr.map((s) => {
-            const punktTyp = PUNKT_TYPEN.includes(s.typ);
-            const abstandM = punktTyp ? regeln.punkt_m[s.typ as 'leuchte' | 'rauchmelder'] : regeln.flaeche_m[s.typ as keyof typeof regeln.flaeche_m];
+            const punktTyp = istPunkt(s);
+            const regel = objektRegel(regeln, s);
+            const kategorie = regel?.kategorie ?? 'tabu';
+            const abstandM = kategorie === 'neutral' ? null : (regel?.abstand_m ?? null);
+            const name = objektName(regeln, s);
             const gewaehlt = gewaehlteSperr?.id === s.id;
             if (punktTyp) {
               return (
-                <g key={s.id} onPointerDown={(e) => anfassen(e, 'sperr', s.id)} className={`plan-punkt plan-${s.typ}${gewaehlt ? ' gewaehlt' : ''}`}>
+                <g key={s.id} onPointerDown={(e) => anfassen(e, 'sperr', s.id)} className={`plan-punkt kat-${kategorie}${gewaehlt ? ' gewaehlt' : ''}`}>
                   {abstandM !== null && <circle cx={s.x} cy={s.y} r={abstandM} className="plan-halo" />}
                   <circle cx={s.x} cy={s.y} r={griffTreffer} className="plan-tippflaeche" />
                   <circle cx={s.x} cy={s.y} r={px(7)} className="plan-punkt-kern" />
+                  {(gewaehlt || zieht === s.id) && (
+                    <text x={s.x} y={s.y - px(14)} fontSize={schrift} textAnchor="middle" className="plan-beschriftung">
+                      {name}
+                    </text>
+                  )}
                 </g>
               );
             }
@@ -499,7 +515,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
               ['sw', s.x, s.y + s.t],
               ['se', s.x + s.b, s.y + s.t],
             ];
-            const schraege = s.typ === 'dachschraege';
+            const schraege = !!s.wand;
             const kante = schraege
               ? s.wand === 'oben'
                 ? [s.x + s.b / 2, s.y + s.t]
@@ -510,17 +526,21 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                     : [s.x, s.y + s.t / 2]
               : null;
             return (
-              <g key={s.id} className={`plan-sperr plan-${s.typ}${gewaehlt ? ' gewaehlt' : ''}`}>
+              <g key={s.id} className={`plan-sperr kat-${kategorie}${gewaehlt ? ' gewaehlt' : ''}`}>
                 {abstandM !== null && abstandM > 0 && (
                   <rect x={s.x - abstandM} y={s.y - abstandM} width={s.b + 2 * abstandM} height={s.t + 2 * abstandM} rx={abstandM} className="plan-halo" />
                 )}
+                {/* Kategorie „abstand“: Modul darf darüber, aber nur innerhalb dieser Linie */}
+                {kategorie === 'abstand' && abstandM !== null && s.b > 2 * abstandM && s.t > 2 * abstandM && (
+                  <rect x={s.x + abstandM} y={s.y + abstandM} width={s.b - 2 * abstandM} height={s.t - 2 * abstandM} className="plan-halo-innen" />
+                )}
                 <rect x={s.x} y={s.y} width={s.b} height={s.t} onPointerDown={(e) => anfassen(e, 'sperr', s.id)} />
-                <text x={s.x + s.b / 2} y={s.y + s.t / 2} fontSize={schrift} textAnchor="middle" dominantBaseline="middle">
-                  {SPERR_TYPEN[s.typ]}
+                <text x={s.x + s.b / 2} y={s.y + s.t / 2} fontSize={schrift} textAnchor="middle" dominantBaseline="middle" className="plan-beschriftung">
+                  {name}
                 </text>
                 {(gewaehlt || zieht === s.id) && (
-                  <text x={s.x + s.b / 2} y={s.y - px(8)} fontSize={schrift} textAnchor="middle" className="plan-mass-live">
-                    {schraege ? `Tiefe ${m(schraegeTiefe(s))}` : `${zahl(s.b)} × ${zahl(s.t)} m`}
+                  <text x={s.x + s.b / 2} y={s.y - px(8)} fontSize={schrift} textAnchor="middle" className="plan-mass-live plan-beschriftung">
+                    {schraege ? `Breite ${m(streifenLage(s, L, B).breite)}` : `${zahl(s.b)} × ${zahl(s.t)} m`}
                   </text>
                 )}
                 {gewaehlt && !gesperrt && !schraege &&
@@ -531,7 +551,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                     </g>
                   ))}
                 {gewaehlt && !gesperrt && kante && (
-                  <g onPointerDown={(e) => anfassen(e, 'sperr', s.id)} className="plan-griff">
+                  <g onPointerDown={(e) => anfassen(e, 'sperr', s.id, 'kante')} className="plan-griff">
                     <circle cx={kante[0]} cy={kante[1]} r={griffTreffer} className="plan-tippflaeche" />
                     <circle cx={kante[0]} cy={kante[1]} r={griffR} className="plan-griff-punkt" />
                   </g>
@@ -540,7 +560,6 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
             );
           })}
 
-          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} />}
 
           {module.map((x, i) => {
             const r = modulRechteck(x);
@@ -593,6 +612,21 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
             optionen={{ auto: 'Skala automatisch', fest: 'Skala fest' }}
             onWahl={(a: SkalaArt) => skalaWaehlen(a)}
           />
+        )}
+        {waermeAn && (
+          <label className="waerme-deckkraft">
+            Deckkraft
+            <input
+              type="range"
+              min={0.2}
+              max={1}
+              step={0.05}
+              value={deckkraft}
+              aria-label="Deckkraft der Farbfläche"
+              onChange={(e) => deckkraftSetzen(Number(e.target.value))}
+            />
+            <span>{Math.round(deckkraft * 100)} %</span>
+          </label>
         )}
       </div>
       {waermeAnzeige?.mit_vorgabewerten && waermeAnzeige.fehlt.length === 0 && (
@@ -647,7 +681,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
               s={gewaehlteSperr}
               L={L}
               B={B}
-              vorgabeHoehe={sperrhoehen(vorgaben.regeln)[gewaehlteSperr.typ] ?? null}
+              objekt={objektVon(gewaehlteSperr)}
+              name={objektName(regeln, gewaehlteSperr)}
+              objekte={objekte}
               onAendern={sperrAendern}
               onLoeschen={() => void speichernSperr(sperr.filter((s) => s.id !== gewaehlteSperr.id)).then(() => setAuswahl(null))}
             />
@@ -662,16 +698,10 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
           <div className="werkzeuge">
             <span className="feldname">
-              Sperrfläche einzeichnen
-              <Hilfe begriff="Sperrfläche" text={HILFE.sperrflaeche} />
+              Möbel und Einbauten
+              <Hilfe begriff="Objekte im Raum" text={HILFE.sperrflaeche} />
             </span>
-            <div className="knopfreihe">
-              {(Object.keys(SPERR_TYPEN) as SperrTyp[]).map((t) => (
-                <button key={t} className="knopf-leise" onClick={() => sperrNeu(t)}>
-                  + {SPERR_TYPEN[t]}
-                </button>
-              ))}
-            </div>
+            <ObjektAuswahl objekte={objekte} raumtypId={raum.raumtyp_id} raumtyp={raumtyp} onWahl={sperrNeu} />
             <span className="feldname">
               Tür und Fenster (nur Orientierung)
               <Hilfe begriff="Tür und Fenster" text={HILFE.tuerFenster} />
@@ -850,36 +880,54 @@ function Oeffnung({
   );
 }
 
-/** Auswahl einer Sperrfläche: Typ ändern, Maße eingeben, löschen */
+/** Auswahl eines Objekts: anderes Objekt gleicher Form wählen, Maße und Höhe eingeben, löschen */
 function SperrLeiste({
   s,
   L,
   B,
-  vorgabeHoehe,
+  objekt,
+  name,
+  objekte,
   onAendern,
   onLoeschen,
 }: {
   s: Sperrflaeche;
   L: number;
   B: number;
-  /** Vorgabe-Höhe des Typs aus den Fachvorgaben (Wärmeverteilung) */
-  vorgabeHoehe: number | null;
+  /** Eintrag der Objektbibliothek (fehlt, wenn das Objekt im Projektstand unbekannt ist) */
+  objekt: BibliotheksObjekt | undefined;
+  name: string;
+  objekte: BibliotheksObjekt[];
   onAendern: (s: Sperrflaeche) => void;
   onLoeschen: () => void;
 }) {
-  const punkt = PUNKT_TYPEN.includes(s.typ);
-  const schraege = s.typ === 'dachschraege';
-  const typen: SperrTyp[] = punkt ? ['leuchte', 'rauchmelder'] : schraege ? ['dachschraege'] : [...RECHTECK_TYPEN];
+  const punkt = istPunkt(s);
+  const streifen = !!s.wand;
+  const form = punkt ? 'punkt' : streifen ? 'streifen' : 'rechteck';
+  const auswahl = objekte.filter((o) => o.form === form && (o.aktiv !== false || o.schluessel === objekt?.schluessel));
+  const standardHoehe = objekt?.hoehe_m ?? null;
+  const lage = streifen ? streifenLage(s, L, B) : null;
+  const wand = s.wand ?? 'oben';
+  const quer = wand === 'oben' || wand === 'unten' ? B : L;
   return (
     <div className="knopfreihe auswahl-leiste">
-      <select aria-label="Typ der Sperrfläche" value={s.typ} disabled={typen.length === 1} onChange={(e) => onAendern({ ...s, typ: e.target.value as SperrTyp })}>
-        {typen.map((t) => (
-          <option key={t} value={t}>
-            {SPERR_TYPEN[t]}
+      <select
+        aria-label="Objekt"
+        value={objektSchluessel(s)}
+        onChange={(e) => {
+          // anderes Objekt: Lage und Maße bleiben, eine eigene Höhe gilt nicht mehr
+          const { typ: _typ, ...rest } = s;
+          onAendern({ ...rest, objekt: e.target.value, hoehe: null });
+        }}
+      >
+        {!objekt && <option value={objektSchluessel(s)}>{name}</option>}
+        {auswahl.map((o) => (
+          <option key={o.schluessel} value={o.schluessel}>
+            {o.name}
           </option>
         ))}
       </select>
-      {!punkt && !schraege && (
+      {!punkt && !streifen && (
         <>
           <label className="inline">
             Breite
@@ -906,30 +954,41 @@ function SperrLeiste({
               }}
             />
           </label>
-          <label className="inline">
-            Höhe
-            <Zahlfeld
-              wert={s.hoehe ?? null}
-              einheit="m"
-              beschriftung="Höhe der Oberseite in m"
-              platzhalter={vorgabeHoehe === null ? 'fehlt' : `${zahl(vorgabeHoehe)} (Vorgabe)`}
-              hervorheben={s.hoehe !== undefined && s.hoehe !== null}
-              onSpeichern={(w) => {
-                if (w === null || w <= 5) onAendern({ ...s, hoehe: w });
-              }}
-            />
-          </label>
+          <div className="hoehe-feld">
+            <span className="hoehe-text" aria-live="polite">
+              {hoeheText(s.hoehe, standardHoehe, name)}
+              <Hilfe begriff="Höhe" text={HILFE.objektHoehe} />
+            </span>
+            <span className="knopfreihe">
+              <Zahlfeld
+                wert={s.hoehe ?? standardHoehe}
+                einheit="m"
+                beschriftung={`Höhe der Oberseite in m – ${s.hoehe != null ? 'angepasst' : `Standard für ${name}`}`}
+                hervorheben={s.hoehe !== undefined && s.hoehe !== null}
+                onSpeichern={(w) => {
+                  if (w !== null && w > 5) return;
+                  // gleich dem Standard (oder leer) = keine eigene Höhe
+                  onAendern({ ...s, hoehe: w === null || (standardHoehe !== null && Math.abs(w - standardHoehe) < 1e-9) ? null : w });
+                }}
+              />
+              {s.hoehe != null && (
+                <button className="knopf-leise klein" onClick={() => onAendern({ ...s, hoehe: null })}>
+                  Standard
+                </button>
+              )}
+            </span>
+          </div>
         </>
       )}
-      {schraege && (
+      {streifen && lage && (
         <>
           <label className="inline">
-            an der Wand
+            parallel zur Wand
             <select
-              value={s.wand ?? 'oben'}
+              value={wand}
               onChange={(e) => {
                 const w = e.target.value as Wand;
-                onAendern({ ...s, wand: w, ...schraegeStreifen(w, Math.min(schraegeTiefe(s), w === 'oben' || w === 'unten' ? B : L), L, B) });
+                onAendern({ ...s, wand: w, ...streifenRechteck(w, lage.abstand, lage.breite, L, B) });
               }}
             >
               {(Object.keys(WAENDE) as Wand[]).map((w) => (
@@ -940,16 +999,25 @@ function SperrLeiste({
             </select>
           </label>
           <label className="inline">
-            Tiefe
+            Abstand zur Wand
             <Zahlfeld
-              wert={Math.round(schraegeTiefe(s) * 100) / 100}
+              wert={Math.round(lage.abstand * 100) / 100}
               einheit="m"
-              beschriftung="Tiefe der Dachschräge in m"
+              beschriftung="Abstand des Streifens zur Wand in m"
+              onSpeichern={(w) => {
+                if (w !== null) onAendern({ ...s, ...streifenRechteck(wand, begrenzen(w, 0, quer), lage.breite, L, B) });
+              }}
+            />
+          </label>
+          <label className="inline">
+            Breite
+            <Zahlfeld
+              wert={Math.round(lage.breite * 100) / 100}
+              einheit="m"
+              beschriftung="Breite des Streifens in m"
               min={MIN_GROESSE}
               onSpeichern={(w) => {
-                if (w === null) return;
-                const wand = s.wand ?? 'oben';
-                onAendern({ ...s, ...schraegeStreifen(wand, begrenzen(w, MIN_GROESSE, wand === 'oben' || wand === 'unten' ? B : L), L, B) });
+                if (w !== null) onAendern({ ...s, ...streifenRechteck(wand, lage.abstand, w, L, B) });
               }}
             />
           </label>
@@ -1062,10 +1130,10 @@ export function PlanVorschau({ raum }: { raum: Raum }) {
         return <line key={o.id} x1={a.x} y1={a.y} x2={e.x} y2={e.y} className={`vorschau-${o.art}`} />;
       })}
       {(raum.sperrflaechen ?? []).map((s) =>
-        PUNKT_TYPEN.includes(s.typ) ? (
+        istPunkt(s) ? (
           <circle key={s.id} cx={s.x} cy={s.y} r={0.04 * Math.max(L, B)} className="vorschau-punkt" />
         ) : (
-          <rect key={s.id} x={s.x} y={s.y} width={s.b} height={s.t} className={`vorschau-sperr vorschau-${s.typ}`} />
+          <rect key={s.id} x={s.x} y={s.y} width={s.b} height={s.t} className={`vorschau-sperr${s.wand ? ' vorschau-streifen' : ''}`} />
         ),
       )}
       {(raum.module ?? []).map((x) => {

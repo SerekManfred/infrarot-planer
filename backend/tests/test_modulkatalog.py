@@ -215,7 +215,7 @@ def test_strahlerkennwerte_im_katalog(client, fachpruefer):
 def test_vorgabewerte_und_hoehen_in_regeln(client, fachpruefer, aussendienst, projekt):  # noqa: F811
     anmelden(client, fachpruefer.email)
     regeln = {r["schluessel"]: r for r in client.get("/api/fachvorgaben").json()["regeln"]}
-    assert {"hoehe_sitzplatz_m", "strahler_temperatur_c", "strahler_emissionsgrad", "strahler_abstrahlwinkel_grad"} <= set(regeln)
+    assert {"strahler_temperatur_c", "strahler_emissionsgrad", "strahler_abstrahlwinkel_grad"} <= set(regeln)
     antwort = client.patch("/api/fachvorgaben/regeln/strahler_emissionsgrad", json={"wert": 1.5})
     assert antwort.status_code == 422 and "höchstens 1" in antwort.json()["detail"]
     assert client.patch("/api/fachvorgaben/regeln/strahler_abstrahlwinkel_grad", json={"wert": 0}).status_code == 422
@@ -223,7 +223,7 @@ def test_vorgabewerte_und_hoehen_in_regeln(client, fachpruefer, aussendienst, pr
     # Höhe einer Sperrfläche wird gespeichert; ungültige Höhe abgelehnt
     anmelden(client, aussendienst.email)
     raum = _raum(client, projekt)
-    sitz = {"id": "s1", "typ": "sitzplatz", "x": 1, "y": 1, "b": 1.5, "t": 1, "hoehe": 0.42}
+    sitz = {"id": "s1", "objekt": "sitzplatz", "x": 1, "y": 1, "b": 1.5, "t": 1, "hoehe": 0.42}
     assert _patch(client, f"/api/raeume/{raum['id']}", {"sperrflaechen": [sitz]})["sperrflaechen"][0]["hoehe"] == 0.42
     assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [{**sitz, "hoehe": 9}]}).status_code == 422
     # neue Regeln ändern weder Heizlast noch Module: das Projekt bleibt ohne offene Vorgaben (still übernommen)

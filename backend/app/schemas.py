@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 Angrenzung = Literal["aussen", "beheizt", "unbeheizt", "erdreich"]
 Rolle = Literal["admin", "fachpruefer", "aussendienst"]
@@ -252,18 +252,31 @@ SperrflaecheTyp = Literal[
 
 
 class Sperrflaeche(BaseModel):
+    """Objekt im Raum (Möbel, Deckeneinbau, Bauliches) mit Verweis auf die Objektbibliothek (Festlegung 01.11.2026)."""
+
     id: str = Field(min_length=1, max_length=40)
-    typ: SperrflaecheTyp
-    # Rechteck: linke obere Ecke und Ausdehnung; Leuchte/Rauchmelder: Punkt (b = t = 0)
+    # Schlüssel des Objekts in der Objektbibliothek
+    objekt: str | None = Field(default=None, min_length=1, max_length=50)
+    # veraltet (feste Typen bis 01.11.2026): ältere Geräte senden noch „typ“ – wird in „objekt“ übernommen
+    typ: SperrflaecheTyp | None = Field(default=None, exclude=True)
+    # Rechteck: linke obere Ecke und Ausdehnung; Punkt (Deckeneinbau): b = t = 0
     x: float = Field(ge=0, le=100)
     y: float = Field(ge=0, le=100)
     b: float = Field(default=0, ge=0, le=100)
     t: float = Field(default=0, ge=0, le=100)
-    # nur Dachschräge: Wand, an der der Streifen liegt
+    # nur Streifen (Dachschräge, Unterzug): Wand, zu der der Streifen parallel liegt
     wand: Literal["oben", "unten", "links", "rechts"] | None = None
-    # Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Vorgabe des Typs
+    # Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Standard des Objekts
     hoehe: float | None = Field(default=None, ge=0, le=5)
     bezeichnung: str = Field(default="", max_length=100)
+
+    @model_validator(mode="after")
+    def _objekt_aus_typ(self):
+        if self.objekt is None:
+            if self.typ is None:
+                raise ValueError("Objekt fehlt")
+            self.objekt = self.typ  # die früheren Typen sind zugleich Schlüssel der Objektbibliothek
+        return self
 
 
 class ModulPlatziert(BaseModel):
@@ -460,6 +473,60 @@ class RegelAenderung(BaseModel):
     quelle: str | None = Field(default=None, max_length=500)
 
 
+ObjektGruppe = Literal["moebel", "decke", "baulich"]
+ObjektForm = Literal["rechteck", "punkt", "streifen"]
+ObjektKategorie = Literal["tabu", "abstand", "neutral"]
+
+
+class BibObjektNeu(BaseModel):
+    """Objekt der Objektbibliothek (app/objektbibliothek.py)."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    gruppe: ObjektGruppe
+    raumtyp_ids: list[int] = Field(default_factory=list, max_length=50)
+    form: ObjektForm
+    breite_m: float | None = Field(default=None, gt=0, le=20)
+    tiefe_m: float | None = Field(default=None, gt=0, le=20)
+    hoehe_m: float | None = Field(default=None, ge=0, le=5)
+    kategorie: ObjektKategorie
+    abstand_cm: float | None = Field(default=None, ge=0, le=500)
+    quelle: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    aktiv: bool = True
+    reihenfolge: int = 0
+
+
+class BibObjektAenderung(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] | None = None
+    gruppe: ObjektGruppe | None = None
+    raumtyp_ids: list[int] | None = Field(default=None, max_length=50)
+    form: ObjektForm | None = None
+    breite_m: float | None = Field(default=None, gt=0, le=20)
+    tiefe_m: float | None = Field(default=None, gt=0, le=20)
+    hoehe_m: float | None = Field(default=None, ge=0, le=5)
+    kategorie: ObjektKategorie | None = None
+    abstand_cm: float | None = Field(default=None, ge=0, le=500)
+    quelle: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)] | None = None
+    aktiv: bool | None = None
+    reihenfolge: int | None = None
+
+
+class BibObjektLesen(Lesbar):
+    id: int
+    schluessel: str
+    name: str
+    gruppe: str
+    raumtyp_ids: list[int]
+    form: str
+    breite_m: float | None
+    tiefe_m: float | None
+    hoehe_m: float | None
+    kategorie: str
+    abstand_cm: float | None
+    quelle: str
+    aktiv: bool
+    reihenfolge: int
+
+
 class ModulLesen(Lesbar):
     id: int
     artikel_nr: str
@@ -587,6 +654,7 @@ class FachvorgabenGesamt(BaseModel):
     raumtypen: list[RaumtypLesen]
     pauschalen: list[PauschaleLesen]
     regeln: list[RegelLesen]
+    objekte: list[BibObjektLesen]
     gebaeudestandards: dict[str, str]
 
 
@@ -654,7 +722,7 @@ class OfflineVorgaben(BaseModel):
 
 
 class VorgabenUnterschied(BaseModel):
-    bereich: Literal["Einzelwert", "Raumtyp", "Pauschale", "Platzierungsregel"]
+    bereich: Literal["Einzelwert", "Raumtyp", "Pauschale", "Platzierungsregel", "Objektbibliothek"]
     bezeichnung: str
     alt: float | str | None
     neu: float | str | None
@@ -699,8 +767,8 @@ class AbgleichProjekt(VorgabenAuswirkung):
 class VorschauAnfrage(BaseModel):
     """Geplante Änderung an den Fachvorgaben, deren Auswirkung vor dem Speichern gezeigt wird."""
 
-    art: Literal["werte", "raumtyp_neu", "raumtyp_aendern", "raumtyp_loeschen", "pauschale", "regel"]
-    # Raumtyp-ID bzw. Schlüssel der Regel
+    art: Literal["werte", "raumtyp_neu", "raumtyp_aendern", "raumtyp_loeschen", "pauschale", "regel", "objekt_neu", "objekt_aendern"]
+    # Raumtyp-ID, Schlüssel der Regel bzw. ID des Objekts
     ziel: int | str | None = None
     daten: dict = Field(default_factory=dict)
 

@@ -13,6 +13,7 @@ import {
   type VorschauErgebnis,
 } from '../api';
 import { BEGRIFF, GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, watt, zahl, zeitpunkt } from '../texte';
+import { ObjektbibliothekKarte } from './Objektbibliothek';
 import { Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 import { Protokoll } from './Protokoll';
 
@@ -198,6 +199,7 @@ export function FachvorgabenSeite({ benutzer }: { benutzer: Benutzer }) {
       </div>
 
       <RegelnKarte regeln={vorgaben.regeln ?? []} darf={darf} pruefen={mitVorschau} />
+      <ObjektbibliothekKarte objekte={vorgaben.objekte ?? []} raumtypen={vorgaben.raumtypen} darf={darf} pruefen={mitVorschau} />
       <div className="karte">
         <h2>Modulkatalog</h2>
         <p>

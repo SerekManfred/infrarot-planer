@@ -221,6 +221,8 @@ export function planungAus(objekt: ObjektPaket, fv: Fachvorgaben, vorgaben: Offl
     bauteile: (vorgaben?.bauteile ?? []).map((b) => ({ id: b.id, u_wert: b.u_wert })),
     // Platzierungsregeln im Stand des Projekts
     regeln: fv.regeln ?? [],
+    // Objektbibliothek im Stand des Projekts (Festlegung 01.11.2026)
+    objekte: fv.objekte ?? [],
     geschosse: (sortiert('geschosse', objekt.geschosse as unknown as Knoten[]) as unknown as ObjektPaket['geschosse']).map((g) => ({
       id: g.id,
       bezeichnung: g.bezeichnung,
@@ -380,6 +382,7 @@ export function neuesProjekt(
           raumtypen: vorgaben.fachvorgaben.raumtypen,
           pauschalen: vorgaben.fachvorgaben.pauschalen,
           regeln: vorgaben.fachvorgaben.regeln ?? [],
+          objekte: vorgaben.fachvorgaben.objekte ?? [],
         }
       : null,
     erstellt_am: jetzt,

@@ -1,9 +1,18 @@
 // Zugriff auf die Backend-API. Die Sitzung liegt im HttpOnly-Cookie; das Frontend sieht kein Token.
 // Typen der API-Daten; Schlüssel wie im Backend (snake_case).
-import type { PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche, TuerFenster } from '@infrarot/rechenkern';
+import type { BibObjekt, PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche, TuerFenster } from '@infrarot/rechenkern';
 import { anfrage } from './offline/daten';
 
 export type { PlatziertesModul, Sperrflaeche, TuerFenster };
+
+/** Objekt der Objektbibliothek (Fachvorgaben, Festlegung 01.11.2026) */
+export interface BibliotheksObjekt extends BibObjekt {
+  /** nur zentral (GET /fachvorgaben); in Projektständen fehlt die ID */
+  id?: number;
+  quelle: string;
+  aktiv: boolean;
+  reihenfolge: number;
+}
 
 export { ApiFehler } from './netz';
 
@@ -226,6 +235,8 @@ export interface Fachvorgaben {
   pauschalen: Pauschale[];
   /** fehlt in Projektständen vor dem 14.10.2026 */
   regeln?: Platzierungsregel[];
+  /** Objektbibliothek; fehlt in Projektständen vor dem 01.11.2026 */
+  objekte?: BibliotheksObjekt[];
   gebaeudestandards: Record<Gebaeudestandard, string>;
 }
 
@@ -294,7 +305,7 @@ export interface ProjektPaket extends Projekt {
 }
 
 export interface VorgabenUnterschied {
-  bereich: 'Einzelwert' | 'Raumtyp' | 'Pauschale' | 'Platzierungsregel';
+  bereich: 'Einzelwert' | 'Raumtyp' | 'Pauschale' | 'Platzierungsregel' | 'Objektbibliothek';
   bezeichnung: string;
   alt: number | string | null;
   neu: number | string | null;
@@ -352,7 +363,7 @@ export interface AbgleichProjekt extends VorgabenAuswirkung {
 
 /** Geplante Fachvorgaben-Änderung für POST /fachvorgaben/vorschau */
 export interface VorschauAnfrage {
-  art: 'werte' | 'raumtyp_neu' | 'raumtyp_aendern' | 'raumtyp_loeschen' | 'pauschale' | 'regel';
+  art: 'werte' | 'raumtyp_neu' | 'raumtyp_aendern' | 'raumtyp_loeschen' | 'pauschale' | 'regel' | 'objekt_neu' | 'objekt_aendern';
   ziel?: number | string;
   daten?: Record<string, unknown>;
 }

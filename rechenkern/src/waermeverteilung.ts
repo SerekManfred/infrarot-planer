@@ -13,7 +13,7 @@
 // - Summe über alle Module. Keine Reflexionen, keine Abschattung, keine Konvektion.
 // Koordinaten wie im Deckenplan: x entlang der Länge, y entlang der Breite, Meter; z von Fußboden nach oben.
 
-import { modulRechteck, type PlatziertesModul, type Sperrflaeche } from './platzierung';
+import { istPunkt, modulRechteck, objektSchluessel, type PlatziertesModul, type Sperrflaeche } from './platzierung';
 
 /** Stefan-Boltzmann-Konstante in W/(m²·K⁴) */
 export const SIGMA = 5.670374419e-8;
@@ -131,16 +131,19 @@ export interface WaermeEingabe {
   kennwerte: Map<number, StrahlerWerte>;
   vorgaben: StrahlerWerte;
   sperrflaechen: Sperrflaeche[];
-  /** Höhe der Oberseite je Sperrflächen-Typ (Vorgabe), wenn an der Sperrfläche keine eigene steht */
-  sperrhoehe: Partial<Record<Sperrflaeche['typ'], number | null>>;
+  /** Standardhöhe der Oberseite je Objektschlüssel (Objektbibliothek), wenn am Objekt keine eigene steht */
+  sperrhoehe: Record<string, number | null>;
   /** Kantenlänge der Rasterzellen in m */
   raster_m?: number;
 }
 
-/** Höhe der Oberseite einer Sperrfläche: eigene Angabe, sonst Vorgabe des Typs; Dachschräge, Leuchte, Rauchmelder: keine */
+/**
+ * Höhe der Oberseite eines Objekts: eigene Angabe, sonst Standardhöhe aus der Objektbibliothek. Punkte (Deckeneinbauten)
+ * und Streifen (Dachschräge, Unterzug) sind keine Empfangsflächen; ohne Höhe in der Bibliothek ebenfalls keine.
+ */
 export function sperrHoehe(s: Sperrflaeche, vorgabe: WaermeEingabe['sperrhoehe']): number | null {
-  if (s.typ === 'dachschraege' || s.typ === 'leuchte' || s.typ === 'rauchmelder') return null;
-  return s.hoehe ?? vorgabe[s.typ] ?? null;
+  if (istPunkt(s) || s.wand) return null;
+  return s.hoehe ?? vorgabe[objektSchluessel(s)] ?? null;
 }
 
 /**

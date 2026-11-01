@@ -406,29 +406,35 @@ def test_loeschen_nur_admin_und_kaskadiert(client, db, projekt, admin):
 
 def test_sperrflaechen_und_module_speichern_und_auswerten(client, projekt, fachpruefer):
     anmelden(client, fachpruefer.email)
-    for schluessel, wert in (("abstand_wand_cm", 50), ("abstand_modul_cm", 40), ("abstand_sitzplatz_cm", 30),
+    for schluessel, wert in (("abstand_wand_cm", 50), ("abstand_modul_cm", 40),
                              ("leistungsreserve_prozent", 10), ("ueberdimensionierung_prozent", 20)):
         client.patch(f"/api/fachvorgaben/regeln/{schluessel}", json={"wert": wert, "quelle": "TESTWERT"})
     client.patch("/api/fachvorgaben/regeln/thermostat_je_raum", json={"wert_text": "ja", "quelle": "TESTWERT"})
     _uebernehmen(client, projekt, fachpruefer)
     raum = _raum(client, projekt)  # 4 × 5 m, Rückfall 45 W/m² → 900 W, benötigt 990 W
-    sitz = {"id": "s1", "typ": "sitzplatz", "x": 0.5, "y": 0.5, "b": 1.5, "t": 1.0}
+    sitz = {"id": "s1", "objekt": "sitzplatz", "x": 0.5, "y": 0.5, "b": 1.5, "t": 1.0}
     modul = {"id": "m1", "modul_id": None, "artikel_nr": "T-1", "bezeichnung": "TESTMODUL", "leistung_w": 1000,
              "laenge_m": 1.0, "breite_m": 0.8, "schutzart": "IP44", "bad_geeignet": True, "x": 1.0, "y": 0.7,
              "gedreht": False}
     # Außendienst darf Sperrflächen und Module setzen (Vor-Ort-Planung)
     anmelden(client, "aussendienst@test.invalid")
     r = _patch(client, f"/api/raeume/{raum['id']}", {"sperrflaechen": [sitz], "module": [modul]})
-    assert r["sperrflaechen"][0]["typ"] == "sitzplatz" and r["module"][0]["artikel_nr"] == "T-1"
+    assert r["sperrflaechen"][0]["objekt"] == "sitzplatz" and r["module"][0]["artikel_nr"] == "T-1"
+    assert "typ" not in r["sperrflaechen"][0]
 
     m = _auswertung(client, projekt)["raeume"][0]["modulplanung"]
     assert m["benoetigt_w"] == pytest.approx(990) and m["installiert_w"] == 1000 and m["thermostate"] == 1
-    assert m["verstoesse"]["m1"] == ["liegt über einem Sitzplatz – über Sitzplätzen und Betten unzulässig"]
+    assert m["verstoesse"]["m1"] == ["liegt über Sitzplatz (allgemein) – dort ist kein Modul zulässig"]
     a = _auswertung(client, projekt)
     assert (a["summe"]["module"], a["summe"]["installiert_w"], a["summe"]["thermostate"]) == (1, 1000, 1)
 
     # ungültige Daten werden abgelehnt
-    assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [{**sitz, "typ": "sofa"}]}).status_code == 422
+    assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [{**sitz, "objekt": ""}]}).status_code == 422
+    ohne = {k: v for k, v in sitz.items() if k != "objekt"}
+    assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [ohne]}).status_code == 422
+    # ältere Geräte senden noch den festen Typ: wird zum gleichnamigen Objekt
+    alt = _patch(client, f"/api/raeume/{raum['id']}", {"sperrflaechen": [{**ohne, "typ": "sitzplatz"}]})
+    assert alt["sperrflaechen"][0]["objekt"] == "sitzplatz" and "typ" not in alt["sperrflaechen"][0]
     assert client.patch(f"/api/raeume/{raum['id']}", json={"module": [{**modul, "leistung_w": 0}]}).status_code == 422
     # im Offline-Paket enthalten
     paket = client.get(f"/api/offline/projekte/{projekt['projekt']['id']}").json()

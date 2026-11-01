@@ -10,14 +10,14 @@ from sqlalchemy import event, func, inspect, insert, update
 from sqlalchemy.orm import Session
 
 from app.models import (
-    BibBauteil, BibKlimadaten, BibModul, BibRaumtyp, Bauteilflaeche, Benutzer, Berechnung, Fachvorgaben, Geschoss,
+    BibBauteil, BibKlimadaten, BibModul, BibObjekt, BibRaumtyp, Bauteilflaeche, Benutzer, Berechnung, Fachvorgaben, Geschoss,
     HeizlastPauschale, Objekt, Oeffnung, Platzierungsregel, Projekt, Protokoll, Raum,
 )
 from app.projektzugriff import projekt_id_von
 
 PROTOKOLLIERT = (
     Benutzer, Projekt, Objekt, Geschoss, Raum, Bauteilflaeche, Oeffnung, Berechnung,
-    BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten, Platzierungsregel, BibModul,
+    BibRaumtyp, HeizlastPauschale, Fachvorgaben, BibBauteil, BibKlimadaten, Platzierungsregel, BibModul, BibObjekt,
 )
 # vorgaben_stand(_am), vorgaben_abgelehnt(_am): eigene, lesbare Einträge „vorgaben_uebernommen“ und
 # „vorgaben_abgelehnt“ (app/routers/projekte.py)

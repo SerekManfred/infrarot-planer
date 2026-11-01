@@ -37,10 +37,10 @@ def test_echte_importdatei(db, inhalt):
 
     regeln = {r.schluessel: r for r in db.scalars(select(Platzierungsregel))}
     assert regeln["abstand_wand_cm"].wert == 50 and regeln["abstand_modul_cm"].wert == 40
-    assert regeln["bett_sperrflaeche"].wert_text == "ja"
+    assert "bett_sperrflaeche" not in regeln  # seit 01.11.2026 in der Objektbibliothek
     assert regeln["bad_min_schutzart"].wert_text == "IP44"
     assert regeln["leistungsreserve_prozent"].wert == 10
-    assert regeln["abstand_dusche_cm"].wert is None  # nicht in der Datei → Vorgabe fehlt
+    assert any("Bett als Sperrfläche (ja/nein)“ steht seit 01.11.2026 in der Objektbibliothek" in a for a in bericht.auffaelligkeiten)
     assert db.get(Fachvorgaben, 1).hoehe_hinweis_m == 2.65
 
     modul = db.scalars(select(BibModul).where(BibModul.artikel_nr == "RD-420-B")).one()
@@ -49,7 +49,7 @@ def test_echte_importdatei(db, inhalt):
 
     text = bericht.text()
     assert "Technik" in text and "bleibt unverändert" in text
-    assert "Mindestabstand zu Dusche/Wanne" in text
+    assert "in der Objektbibliothek – Zeile übersprungen" in text
     assert "21 von 21 Modulen ohne EK/VK-Preis" in text
 
     # erneuter Import: nichts neu, alles aktualisiert

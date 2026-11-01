@@ -6,24 +6,61 @@
 //
 // Regeln kommen aus der Regeltabelle des Projekts (eingefroren wie die übrigen Fachvorgaben). Fehlt eine Regel,
 // wird nichts geschätzt: Der Hinweis „Vorgabe fehlt“ erscheint, und was davon abhängt, wird nicht geprüft
-// bzw. nicht automatisch geplant. Über Sitzplätzen und Betten ist ein Modul immer unzulässig.
+// bzw. nicht automatisch geplant.
+//
+// Objekte im Raum (Möbel, Deckeneinbauten, Bauliches) kommen aus der Objektbibliothek des Projekts
+// (Festlegung 01.11.2026, ebenfalls eingefroren). Je Objekt bestimmt die Kategorie die Regelprüfung:
+// - tabu: kein Modul darüber, dazu Mindestabstand zum Objekt,
+// - abstand: Modul darf auch darüber liegen, muss aber den Mindestabstand zur Kante des Objekts einhalten
+//   (ein Modul, das über die Kante ragt, verstößt immer),
+// - neutral: nur Darstellung und Wärmeverteilung, keine Regel.
+// Punkte (Deckeneinbauten wie Leuchten) werden nie überdeckt, ihr Abstand zählt zur nächsten Modulkante.
 
+/** Frühere feste Sperrflächen-Typen (bis 01.11.2026); ihre Schlüssel sind zugleich Schlüssel der Objektbibliothek */
 export type SperrTyp = 'sitzplatz' | 'bett' | 'hochschrank' | 'dachschraege' | 'dusche' | 'sonstiges' | 'leuchte' | 'rauchmelder';
 export type Wand = 'oben' | 'unten' | 'links' | 'rechts';
 
-export const SPERR_TYPEN: Record<SperrTyp, string> = {
-  sitzplatz: 'Sitzplatz',
-  bett: 'Bett',
-  hochschrank: 'Hochschrank',
-  dachschraege: 'Dachschräge',
-  dusche: 'Dusche/Wanne',
-  sonstiges: 'sonstige Sperrfläche',
-  leuchte: 'Leuchte/Spot',
-  rauchmelder: 'Rauchmelder',
+export type ObjektGruppe = 'moebel' | 'decke' | 'baulich';
+export type ObjektForm = 'rechteck' | 'punkt' | 'streifen';
+export type ObjektKategorie = 'tabu' | 'abstand' | 'neutral';
+
+export const OBJEKT_GRUPPEN: Record<ObjektGruppe, string> = { moebel: 'Möbel', decke: 'Deckeneinbauten', baulich: 'Bauliches' };
+export const OBJEKT_FORMEN: Record<ObjektForm, string> = { rechteck: 'Rechteck', punkt: 'Punkt', streifen: 'Streifen entlang Wand' };
+export const OBJEKT_KATEGORIEN: Record<ObjektKategorie, string> = {
+  tabu: 'tabu – kein Modul darüber',
+  abstand: 'Abstand – Modul erlaubt, Mindestabstand zur Kante',
+  neutral: 'neutral – nur Darstellung',
 };
-export const PUNKT_TYPEN: readonly SperrTyp[] = ['leuchte', 'rauchmelder'];
-/** Über diesen Flächen ist ein Modul immer unzulässig (Festlegung 14.10.2026) */
-export const IMMER_GESPERRT: readonly SperrTyp[] = ['sitzplatz', 'bett'];
+
+/** Eintrag der Objektbibliothek (Fachvorgaben) */
+export interface BibObjekt {
+  schluessel: string;
+  name: string;
+  gruppe: ObjektGruppe;
+  /** passende Raumtypen (IDs); leer = alle */
+  raumtyp_ids: number[];
+  form: ObjektForm;
+  /** Standardmaße in m (Streifen: breite = Tiefe ab der Wand) */
+  breite_m: number | null;
+  tiefe_m: number | null;
+  /** Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = keine Empfangsfläche */
+  hoehe_m: number | null;
+  kategorie: ObjektKategorie;
+  /** Mindestabstand in cm; leer = Vorgabe fehlt (bei neutral ohne Bedeutung) */
+  abstand_cm: number | null;
+  quelle?: string;
+  aktiv?: boolean;
+  reihenfolge?: number;
+}
+
+/** Für die Prüfung aufgelöstes Objekt */
+export interface ObjektRegel {
+  name: string;
+  form: ObjektForm;
+  kategorie: ObjektKategorie;
+  abstand_m: number | null;
+  hoehe_m: number | null;
+}
 
 export const HINWEIS_BAD = 'Schutzbereiche nach DIN VDE 0100-701 durch Elektrofachkraft prüfen';
 
@@ -36,13 +73,27 @@ export interface Rechteck {
   t: number;
 }
 
+/** Objekt im Raum (früher „Sperrfläche“); Punkt: b = t = 0, Streifen: wand gesetzt */
 export interface Sperrflaeche extends Rechteck {
   id: string;
-  typ: SperrTyp;
+  /** Schlüssel des Objekts in der Objektbibliothek */
+  objekt?: string;
+  /** veraltet: fester Typ vor dem 01.11.2026 (wird wie der gleichnamige Objektschlüssel behandelt) */
+  typ?: SperrTyp;
   wand?: Wand | null;
   bezeichnung?: string;
-  /** Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Vorgabe des Typs */
+  /** Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Standard des Objekts */
   hoehe?: number | null;
+}
+
+/** Schlüssel des Bibliotheksobjekts einer Sperrfläche (auch für ältere Daten mit festem Typ) */
+export function objektSchluessel(s: Pick<Sperrflaeche, 'objekt' | 'typ'>): string {
+  return s.objekt ?? s.typ ?? '';
+}
+
+/** Punktobjekt (Deckeneinbau): keine Ausdehnung */
+export function istPunkt(s: Rechteck): boolean {
+  return s.b <= EPS && s.t <= EPS;
 }
 
 export interface KatalogModul {
@@ -87,8 +138,8 @@ export interface Regel {
 export interface Regeln {
   wand_m: number | null;
   modul_m: number | null;
-  punkt_m: Record<'leuchte' | 'rauchmelder', number | null>;
-  flaeche_m: Record<Exclude<SperrTyp, 'leuchte' | 'rauchmelder'>, number | null>;
+  /** Objektbibliothek nach Schlüssel */
+  objekte: Record<string, ObjektRegel>;
   mindesthoehe_m: number | null;
   reserve_prozent: number | null;
   ueberdimensionierung_prozent: number | null;
@@ -109,17 +160,8 @@ const EPS = 1e-6;
 const RASTER_M = 0.05;
 export const MAX_ANZAHL = 12;
 
-const ABSTAND_SCHLUESSEL: Record<Exclude<SperrTyp, 'leuchte' | 'rauchmelder'>, string> = {
-  sitzplatz: 'abstand_sitzplatz_cm',
-  bett: 'abstand_bett_cm',
-  hochschrank: 'abstand_hochschrank_cm',
-  dachschraege: 'abstand_dachschraege_cm',
-  dusche: 'abstand_dusche_cm',
-  sonstiges: 'abstand_sonstiges_cm',
-};
-
-/** Regeltabelle → Regeln in Metern; fehlende Werte bleiben null */
-export function regelnAufloesen(regeln: Regel[] | undefined): Regeln {
+/** Regeltabelle und Objektbibliothek → Regeln in Metern; fehlende Werte bleiben null */
+export function regelnAufloesen(regeln: Regel[] | undefined, objekte: BibObjekt[] = []): Regeln {
   const nach = new Map((regeln ?? []).map((r) => [r.schluessel, r]));
   const zahl = (s: string) => nach.get(s)?.wert ?? null;
   const cm = (s: string) => {
@@ -136,10 +178,12 @@ export function regelnAufloesen(regeln: Regel[] | undefined): Regeln {
   return {
     wand_m: cm('abstand_wand_cm'),
     modul_m: cm('abstand_modul_cm'),
-    punkt_m: { leuchte: cm('abstand_leuchte_cm'), rauchmelder: cm('abstand_rauchmelder_cm') },
-    flaeche_m: Object.fromEntries(
-      Object.entries(ABSTAND_SCHLUESSEL).map(([typ, s]) => [typ, cm(s)]),
-    ) as Regeln['flaeche_m'],
+    objekte: Object.fromEntries(
+      objekte.map((o) => [
+        o.schluessel,
+        { name: o.name, form: o.form, kategorie: o.kategorie, abstand_m: o.abstand_cm === null ? null : o.abstand_cm / 100, hoehe_m: o.hoehe_m },
+      ]),
+    ),
     mindesthoehe_m: zahl('mindesthoehe_m'),
     reserve_prozent: zahl('leistungsreserve_prozent'),
     ueberdimensionierung_prozent: zahl('ueberdimensionierung_prozent'),
@@ -173,6 +217,18 @@ export function ueberlappt(a: Rechteck, b: Rechteck): boolean {
   return a.x < b.x + b.b - EPS && b.x < a.x + a.b - EPS && a.y < b.y + b.t - EPS && b.y < a.y + a.t - EPS;
 }
 
+/**
+ * Abstand eines Moduls zur Kante eines Objekts: außerhalb die kürzeste Entfernung, ganz innerhalb der kleinste
+ * Abstand zu den Objektkanten, über die Kante ragend 0.
+ */
+export function kantenAbstand(modul: Rechteck, objekt: Rechteck): number {
+  if (!ueberlappt(modul, objekt)) return abstand(modul, objekt);
+  const innen =
+    modul.x >= objekt.x - EPS && modul.y >= objekt.y - EPS && modul.x + modul.b <= objekt.x + objekt.b + EPS && modul.y + modul.t <= objekt.y + objekt.t + EPS;
+  if (!innen) return 0;
+  return Math.max(0, Math.min(modul.x - objekt.x, modul.y - objekt.y, objekt.x + objekt.b - (modul.x + modul.b), objekt.y + objekt.t - (modul.y + modul.t)));
+}
+
 export function modulRechteck(m: Pick<PlatziertesModul, 'x' | 'y' | 'laenge_m' | 'breite_m' | 'gedreht'>): Rechteck {
   return m.gedreht ? { x: m.x, y: m.y, b: m.breite_m, t: m.laenge_m } : { x: m.x, y: m.y, b: m.laenge_m, t: m.breite_m };
 }
@@ -188,6 +244,34 @@ function meterText(m: number): string {
 /** Bevorzugte Ausrichtung: Modul-Längsseite parallel zur langen Raumseite */
 export function bevorzugtGedreht(raum: Pick<PlatzierungsRaum, 'laenge_m' | 'breite_m'>): boolean {
   return raum.breite_m > raum.laenge_m;
+}
+
+// ── Objekte im Raum ──
+
+/** Objekt der Bibliothek zu einer Sperrfläche; null = nicht in der Objektbibliothek des Projekts */
+export function objektRegel(r: Regeln, s: Sperrflaeche): ObjektRegel | null {
+  return r.objekte[objektSchluessel(s)] ?? null;
+}
+
+export function objektName(r: Regeln, s: Sperrflaeche): string {
+  return objektRegel(r, s)?.name ?? (s.bezeichnung || `Objekt „${objektSchluessel(s) || 'ohne Angabe'}“`);
+}
+
+/** Wie ein Objekt für Prüfung und Platzierung zählt; unbekannte Objekte vorsichtshalber als tabu ohne Mindestabstand */
+function objektWirkung(r: Regeln, s: Sperrflaeche): { name: string; kategorie: ObjektKategorie; min: number | null; bekannt: boolean } {
+  const o = objektRegel(r, s);
+  return { name: objektName(r, s), kategorie: o?.kategorie ?? 'tabu', min: o?.abstand_m ?? null, bekannt: o !== null };
+}
+
+/** Maßgeblicher Abstand Modul ↔ Objekt (0 = liegt darüber bzw. ragt über die Kante) */
+function objektAbstand(a: Rechteck, s: Sperrflaeche, kategorie: ObjektKategorie): number {
+  if (istPunkt(s)) return abstand(a, s);
+  if (kategorie === 'abstand') return kantenAbstand(a, s);
+  return ueberlappt(a, s) ? 0 : abstand(a, s);
+}
+
+function fehltObjekt(name: string, bekannt: boolean): string {
+  return bekannt ? `Vorgabe fehlt: Mindestabstand zu ${name} (Objektbibliothek)` : `Vorgabe fehlt: ${name} ist nicht in der Objektbibliothek des Projekts`;
 }
 
 // ── Regelprüfung ──
@@ -230,30 +314,30 @@ export function pruefeModule(raum: PlatzierungsRaum, sperr: Sperrflaeche[], modu
       if (zurWand < r.wand_m - EPS) liste.push(`Abstand zur Wand ${cm(zurWand)} (mind. ${cm(r.wand_m)})`);
     }
     for (const s of sperr) {
-      const name = SPERR_TYPEN[s.typ];
-      if (s.typ === 'leuchte' || s.typ === 'rauchmelder') {
-        const min = r.punkt_m[s.typ];
-        const d = abstand(a, s);
-        if (d <= EPS) liste.push(`liegt über ${s.typ === 'leuchte' ? 'einer Leuchte' : 'einem Rauchmelder'}`);
-        else if (min === null) hinweise.add(`${fehlt(r, s.typ === 'leuchte' ? 'abstand_leuchte_cm' : 'abstand_rauchmelder_cm', `Mindestabstand zu ${name}`)} – nicht geprüft`);
-        else if (d < min - EPS) liste.push(`Abstand zu ${name} ${cm(d)} (mind. ${cm(min)})`);
+      const { name, kategorie, min, bekannt } = objektWirkung(r, s);
+      if (kategorie === 'neutral') continue;
+      if (!bekannt) hinweise.add(`${fehltObjekt(name, false)} – geprüft wird nur, dass kein Modul darüber liegt`);
+      const punkt = istPunkt(s);
+      const d = objektAbstand(a, s, kategorie);
+      if (punkt || kategorie === 'tabu') {
+        const darueber = punkt ? d <= EPS : ueberlappt(a, s);
+        if (darueber) {
+          liste.push(punkt ? `liegt über ${name}` : `liegt über ${name} – dort ist kein Modul zulässig`);
+          continue;
+        }
+        if (min === null) {
+          if (bekannt) hinweise.add(`${fehltObjekt(name, true)} – ${punkt ? 'nicht geprüft' : 'geprüft wird nur, dass kein Modul darüber liegt'}`);
+          continue;
+        }
+        if (d < min - EPS) liste.push(`Abstand zu ${name} ${cm(d)} (mind. ${cm(min)})`);
         continue;
       }
-      const min = r.flaeche_m[s.typ];
-      if (ueberlappt(a, s)) {
-        liste.push(
-          IMMER_GESPERRT.includes(s.typ)
-            ? `liegt über ${s.typ === 'bett' ? 'einem Bett' : 'einem Sitzplatz'} – über Sitzplätzen und Betten unzulässig`
-            : `liegt über Sperrfläche ${name}`,
-        );
-        continue;
-      }
+      // Kategorie „abstand“: darüber erlaubt, aber mit Mindestabstand zur Kante
       if (min === null) {
-        hinweise.add(`${fehlt(r, ABSTAND_SCHLUESSEL[s.typ], `Mindestabstand zu ${name}`)} – geprüft wird nur, dass kein Modul darüber liegt`);
+        hinweise.add(`${fehltObjekt(name, bekannt)} – nicht geprüft`);
         continue;
       }
-      const d = abstand(a, s);
-      if (d < min - EPS) liste.push(`Abstand zu ${name} ${cm(d)} (mind. ${cm(min)})`);
+      if (d < min - EPS) liste.push(`Abstand zur Kante ${name} ${cm(d)} (mind. ${cm(min)})`);
     }
     module.forEach((n, j) => {
       if (j === i) return;
@@ -343,10 +427,12 @@ export function fehlendeRegelnFuerPlanung(sperr: Sperrflaeche[], r: Regeln): str
   const liste: string[] = [];
   if (r.wand_m === null) liste.push(fehlt(r, 'abstand_wand_cm', 'Mindestabstand Modul – Wand'));
   if (r.modul_m === null) liste.push(fehlt(r, 'abstand_modul_cm', 'Mindestabstand Modul – Modul'));
-  for (const p of ['leuchte', 'rauchmelder'] as const) {
-    if (sperr.some((s) => s.typ === p) && r.punkt_m[p] === null) {
-      liste.push(fehlt(r, p === 'leuchte' ? 'abstand_leuchte_cm' : 'abstand_rauchmelder_cm', `Mindestabstand zu ${SPERR_TYPEN[p]}`));
-    }
+  // Punkte (Leuchten, Rauchmelder …) brauchen ihren Mindestabstand, sonst wird nicht automatisch geplant
+  for (const s of sperr) {
+    if (!istPunkt(s)) continue;
+    const { name, kategorie, min, bekannt } = objektWirkung(r, s);
+    const text = fehltObjekt(name, bekannt);
+    if (kategorie !== 'neutral' && min === null && !liste.includes(text)) liste.push(text);
   }
   return liste;
 }
@@ -366,14 +452,14 @@ function kandidaten(raum: PlatzierungsRaum, sperr: Sperrflaeche[], r: Regeln, w:
       let frei = Infinity;
       let ok = true;
       for (const s of sperr) {
-        const d = abstand(a, s);
-        const punkt = s.typ === 'leuchte' || s.typ === 'rauchmelder';
-        const min = punkt ? (r.punkt_m[s.typ as 'leuchte' | 'rauchmelder'] ?? 0) : (r.flaeche_m[s.typ as keyof Regeln['flaeche_m']] ?? 0);
-        if ((!punkt && ueberlappt(a, s)) || d <= EPS || d < min - EPS) {
+        const { kategorie, min } = objektWirkung(r, s);
+        if (kategorie === 'neutral') continue;
+        const d = objektAbstand(a, s, kategorie);
+        if (d <= EPS || d < (min ?? 0) - EPS) {
           ok = false;
           break;
         }
-        if (!punkt) frei = Math.min(frei, d);
+        if (!istPunkt(s)) frei = Math.min(frei, d);
       }
       if (ok) liste.push({ x: a.x, y: a.y, mx: a.x + w / 2, my: a.y + h / 2, frei });
     }

@@ -147,6 +147,14 @@ describe('Raster im Raum', () => {
     expect(sperrHoehe({ ...tisch, typ: 'dachschraege' }, { sonstiges: 0.75 })).toBeNull();
   });
 
+  it('Objektbibliothek: Standardhöhe über den Objektschlüssel; Streifen und Punkte sind keine Empfangsflächen', () => {
+    const sofa = { id: 's', objekt: 'sofa', x: 2, y: 1.5, b: 1, t: 1 };
+    expect(sperrHoehe(sofa, { sofa: 0.45 })).toBe(0.45);
+    expect(sperrHoehe({ ...sofa, objekt: 'dachfenster' }, { dachfenster: null })).toBeNull();
+    expect(sperrHoehe({ ...sofa, objekt: 'unterzug', wand: 'oben' }, { unterzug: 0.3 })).toBeNull();
+    expect(sperrHoehe({ ...sofa, objekt: 'leuchte', b: 0, t: 0 }, { leuchte: 1 })).toBeNull();
+  });
+
   it('Hochschrank bis fast an die Decke: Oberseite sehr nah am Modul', () => {
     const schrank = { id: 'h', typ: 'hochschrank' as const, x: 0, y: 0, b: 1, t: 0.6 };
     const w = waermeverteilung(eingabe({ sperrflaechen: [schrank], sperrhoehe: { hochschrank: 2 } }));
