@@ -112,6 +112,9 @@ EXPORT_SPALTEN = (
     ("Gewicht (kg)", "gewicht_kg"), ("Schutzart (IP)", "schutzart"), ("Bad geeignet", "bad_geeignet"),
     ("Oberfläche / Farbe", "oberflaeche"), ("EK netto (€)", "ek_netto"), ("VK netto (€)", "vk_netto"),
     ("Montagezeit (min)", "montagezeit_min"), ("Quelle (Produktseite)", "quelle"), ("Bemerkung", "bemerkung"),
+    # nach den Spalten der Importdatei: Strahlerkennwerte für die Wärmeverteilung
+    ("Oberflächentemperatur (°C)", "oberflaechentemperatur_c"), ("Emissionsgrad", "emissionsgrad"),
+    ("Abstrahlwinkel (°)", "abstrahlwinkel_grad"),
 )
 
 
@@ -128,7 +131,7 @@ def module_export(db: Session = Depends(get_db)):
         werte = [getattr(m, f) for _, f in EXPORT_SPALTEN]
         werte[8] = "ja" if m.bad_geeignet else "nein"
         blatt.append(werte + ["ja" if m.aktiv else "nein"])
-    for spalte, breite in zip("ABCDEFGHIJKLMNOP", (12, 40, 12, 11, 11, 12, 12, 13, 12, 36, 12, 12, 16, 50, 40, 8), strict=True):
+    for spalte, breite in zip("ABCDEFGHIJKLMNOPQRS", (12, 40, 12, 11, 11, 12, 12, 13, 12, 36, 12, 12, 16, 50, 40, 14, 12, 14, 8), strict=True):
         blatt.column_dimensions[spalte].width = breite
     blatt.freeze_panes = "A2"
     puffer = io.BytesIO()

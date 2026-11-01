@@ -261,6 +261,8 @@ class Sperrflaeche(BaseModel):
     t: float = Field(default=0, ge=0, le=100)
     # nur Dachschräge: Wand, an der der Streifen liegt
     wand: Literal["oben", "unten", "links", "rechts"] | None = None
+    # Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Vorgabe des Typs
+    hoehe: float | None = Field(default=None, ge=0, le=5)
     bezeichnung: str = Field(default="", max_length=100)
 
 
@@ -476,6 +478,9 @@ class ModulLesen(Lesbar):
     quelle: str
     bemerkung: str
     aktiv: bool
+    oberflaechentemperatur_c: float | None
+    emissionsgrad: float | None
+    abstrahlwinkel_grad: float | None
 
 
 class ModulNeu(BaseModel):
@@ -497,6 +502,10 @@ class ModulNeu(BaseModel):
     quelle: str = Field(min_length=1, max_length=500)
     bemerkung: str = ""
     aktiv: bool = True
+    # nur für die Wärmeverteilung; leer = Vorgabewert der Fachvorgaben
+    oberflaechentemperatur_c: float | None = Field(default=None, gt=0, le=400)
+    emissionsgrad: float | None = Field(default=None, gt=0, le=1)
+    abstrahlwinkel_grad: float | None = Field(default=None, gt=0, le=180)
 
     @model_validator(mode="after")
     def _bad_nur_ab_ip44(self):
@@ -526,6 +535,9 @@ class ModulAenderung(BaseModel):
     quelle: str | None = None
     bemerkung: str | None = None
     aktiv: bool | None = None
+    oberflaechentemperatur_c: float | None = None
+    emissionsgrad: float | None = None
+    abstrahlwinkel_grad: float | None = None
 
 
 class KlimadatenLesen(Lesbar):

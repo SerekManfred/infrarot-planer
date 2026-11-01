@@ -208,6 +208,10 @@ class BibModul(Zeitstempel, Base):
     quelle: Mapped[str] = mapped_column(String(500))
     bemerkung: Mapped[str] = mapped_column(Text, default="")
     aktiv: Mapped[bool] = mapped_column(default=True, comment="inaktive Module werden nicht mehr vorgeschlagen")
+    # Strahlerkennwerte nur für die Wärmeverteilung (Festlegung 01.11.2026); leer = Vorgabewert der Fachvorgaben
+    oberflaechentemperatur_c: Mapped[float | None] = mapped_column(Float)
+    emissionsgrad: Mapped[float | None] = mapped_column(Float)
+    abstrahlwinkel_grad: Mapped[float | None] = mapped_column(Float, comment="voller Abstrahlwinkel")
 
 
 class BibKlimadaten(Zeitstempel, Base):

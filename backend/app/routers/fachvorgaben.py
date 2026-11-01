@@ -24,6 +24,7 @@ from app.schemas import (
     RegelLesen, SammelEntscheidung, SammelErgebnis, VorgabenAblehnen, VorschauAnfrage, VorschauErgebnis,
 )
 from app.modulabgleich import betroffene as module_betroffene
+from app.platzierungsregeln import GRENZEN
 from app.vorgabenabgleich import abgleichen, betroffene, vorschau as vorschau_berechnen
 
 router = APIRouter(prefix="/fachvorgaben", tags=["Fachvorgaben"], dependencies=[Depends(aktueller_benutzer)])
@@ -53,6 +54,13 @@ def regel_aendern(schluessel: str, daten: RegelAenderung, db: Session = Depends(
     regel = db.get(Platzierungsregel, schluessel)
     if regel is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Platzierungsregel {schluessel} nicht gefunden")
+    if daten.wert is not None and schluessel in GRENZEN:
+        unten, oben, ohne_unten = GRENZEN[schluessel]
+        if daten.wert > oben or daten.wert < unten or (ohne_unten and daten.wert == unten):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"{regel.bezeichnung}: Wert muss {'größer als' if ohne_unten else 'mindestens'} {unten:g} und höchstens {oben:g} sein",
+            )
     for name, wert in daten.model_dump(exclude_unset=True).items():
         setattr(regel, name, "" if wert is None and name != "wert" else wert)
     db.commit()

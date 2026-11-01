@@ -193,3 +193,38 @@ def test_freigegebene_projekte_bleiben_unveraendert(client, projekt, aussendiens
     assert (p["module_offen"], p["status"]) == (False, "freigegeben")
     assert _auswertung(client, projekt)["raeume"][0]["modulplanung"]["installiert_w"] == 900
     assert client.get(f"/api/projekte/{pid}/module-abgleich").json() == {"unterschiede": [], "offen": False, "auswirkung": None}
+
+
+# ── Wärmeverteilung: Strahlerkennwerte, Höhen, Vorgabewerte (01.11.2026) ──
+
+
+def test_strahlerkennwerte_im_katalog(client, fachpruefer):
+    m = _modul_anlegen(client, fachpruefer)
+    assert (m["oberflaechentemperatur_c"], m["emissionsgrad"], m["abstrahlwinkel_grad"]) == (None, None, None)
+    m = _patch(client, f"/api/bibliotheken/module/{m['id']}", {"oberflaechentemperatur_c": 95, "emissionsgrad": 0.93, "abstrahlwinkel_grad": 120})
+    assert (m["oberflaechentemperatur_c"], m["emissionsgrad"], m["abstrahlwinkel_grad"]) == (95, 0.93, 120)
+    for falsch in ({"emissionsgrad": 1.2}, {"emissionsgrad": 0}, {"abstrahlwinkel_grad": 200}, {"oberflaechentemperatur_c": 500}):
+        assert client.patch(f"/api/bibliotheken/module/{m['id']}", json=falsch).status_code == 422, falsch
+    # leeren erlaubt (dann gilt der Vorgabewert)
+    assert _patch(client, f"/api/bibliotheken/module/{m['id']}", {"emissionsgrad": None})["emissionsgrad"] is None
+    blatt = load_workbook(io.BytesIO(client.get("/api/bibliotheken/module/export.xlsx").content))["Modulkatalog"]
+    kopf = next(blatt.iter_rows(values_only=True))
+    assert kopf[15:18] == ("Oberflächentemperatur (°C)", "Emissionsgrad", "Abstrahlwinkel (°)")
+
+
+def test_vorgabewerte_und_hoehen_in_regeln(client, fachpruefer, aussendienst, projekt):  # noqa: F811
+    anmelden(client, fachpruefer.email)
+    regeln = {r["schluessel"]: r for r in client.get("/api/fachvorgaben").json()["regeln"]}
+    assert {"hoehe_sitzplatz_m", "strahler_temperatur_c", "strahler_emissionsgrad", "strahler_abstrahlwinkel_grad"} <= set(regeln)
+    antwort = client.patch("/api/fachvorgaben/regeln/strahler_emissionsgrad", json={"wert": 1.5})
+    assert antwort.status_code == 422 and "höchstens 1" in antwort.json()["detail"]
+    assert client.patch("/api/fachvorgaben/regeln/strahler_abstrahlwinkel_grad", json={"wert": 0}).status_code == 422
+    assert client.patch("/api/fachvorgaben/regeln/strahler_emissionsgrad", json={"wert": 0.9}).status_code == 200
+    # Höhe einer Sperrfläche wird gespeichert; ungültige Höhe abgelehnt
+    anmelden(client, aussendienst.email)
+    raum = _raum(client, projekt)
+    sitz = {"id": "s1", "typ": "sitzplatz", "x": 1, "y": 1, "b": 1.5, "t": 1, "hoehe": 0.42}
+    assert _patch(client, f"/api/raeume/{raum['id']}", {"sperrflaechen": [sitz]})["sperrflaechen"][0]["hoehe"] == 0.42
+    assert client.patch(f"/api/raeume/{raum['id']}", json={"sperrflaechen": [{**sitz, "hoehe": 9}]}).status_code == 422
+    # neue Regeln ändern weder Heizlast noch Module: das Projekt bleibt ohne offene Vorgaben (still übernommen)
+    assert client.get(f"/api/projekte/{projekt['projekt']['id']}").json()["vorgaben_offen"] is False

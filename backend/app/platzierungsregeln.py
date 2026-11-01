@@ -40,7 +40,25 @@ REGELN: tuple[Regel, ...] = (
     Regel("bad_min_schutzart", "Bad: zulässige Module", "min. Schutzart", "text"),
     Regel("bevorzugte_lage", "Bevorzugte Lage im Raum", "Text", "text"),
     Regel("bevorzugte_ausrichtung", "Bevorzugte Ausrichtung", "Text", "text"),
+    # Wärmeverteilung (Festlegung 01.11.2026): Höhe der Oberseite je Sperrflächen-Typ (Empfangsfläche)
+    Regel("hoehe_sitzplatz_m", "Höhe Sitzplatz (Wärmeverteilung)", "m", "zahl"),
+    Regel("hoehe_bett_m", "Höhe Bett (Wärmeverteilung)", "m", "zahl"),
+    Regel("hoehe_hochschrank_m", "Höhe Hochschrank (Wärmeverteilung)", "m", "zahl"),
+    Regel("hoehe_dusche_m", "Höhe Dusche/Wanne (Wärmeverteilung)", "m", "zahl"),
+    Regel("hoehe_sonstiges_m", "Höhe sonstige Sperrfläche (Wärmeverteilung)", "m", "zahl"),
+    # Vorgabewerte für Module ohne Katalogangaben – nur für die Wärmeverteilung, bis zur Pflege „Vorgabe fehlt“
+    Regel("strahler_temperatur_c", "Vorgabewert Oberflächentemperatur Modul (Wärmeverteilung)", "°C", "zahl"),
+    Regel("strahler_emissionsgrad", "Vorgabewert Emissionsgrad Modul (Wärmeverteilung)", "–", "zahl"),
+    Regel("strahler_abstrahlwinkel_grad", "Vorgabewert Abstrahlwinkel Modul (Wärmeverteilung)", "°", "zahl"),
 )
+
+# Zulässiger Bereich je Regel (min, max, min ausgeschlossen); sonst 0 … 1000
+GRENZEN: dict[str, tuple[float, float, bool]] = {
+    "strahler_emissionsgrad": (0, 1, True),
+    "strahler_abstrahlwinkel_grad": (0, 180, True),
+    "strahler_temperatur_c": (0, 400, True),
+    **{f"hoehe_{t}_m": (0, 5, False) for t in ("sitzplatz", "bett", "hochschrank", "dusche", "sonstiges")},
+}
 
 NACH_SCHLUESSEL = {r.schluessel: r for r in REGELN}
 NACH_BEZEICHNUNG = {r.bezeichnung: r for r in REGELN}
