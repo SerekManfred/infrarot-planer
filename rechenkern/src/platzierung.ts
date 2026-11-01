@@ -41,6 +41,8 @@ export interface Sperrflaeche extends Rechteck {
   typ: SperrTyp;
   wand?: Wand | null;
   bezeichnung?: string;
+  /** Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Vorgabe des Typs */
+  hoehe?: number | null;
 }
 
 export interface KatalogModul {
