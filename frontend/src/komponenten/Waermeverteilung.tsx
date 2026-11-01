@@ -8,8 +8,12 @@ import { Meldung } from './Felder';
 
 export const HINWEIS_WAERME = 'Vereinfachte Veranschaulichung der Strahlungsverteilung – keine Behaglichkeitsberechnung nach Norm.';
 
-/** Feste Skala: Stufen à 25 W/m², einfarbig hell → dunkel (Orange der App); ab 200 W/m² dunkelste Stufe */
-export const SKALA_STUFE = 25;
+/**
+ * Feste Skala: Stufen à 10 W/m², einfarbig hell → dunkel (Orange der App); ab 70 W/m² dunkelste Stufe.
+ * Bemessen für übliche Deckenmodule in Wohnraumhöhe (am Boden meist 10–40 W/m²); höhere Werte entstehen nahe der
+ * Decke, z. B. auf Hochschränken.
+ */
+export const SKALA_STUFE = 10;
 const FARBEN = ['#fff1e6', '#ffe0c7', '#fec79f', '#fca772', '#f5844a', '#e4622a', '#c24a1b', '#943612'];
 
 export function farbe(wert: number): string {
@@ -65,23 +69,27 @@ export function berechnen(eingabe: {
   });
 }
 
-/** Farbschicht im SVG des Deckenplans (Planeinheiten = Meter); jede Zelle mit Tooltip */
+/**
+ * Farbschicht im SVG des Deckenplans (Planeinheiten = Meter). Sie nimmt keine Zeigereingaben an, damit Sperrflächen
+ * und Module darunter bedienbar bleiben; den Wert an der Zeigerposition zeigt die Legende (zelleAn).
+ */
 export function WaermeSchicht({ ergebnis }: { ergebnis: Ergebnis }) {
   return (
     <g className="waerme-schicht" aria-hidden="true">
       {ergebnis.zellen.map((z) => (
-        <rect key={`${z.x}-${z.y}`} x={z.x} y={z.y} width={z.b + 0.002} height={z.t + 0.002} fill={farbe(z.wert)}>
-          <title>
-            {`${zahl(z.wert, 0)} W/m² ${z.flaeche === 'moebel' ? `auf Möbeloberseite (${zahl(z.z)} m)` : 'am Boden'} · ${zahl(z.x + z.b / 2, 1)} / ${zahl(z.y + z.t / 2, 1)} m`}
-          </title>
-        </rect>
+        <rect key={`${z.x}-${z.y}`} x={z.x} y={z.y} width={z.b + 0.002} height={z.t + 0.002} fill={farbe(z.wert)} />
       ))}
     </g>
   );
 }
 
+/** Rasterzelle an einer Stelle des Plans (für die Anzeige unter dem Zeiger bzw. Finger) */
+export function zelleAn(ergebnis: Ergebnis, x: number, y: number) {
+  return ergebnis.zellen.find((z) => x >= z.x && x < z.x + z.b && y >= z.y && y < z.y + z.t) ?? null;
+}
+
 /** Legende mit fester Skala, Höchstwert und Hinweisen */
-export function WaermeLegende({ ergebnis }: { ergebnis: Ergebnis }) {
+export function WaermeLegende({ ergebnis, zeiger }: { ergebnis: Ergebnis; zeiger: { x: number; y: number } | null }) {
   if (ergebnis.fehlt.length > 0) {
     return (
       <Meldung art="warnung">
@@ -91,7 +99,7 @@ export function WaermeLegende({ ergebnis }: { ergebnis: Ergebnis }) {
   }
   return (
     <div className="waerme-legende">
-      <div className="waerme-skala" role="img" aria-label="Skala Bestrahlungsstärke 0 bis 200 W/m² und mehr">
+      <div className="waerme-skala" role="img" aria-label={`Skala Bestrahlungsstärke 0 bis ${(FARBEN.length - 1) * SKALA_STUFE} W/m² und mehr`}>
         {FARBEN.map((f, i) => (
           <span key={f} className="waerme-stufe">
             <span className="waerme-farbe" style={{ background: f }} />
@@ -103,6 +111,14 @@ export function WaermeLegende({ ergebnis }: { ergebnis: Ergebnis }) {
       <p className="klein-text">
         Bestrahlungsstärke am Boden bzw. auf der Oberseite von Möbeln (über Sperrflächen wird der Boden nicht dargestellt). Höchstwert in diesem
         Raum: <strong>{zahl(ergebnis.max_w_m2, 0)} W/m²</strong>. Feste Skala, in allen Räumen gleich.
+      </p>
+      <p className="klein-text waerme-zeiger" aria-live="polite">
+        {(() => {
+          const z = zeiger && zelleAn(ergebnis, zeiger.x, zeiger.y);
+          return z
+            ? `An der Zeigerposition (${zahl(zeiger!.x, 1)} / ${zahl(zeiger!.y, 1)} m): ${zahl(z.wert, 0)} W/m² ${z.flaeche === 'moebel' ? `auf der Möbeloberseite in ${zahl(z.z)} m Höhe` : 'am Boden'}`
+            : 'Zeiger über den Plan bewegen oder antippen, um den Wert an dieser Stelle zu sehen.';
+        })()}
       </p>
       {ergebnis.mit_vorgabewerten && (
         <Meldung art="warnung">

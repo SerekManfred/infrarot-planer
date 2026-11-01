@@ -175,6 +175,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     }
   });
   const raumtemperatur = ergebnis?.werte.theta_int.wert ?? null;
+  // Stelle unter Zeiger bzw. Finger für die Wertanzeige der Wärmeverteilung
+  const [zeiger, setZeiger] = useState<{ x: number; y: number } | null>(null);
   const waerme = useMemo(
     () =>
       waermeAn && zieht === null && L > 0 && B > 0
@@ -239,6 +241,10 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
   function ziehen(e: ReactPointerEvent) {
     const z = zug.current;
+    if (waermeAn && !z) {
+      const q = punkt(e);
+      setZeiger(q.x >= 0 && q.y >= 0 && q.x <= L && q.y <= B ? q : null);
+    }
     if (!z) return;
     const p = punkt(e);
     z.bewegt = true;
@@ -305,6 +311,10 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
   /** Antippen der leeren Fläche: Auswahl aufheben – oder Tür/Fenster an der nächsten Wand setzen */
   function hintergrund(e: ReactPointerEvent) {
+    if (waermeAn) {
+      const q = punkt(e);
+      setZeiger(q.x >= 0 && q.y >= 0 && q.x <= L && q.y <= B ? q : null);
+    }
     if (!neueOeffnung) return setAuswahl(null);
     const p = punkt(e);
     const w = naechsteWand(p, L, B);
@@ -658,7 +668,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         </label>
         <Hilfe begriff="Wärmeverteilung" text={`${HILFE.waermeverteilung} ${HINWEIS_WAERME}`} />
       </div>
-      {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} />}
+      {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} zeiger={zeiger} />}
 
       <PlanErgebnis planung={planung} module={module} />
     </div>

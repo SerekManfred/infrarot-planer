@@ -347,7 +347,7 @@ body.ohne-bildlauf { overflow: hidden; }
 .modulkatalog td.aktionen { white-space: nowrap; }
 
 /* Wärmeverteilung (feste Skala, halbtransparent über dem Plan) */
-.waerme-schicht { opacity: 0.6; }
+.waerme-schicht { opacity: 0.6; pointer-events: none; }
 .waerme-schicht rect { stroke: none; }
 .waerme-schalter { display: flex; align-items: center; gap: 0.25rem; min-height: 44px; margin-top: 0.5rem; }
 .waerme-schalter input { width: 22px; height: 22px; min-height: 0; margin: 0 0.4rem 0 0; display: inline-block; }

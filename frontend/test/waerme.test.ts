@@ -1,14 +1,16 @@
 // Wärmeverteilung im Deckenplan: feste Farbskala und Vorgaben aus den Fachvorgaben. Werte sind TESTWERTE.
 import { describe, expect, it } from 'vitest';
-import { berechnen, farbe, sperrhoehen } from '../src/komponenten/Waermeverteilung';
+import { berechnen, farbe, SKALA_STUFE, sperrhoehen } from '../src/komponenten/Waermeverteilung';
 
 const regel = (schluessel: string, wert: number | null) => ({ schluessel, bezeichnung: schluessel, wert, wert_text: '' });
 
 describe('Wärmeverteilung', () => {
-  it('feste Skala in 25-W/m²-Stufen, ab 200 W/m² dunkelste Stufe', () => {
-    expect(farbe(0)).toBe(farbe(24.9));
-    expect(farbe(25)).not.toBe(farbe(0));
-    expect(farbe(200)).toBe(farbe(900));
+  it('feste Skala in 10-W/m²-Stufen, ab 70 W/m² dunkelste Stufe', () => {
+    expect(SKALA_STUFE).toBe(10);
+    expect(farbe(0)).toBe(farbe(9.9));
+    expect(farbe(10)).not.toBe(farbe(0));
+    expect(farbe(70)).toBe(farbe(900));
+    expect(farbe(60)).not.toBe(farbe(70));
   });
 
   it('Höhen je Sperrflächen-Typ aus den Regeln; fehlende bleiben leer', () => {

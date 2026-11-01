@@ -1,6 +1,6 @@
 # Fachkonzept
 
-Stand: Phase 1 Teil D, Deckenplan nach Praxistest überarbeitet (31.10.2026)
+Stand: Phase 1 Teil D, Wärmeverteilung im Deckenplan (01.11.2026)
 
 ## Zweck und Beteiligte
 
@@ -221,6 +221,33 @@ Die Sperrflächen werden je Raum in einer maßstäblichen Draufsicht eingezeichn
   - Tür: öffnet nach innen oder außen, Band links oder rechts (vom Raum aus gesehen); dargestellt mit Türblatt und Viertelkreis. Fenster: Doppellinie in der Wand.
   - Mehrere je Raum möglich, offline-fähig, synchronisiert mit dem Projekt (`raum.tueren_fenster`).
 - **Raumliste** (Reiter im Projekt): je Raum Heizlast, benötigte Leistung, Module (Typ × Anzahl), installierte Leistung, Thermostat und Prüfergebnis, dazu die Summen.
+
+### Wärmeverteilung (Festlegung 01.11.2026)
+
+**Vereinfachte Veranschaulichung der Strahlungsverteilung – keine Behaglichkeitsberechnung nach Norm.** Rechenmodell: `rechenkern/src/waermeverteilung.ts`. Es rechnet im Browser, auch offline, und aktualisiert sich nach jedem Verschieben oder Ändern.
+
+- **Schalter „Wärmeverteilung anzeigen“** im Deckenplan, gemerkt je Gerät. Dargestellt wird ein halbtransparenter Farbverlauf der Bestrahlungsstärke in W/m².
+  - Feste Skala, in allen Räumen gleich: Stufen zu 10 W/m², einfarbig hell → dunkel, ab 70 W/m² dunkelste Stufe.
+  - Die Legende nennt den Höchstwert des Raums und den Wert unter Zeiger bzw. Finger.
+  - Die Farbschicht nimmt keine Eingaben an, Sperrflächen und Module bleiben bedienbar.
+- **Strahler:** Jedes Modul ist ein ebener, diffus (Lambert) nach unten abstrahlender Rechteckstrahler an der Decke (Raumhöhe H).
+  - Spezifische Ausstrahlung M = ε · σ · (T_O⁴ − T_R⁴), mit Oberflächentemperatur T_O, Raumtemperatur T_R (Raumtemperatur des Raums bzw. Raumtyps), Emissionsgrad ε und σ = 5,670374419 · 10⁻⁸ W/(m²·K⁴). Ist das Modul nicht wärmer als der Raum, ist M = 0.
+- **Bestrahlungsstärke** an einem Punkt einer horizontalen Empfangsfläche in der Höhe z: E = Σ M · F.
+  - F ist der Sichtfaktor vom Flächenelement zum parallelen Rechteck im Abstand c = H − z.
+  - Exakte Formel für die Ecke (Element unter einer Ecke eines Rechtecks a × b): F = 1/(2π) · [X/√(1+X²) · atan(Y/√(1+X²)) + Y/√(1+Y²) · atan(X/√(1+Y²))], mit X = a/c, Y = b/c.
+  - Jede Lage ergibt sich durch Überlagerung der vier Eckrechtecke mit Vorzeichen.
+- **Abstrahlwinkel** (voller Winkel): Teile des Moduls außerhalb des halben Winkels um die Senkrechte strahlen den Punkt nicht an. Dazu wird das Modul in 8 × 8 Teilflächen zerlegt, jede mit der exakten Formel gerechnet; zum Kegel gehört sie, wenn ihr Mittelpunkt darin liegt. Ab 180° gibt es keine Begrenzung.
+- **Nicht berücksichtigt:** Reflexionen, Abschattung, Konvektion, Wandflächen.
+- **Empfangsflächen:**
+  - der Boden (z = 0) und die Oberseiten der Sperrflächen auf ihrer Höhe; unter Möbeln wird der Boden nicht dargestellt;
+  - bei mehreren Sperrflächen übereinander zählt die höchste;
+  - Dachschräge, Leuchte und Rauchmelder sind keine Empfangsflächen.
+- **Höhe je Sperrfläche:** Feld „Höhe“ beim Antippen einer Sperrfläche. Leer bedeutet die Vorgabe des Typs aus den Fachvorgaben (Platzierungsregeln), Festlegung 01.11.2026: Sitzplatz 0,45 m, Bett 0,50 m, Hochschrank 2,00 m, Dusche/Wanne 0 m, Sonstiges 0,75 m.
+- **Strahlerkennwerte im Modulkatalog:** Oberflächentemperatur (°C), Emissionsgrad (0–1) und Abstrahlwinkel (°).
+  - Sind sie leer, gelten die Vorgabewerte aus den Fachvorgaben, und die Darstellung zeigt „Mit Vorgabewerten berechnet“.
+  - Sind auch die Vorgabewerte leer, steht „Vorgabe fehlt“, und es wird nichts dargestellt. Werte werden nicht erfunden.
+  - Stand 01.11.2026: Weder Katalog- noch Vorgabewerte sind gepflegt.
+- **Raum:** Fehlen Raumhöhe oder Raumtemperatur, gibt es keine Darstellung, sondern einen Hinweis.
 
 ## Noch nicht Bestandteil
 

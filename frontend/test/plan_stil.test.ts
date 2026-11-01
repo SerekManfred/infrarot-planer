@@ -10,6 +10,9 @@ describe('Deckenplan-Stile', () => {
   it('alle Striche im Plan in Bildschirmpixeln', () => {
     expect(css).toMatch(/\.plan \* \{ vector-effect: non-scaling-stroke; \}/);
   });
+  it('Wärmeverteilung nimmt keine Zeigereingaben an (Sperrflächen und Module bleiben bedienbar)', () => {
+    expect(css).toMatch(/\.waerme-schicht \{[^}]*pointer-events: none;/);
+  });
   it('Tippflächen ohne Rand, Auswahl nur an sichtbaren Formen', () => {
     expect(css).toMatch(/\.plan \.plan-tippflaeche \{ fill: transparent; stroke: none !important; \}/);
     expect(css).not.toMatch(/^\.gewaehlt rect/m);
