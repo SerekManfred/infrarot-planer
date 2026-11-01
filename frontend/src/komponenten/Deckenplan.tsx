@@ -32,6 +32,7 @@ import {
 import { api, type AuswertungRaum, type Fachvorgaben, type KatalogModulDaten, type PlatziertesModul, type Raum, type Sperrflaeche } from '../api';
 import { HILFE, watt, zahl } from '../texte';
 import { Hilfe, Meldung, Schalter, Zahlfeld } from './Felder';
+import { berechnen as waermeBerechnen, HINWEIS_WAERME, sperrhoehen, WaermeLegende, WaermeSchicht } from './Waermeverteilung';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
 
@@ -165,6 +166,33 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const geometrie: PlatzierungsRaum = { laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, ist_bad: istBad(raumtyp) };
   const heizlast = ergebnis?.phi_massgeblich_w ?? null;
   const planung = raumModulplanung(geometrie, sperr, module, regeln, heizlast);
+  // Wärmeverteilung: Schalter je Gerät merken; gerechnet wird nur, wenn nicht gerade gezogen wird
+  const [waermeAn, setWaermeAn] = useState(() => {
+    try {
+      return localStorage.getItem('deckenplan.waerme') === 'ja';
+    } catch {
+      return false;
+    }
+  });
+  const raumtemperatur = ergebnis?.werte.theta_int.wert ?? null;
+  const waerme = useMemo(
+    () =>
+      waermeAn && zieht === null && L > 0 && B > 0
+        ? waermeBerechnen({ laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, raumtemperatur_c: raumtemperatur, module, sperrflaechen: sperr, katalog, regeln: vorgaben.regeln })
+        : null,
+    [waermeAn, zieht, L, B, raum.hoehe_m, raumtemperatur, module, sperr, katalog, vorgaben.regeln],
+  );
+  const letzteWaerme = useRef(waerme);
+  if (waerme) letzteWaerme.current = waerme;
+  const waermeAnzeige = waermeAn ? (waerme ?? letzteWaerme.current) : null;
+  function waermeUmschalten(an: boolean) {
+    setWaermeAn(an);
+    try {
+      localStorage.setItem('deckenplan.waerme', an ? 'ja' : 'nein');
+    } catch {
+      /* ohne Speicher: gilt nur bis zum Schließen */
+    }
+  }
   const zulaessig = useMemo(
     () => zulaessigeModule(katalogFuerRechenkern(katalog), { ...geometrie }, regeln),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -477,6 +505,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
             );
           })}
 
+          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} />}
+
           {module.map((x, i) => {
             const r = modulRechteck(x);
             const verstoss = (planung.verstoesse[x.id] ?? []).length > 0;
@@ -562,6 +592,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
               s={gewaehlteSperr}
               L={L}
               B={B}
+              vorgabeHoehe={sperrhoehen(vorgaben.regeln)[gewaehlteSperr.typ] ?? null}
               onAendern={sperrAendern}
               onLoeschen={() => void speichernSperr(sperr.filter((s) => s.id !== gewaehlteSperr.id)).then(() => setAuswahl(null))}
             />
@@ -620,6 +651,14 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         </>
       )}
       {meldung && <Meldung art={meldung.art}>{meldung.text}</Meldung>}
+
+      <div className="waerme-schalter">
+        <label className="inline">
+          <input type="checkbox" checked={waermeAn} onChange={(e) => waermeUmschalten(e.target.checked)} /> Wärmeverteilung anzeigen
+        </label>
+        <Hilfe begriff="Wärmeverteilung" text={`${HILFE.waermeverteilung} ${HINWEIS_WAERME}`} />
+      </div>
+      {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} />}
 
       <PlanErgebnis planung={planung} module={module} />
     </div>
@@ -768,12 +807,15 @@ function SperrLeiste({
   s,
   L,
   B,
+  vorgabeHoehe,
   onAendern,
   onLoeschen,
 }: {
   s: Sperrflaeche;
   L: number;
   B: number;
+  /** Vorgabe-Höhe des Typs aus den Fachvorgaben (Wärmeverteilung) */
+  vorgabeHoehe: number | null;
   onAendern: (s: Sperrflaeche) => void;
   onLoeschen: () => void;
 }) {
@@ -813,6 +855,19 @@ function SperrLeiste({
               min={MIN_GROESSE}
               onSpeichern={(w) => {
                 if (w !== null) onAendern({ ...s, t: begrenzen(w, MIN_GROESSE, B - s.y) });
+              }}
+            />
+          </label>
+          <label className="inline">
+            Höhe
+            <Zahlfeld
+              wert={s.hoehe ?? null}
+              einheit="m"
+              beschriftung="Höhe der Oberseite in m"
+              platzhalter={vorgabeHoehe === null ? 'fehlt' : `${zahl(vorgabeHoehe)} (Vorgabe)`}
+              hervorheben={s.hoehe !== undefined && s.hoehe !== null}
+              onSpeichern={(w) => {
+                if (w === null || w <= 5) onAendern({ ...s, hoehe: w });
               }}
             />
           </label>

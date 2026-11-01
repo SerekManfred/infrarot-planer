@@ -179,6 +179,10 @@ export interface KatalogModulDaten {
   quelle: string;
   bemerkung: string;
   aktiv: boolean;
+  /** nur Wärmeverteilung; leer = Vorgabewert der Fachvorgaben */
+  oberflaechentemperatur_c: number | null;
+  emissionsgrad: number | null;
+  abstrahlwinkel_grad: number | null;
 }
 
 export interface Bauteil {

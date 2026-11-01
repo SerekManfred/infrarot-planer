@@ -87,6 +87,12 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
                 <th className="zahl">Montage (min)</th>
                 <th>{BEGRIFF.quelle}</th>
                 <th>Bemerkung</th>
+                <th className="zahl">
+                  Oberfl.-Temp. (°C)
+                  <Hilfe begriff="Strahlerkennwerte" text={HILFE.strahlerkennwerte} />
+                </th>
+                <th className="zahl">Emissionsgrad</th>
+                <th className="zahl">Abstrahlwinkel (°)</th>
                 <th>Status</th>
                 {darf && <th />}
               </tr>
@@ -146,6 +152,11 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
                   <td>
                     <Textfeld wert={m.bemerkung} gesperrt={!darf} beschriftung="Bemerkung" onSpeichern={setzen(m, 'bemerkung')} />
                   </td>
+                  {(['oberflaechentemperatur_c', 'emissionsgrad', 'abstrahlwinkel_grad'] as const).map((f) => (
+                    <td key={f}>
+                      <Zahlfeld wert={m[f]} platzhalter="Vorgabe" gesperrt={!darf} beschriftung={f} onSpeichern={setzen(m, f)} />
+                    </td>
+                  ))}
                   <td>{m.aktiv ? 'aktiv' : 'inaktiv'}</td>
                   {darf && (
                     <td className="aktionen">

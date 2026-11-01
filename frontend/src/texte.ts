@@ -108,6 +108,10 @@ export const HILFE = {
     'Die App wählt möglichst wenige Module, die zusammen die benötigte Leistung bringen und mit allen Mindestabständen an die Decke passen. Danach lassen sie sich von Hand verschieben, drehen oder tauschen.',
   benoetigteLeistung: 'Heizlast des Raums plus Leistungsreserve. So viel Leistung sollen die Module zusammen mindestens haben.',
   installierteLeistung: 'Summe der Leistung aller Module im Raum.',
+  waermeverteilung:
+    'Zeigt, wie stark die Module welche Stelle anstrahlen (W/m²): am Boden und auf der Oberseite von Möbeln. Berechnet aus Lage, Größe, Oberflächentemperatur, Emissionsgrad und Abstrahlwinkel der Module.',
+  strahlerkennwerte:
+    'Oberflächentemperatur, Emissionsgrad (0–1) und voller Abstrahlwinkel des Moduls – nur für die Darstellung der Wärmeverteilung. Leer: Es gilt der Vorgabewert aus den Fachvorgaben, die Darstellung zeigt dann „mit Vorgabewerten berechnet“.',
   badGeeignet: 'Darf im Bad eingesetzt werden. Nur bei Schutzart IP44 oder höher möglich; die Schutzbereiche prüft eine Elektrofachkraft.',
   tuerFenster:
     'Nur zur Orientierung im Plan: Tür (mit Aufschlag) und Fenster liegen in der Wand. Sie sind keine Sperrflächen und beeinflussen die Platzierung der Module nicht. Antippen, dann auf die Wand tippen.',
