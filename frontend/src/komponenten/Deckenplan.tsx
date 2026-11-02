@@ -10,6 +10,7 @@ import {
   FENSTER_BREITE_M,
   formVonRaum,
   istBad,
+  istRund,
   istPunkt,
   punktImRaum,
   teilRechteck,
@@ -39,9 +40,9 @@ import {
 } from '@infrarot/rechenkern';
 import { api, type AuswertungRaum, type BibliotheksObjekt, type Fachvorgaben, type KatalogModulDaten, type PlatziertesModul, type Raum, type Sperrflaeche } from '../api';
 import { HILFE, watt, zahl } from '../texte';
-import { Hilfe, Meldung, Schalter, Zahlfeld } from './Felder';
-import { ObjektAuswahl } from './Objektbibliothek';
-import { objektDrehen, objektMasse, streifenLage, streifenRechteck } from '../planhilfen';
+import { Hilfe, Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
+import { KATEGORIE_WAHL, ObjektAuswahl, UMRISSE, type SonstigeAngaben } from './Objektbibliothek';
+import { beschriftungEinpassen, kreisAusZeiger, objektDrehen, objektMasse, quadratAusEcke, streifenLage, streifenRechteck } from '../planhilfen';
 import {
   berechnen as waermeBerechnen,
   HINWEIS_WAERME,
@@ -72,7 +73,7 @@ type Ecke = 'nw' | 'ne' | 'sw' | 'se';
 type Art = 'sperr' | 'modul' | 'oeffnung' | 'teil';
 type Auswahl = { art: Art; id: string } | null;
 /** schieben; Rechteck: Ecke ziehen; Streifen: Kante ziehen (Breite); Tür/Fenster: Anfang oder Ende ziehen (Breite) */
-type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'kante' | 'anfang' | 'ende'; dx: number; dy: number; bewegt: boolean };
+type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'kante' | 'anfang' | 'ende' | 'kreis'; dx: number; dy: number; bewegt: boolean };
 
 export function neueId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -398,7 +399,11 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           const versatz = w === 'oben' ? z.dy : w === 'unten' ? s.t - z.dy : w === 'links' ? z.dx : s.b - z.dx;
           return { ...s, ...streifenRechteck(w, rasten(ab - versatz), lage.breite, L, B) };
         }
-        if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') return { ...s, ...eckeZiehen(s, z.modus, p, bb) };
+        if (z.modus === 'kreis') return { ...s, ...kreisAusZeiger(s, p, bb) };
+        if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') {
+          const r = eckeZiehen(s, z.modus, p, bb);
+          return { ...s, ...(s.umriss === 'quadrat' ? quadratAusEcke(s, r, z.modus, bb) : r) };
+        }
         return { ...s, x: rasten(begrenzen(p.x - z.dx, bb.x0, bb.x1 - s.b)), y: rasten(begrenzen(p.y - z.dy, bb.y0, bb.y1 - s.t)) };
       }),
     );
@@ -466,9 +471,13 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   }
 
   /** Neues Objekt mit den Standardmaßen der Bibliothek, mittig (Streifen an der oberen Wand) */
-  function sperrNeu(o: BibliotheksObjekt) {
+  function sperrNeu(o: BibliotheksObjekt, extra?: SonstigeAngaben) {
     let neu: Sperrflaeche;
-    if (o.form === 'punkt') {
+    if (extra && extra.umriss !== 'rechteck') {
+      // Sonstige Sperrfläche rund/quadratisch (Paket N4): Seitenlänge bzw. Durchmesser = Standardbreite
+      const d = Math.min(o.breite_m ?? 1, L, B);
+      neu = { id: neueId(), objekt: o.schluessel, x: rasten((L - d) / 2), y: rasten((B - d) / 2), b: d, t: d };
+    } else if (o.form === 'punkt') {
       neu = { id: neueId(), objekt: o.schluessel, x: rasten(L / 2), y: rasten(B / 2), b: 0, t: 0 };
     } else if (o.form === 'streifen') {
       const breite = rasten(Math.min(o.breite_m ?? 1, B / 2));
@@ -479,6 +488,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
       const tt = Math.min(o.tiefe_m ?? 1, B);
       neu = { id: neueId(), objekt: o.schluessel, x: rasten((L - bb) / 2), y: rasten((B - tt) / 2), b: bb, t: tt };
     }
+    if (extra) neu = { ...neu, bezeichnung: extra.bezeichnung, umriss: extra.umriss, kategorie: extra.kategorie, hoehe: extra.hoehe };
     setAuswahl({ art: 'sperr', id: neu.id });
     void speichernSperr([...sperr, neu]);
   }
@@ -532,6 +542,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   /** Ausgewähltes Objekt um 90° drehen (Mitte bleibt, ggf. minimal verschoben); Meldung, wenn nicht möglich */
   function sperrDrehen(): string | null {
     if (!gewaehlteSperr || istPunkt(gewaehlteSperr) || gewaehlteSperr.wand || !form) return null;
+    if (gewaehlteSperr.umriss === 'quadrat' || gewaehlteSperr.umriss === 'rund') return null; // Drehen ändert nichts
     const e = objektDrehen(gewaehlteSperr, form);
     if (!e.ok) {
       setMeldung({ text: e.meldung, art: 'warnung' });
@@ -612,13 +623,23 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                 d={`M${-wandStaerke},${-wandStaerke}H${L + wandStaerke}V${B + wandStaerke}H${-wandStaerke}Z M0,0V${B}H${L}V0Z`}
               />
               <rect x={0} y={0} width={L} height={B} className="plan-raum" />
-              {/* Wärmeverteilung unter Objekten und Modulen: Umrisse und Beschriftungen bleiben obenauf lesbar */}
-              {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} deckkraft={deckkraft} />}
               {regeln.wand_m !== null && L > 2 * regeln.wand_m && B > 2 * regeln.wand_m && (
                 <rect x={regeln.wand_m} y={regeln.wand_m} width={L - 2 * regeln.wand_m} height={B - 2 * regeln.wand_m} className="plan-wandabstand" />
               )}
 
             </>
+          )}
+          {/* Wärmeverteilung für jede Raumform (Fehler N5: lag nur im Rechteck-Zweig), auf den Umriss zugeschnitten,
+              unter Objekten und Modulen – Umrisse und Beschriftungen bleiben obenauf lesbar */}
+          {form && (
+            <clipPath id={`umriss-${raum.id}`}>
+              <path d={umrissPfad(form)} />
+            </clipPath>
+          )}
+          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && (
+            <g clipPath={form ? `url(#umriss-${raum.id})` : undefined}>
+              <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} deckkraft={deckkraft} />
+            </g>
           )}
           {form && !form.rechteck ? (
             <SegmentBemassung form={form} abstand={masslinie} schrift={schrift} />
@@ -659,14 +680,16 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           {sperr.map((s) => {
             const punktTyp = istPunkt(s);
             const regel = objektRegel(regeln, s);
-            const kategorie = regel?.kategorie ?? 'tabu';
+            // eigene Kategorie der Sonstigen Sperrfläche (Paket N4) vor der Bibliothek
+            const kategorie = s.kategorie ?? regel?.kategorie ?? 'tabu';
+            const umrissClip = form ? `url(#umriss-${raum.id})` : undefined;
             const abstandM = kategorie === 'neutral' ? null : (regel?.abstand_m ?? null);
             const name = objektName(regeln, s);
             const gewaehlt = gewaehlteSperr?.id === s.id;
             if (punktTyp) {
               return (
                 <g key={s.id} onPointerDown={(e) => anfassen(e, 'sperr', s.id)} className={`plan-punkt kat-${kategorie}${gewaehlt ? ' gewaehlt' : ''}`}>
-                  {abstandM !== null && <circle cx={s.x} cy={s.y} r={abstandM} className="plan-halo" />}
+                  {abstandM !== null && <circle cx={s.x} cy={s.y} r={abstandM} className="plan-halo" clipPath={umrissClip} />}
                   <circle cx={s.x} cy={s.y} r={griffTreffer} className="plan-tippflaeche" />
                   <circle cx={s.x} cy={s.y} r={px(7)} className="plan-punkt-kern" />
                   {(gewaehlt || zieht === s.id) && (
@@ -693,26 +716,65 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                     ? [s.x + s.b, s.y + s.t / 2]
                     : [s.x, s.y + s.t / 2]
               : null;
+            // Name eingepasst (Paket N6): kleiner, umbrechen, kürzen – nie über das Objekt hinaus
+            const rund = istRund(s);
+            const marke = beschriftungEinpassen(name, (rund ? s.b * 0.7 : s.b) * pxProM - 6, (rund ? s.t * 0.7 : s.t) * pxProM - 4, 13, 9);
+            const beschriftung = (
+              <text x={s.x + s.b / 2} y={s.y + s.t / 2} fontSize={px(marke.groesse)} textAnchor="middle" dominantBaseline="middle" className="plan-beschriftung">
+                {marke.zeilen.map((z, i) => (
+                  <tspan key={i} x={s.x + s.b / 2} dy={i === 0 ? px(-(marke.zeilen.length - 1) * marke.groesse * 0.575) : px(marke.groesse * 1.15)}>
+                    {z}
+                  </tspan>
+                ))}
+              </text>
+            );
+            if (rund) {
+              const r = s.b / 2;
+              const cx = s.x + r;
+              const cy = s.y + r;
+              const griffe: [number, number][] = [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]];
+              return (
+                <g key={s.id} className={`plan-sperr plan-rund kat-${kategorie}${gewaehlt ? ' gewaehlt' : ''}`}>
+                  <title>{name}</title>
+                  {abstandM !== null && abstandM > 0 && <circle cx={cx} cy={cy} r={r + abstandM} className="plan-halo" clipPath={umrissClip} />}
+                  {kategorie === 'abstand' && abstandM !== null && r > abstandM && <circle cx={cx} cy={cy} r={r - abstandM} className="plan-halo-innen" />}
+                  <circle cx={cx} cy={cy} r={r} className="plan-kreis" onPointerDown={(e) => anfassen(e, 'sperr', s.id)} />
+                  {beschriftung}
+                  {(gewaehlt || zieht === s.id) && (
+                    <text x={cx} y={cy - r - griffR - px(10)} fontSize={schrift} textAnchor="middle" className="plan-mass-live plan-beschriftung">
+                      Ø {zahl(s.b)} m
+                    </text>
+                  )}
+                  {gewaehlt &&
+                    !gesperrt &&
+                    griffe.map(([x, y], i) => (
+                      <g key={i} onPointerDown={(e) => anfassen(e, 'sperr', s.id, 'kreis')} className="plan-griff">
+                        <circle cx={x} cy={y} r={griffTreffer} className="plan-tippflaeche" />
+                        <circle cx={x} cy={y} r={griffR} className="plan-griff-punkt" />
+                      </g>
+                    ))}
+                </g>
+              );
+            }
             return (
               <g key={s.id} className={`plan-sperr kat-${kategorie}${gewaehlt ? ' gewaehlt' : ''}`}>
+                <title>{name}</title>
                 {abstandM !== null && abstandM > 0 && (
-                  <rect x={s.x - abstandM} y={s.y - abstandM} width={s.b + 2 * abstandM} height={s.t + 2 * abstandM} rx={abstandM} className="plan-halo" />
+                  <rect x={s.x - abstandM} y={s.y - abstandM} width={s.b + 2 * abstandM} height={s.t + 2 * abstandM} rx={abstandM} className="plan-halo" clipPath={umrissClip} />
                 )}
                 {/* Kategorie „abstand“: Modul darf darüber, aber nur innerhalb dieser Linie */}
                 {kategorie === 'abstand' && abstandM !== null && s.b > 2 * abstandM && s.t > 2 * abstandM && (
                   <rect x={s.x + abstandM} y={s.y + abstandM} width={s.b - 2 * abstandM} height={s.t - 2 * abstandM} className="plan-halo-innen" />
                 )}
                 <rect x={s.x} y={s.y} width={s.b} height={s.t} onPointerDown={(e) => anfassen(e, 'sperr', s.id)} />
-                <text x={s.x + s.b / 2} y={s.y + s.t / 2} fontSize={schrift} textAnchor="middle" dominantBaseline="middle" className="plan-beschriftung">
-                  {name}
-                </text>
+                {beschriftung}
                 {(gewaehlt || zieht === s.id) && (
                   // Maße oberhalb der Eck-Anfasser (Anfasser 10 px Radius), nie darüber (Paket N1)
                   <text x={s.x + s.b / 2} y={s.y - griffR - px(10)} fontSize={schrift} textAnchor="middle" className="plan-mass-live plan-beschriftung">
                     {schraege ? `Breite ${m(streifenLage(s, L, B).breite)}` : `${zahl(s.b)} × ${zahl(s.t)} m`}
                   </text>
                 )}
-                {gewaehlt && !gesperrt && !schraege && (
+                {gewaehlt && !gesperrt && !schraege && s.umriss !== 'quadrat' && (
                   <g
                     className="plan-drehen"
                     role="button"
@@ -1147,6 +1209,9 @@ function SperrLeiste({
   const wand = s.wand ?? 'oben';
   const quer = wand === 'oben' || wand === 'unten' ? B : L;
   const [drehMeldung, setDrehMeldung] = useState('');
+  // Sonstige Sperrfläche (Paket N4): Name, Form und Kategorie frei wählbar
+  const sonstige = objektSchluessel(s) === 'sonstiges';
+  const umriss = s.umriss ?? 'rechteck';
   /** Breite/Tiefe sofort wirksam: Mitte bleibt, sonst Meldung am Feld (Paket N1) */
   const masse = (b: number, t: number): string | null => {
     const e = objektMasse(s, b, t, form);
@@ -1175,8 +1240,51 @@ function SperrLeiste({
           ))}
         </select>
       </label>
+      {sonstige && (
+        <>
+          <label className="leiste-feld">
+            <span>Name</span>
+            <Textfeld
+              wert={s.bezeichnung || name}
+              beschriftung="Name der Sperrfläche"
+              onSpeichern={(t) => onAendern({ ...s, bezeichnung: t.trim().slice(0, 30) })}
+            />
+          </label>
+          <div className="leiste-feld">
+            <span>Form</span>
+            <Schalter
+              wert={umriss}
+              optionen={UMRISSE}
+              beschriftung="Form"
+              onWahl={(u) => {
+                // Quadrat/Rund: gleiche Seiten (kleinere Ausdehnung), Mitte bleibt
+                const d = Math.min(s.b, s.t);
+                const e = u === 'rechteck' ? null : objektMasse(s, d, d, form);
+                onAendern({ ...s, umriss: u, ...(e && e.ok ? e.r : {}) });
+              }}
+            />
+          </div>
+          <div className="leiste-feld">
+            <span>Kategorie</span>
+            <Schalter wert={s.kategorie ?? objekt?.kategorie ?? 'tabu'} optionen={KATEGORIE_WAHL} beschriftung="Kategorie" onWahl={(k) => onAendern({ ...s, kategorie: k })} />
+          </div>
+        </>
+      )}
+      {!punkt && !streifen && umriss !== 'rechteck' && (
+        <label className="leiste-feld">
+          <span>{umriss === 'rund' ? 'Durchmesser' : 'Seitenlänge'}</span>
+          <Zahlfeld
+            wert={Math.round(s.b * 100) / 100}
+            einheit="m"
+            beschriftung={umriss === 'rund' ? 'Durchmesser in m' : 'Seitenlänge in m'}
+            min={MIN_GROESSE}
+            onSpeichern={(w) => (w === null ? 'Bitte ein Maß eingeben' : masse(w, w))}
+          />
+        </label>
+      )}
       {!punkt && !streifen && (
         <>
+          {umriss === 'rechteck' && (
           <div className="leiste-feld leiste-masse">
             <span>Breite × Tiefe</span>
             <span className="leiste-paar">
@@ -1197,6 +1305,7 @@ function SperrLeiste({
               />
             </span>
           </div>
+          )}
           <label className="leiste-feld">
             <span>
               Höhe
@@ -1217,6 +1326,7 @@ function SperrLeiste({
               }}
             />
           </label>
+          {umriss === 'rechteck' && (
           <div className="leiste-feld">
             <span>&nbsp;</span>
             <button
@@ -1227,6 +1337,7 @@ function SperrLeiste({
               Drehen 90°
             </button>
           </div>
+          )}
         </>
       )}
       {streifen && lage && (

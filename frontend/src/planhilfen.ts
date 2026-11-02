@@ -71,3 +71,67 @@ export function objektDrehen(s: { x: number; y: number; b: number; t: number }, 
   const e = objektMasse(s, s.t, s.b, form);
   return e.ok ? e : { ok: false, meldung: `Drehen nicht möglich: ${e.meldung}` };
 }
+
+// ── Beschriftung im Objekt (Paket N6, 02.11.2026) ──
+
+/** ungefähre Zeichenbreite (fette Sans-Schrift) im Verhältnis zur Schriftgröße */
+const ZEICHENBREITE = 0.6;
+
+/**
+ * Objektnamen in die Objektfläche einpassen: erst die Schrift bis zur Mindestgröße verkleinern, dann auf zwei Zeilen
+ * umbrechen, dann mit „…“ kürzen. Nie breiter oder höher als die Fläche; passt nicht einmal eine Zeile, bleibt die
+ * Beschriftung leer (voller Name im Tooltip und in der Bearbeitungsleiste).
+ */
+export function beschriftungEinpassen(text: string, breitePx: number, hoehePx: number, grund = 13, min = 9): { groesse: number; zeilen: string[] } {
+  const passt = (t: string, g: number) => t.length * ZEICHENBREITE * g <= breitePx;
+  for (let g = grund; g >= min; g--) {
+    if (passt(text, g) && g * 1.15 <= hoehePx) return { groesse: g, zeilen: [text] };
+  }
+  const g = min;
+  const zeile = g * 1.15;
+  if (zeile > hoehePx) return { groesse: g, zeilen: [] };
+  // zwei Zeilen: an der Wortgrenze, die die längere Zeile am kürzesten macht
+  const woerter = text.split(/(?<=[\s-])/);
+  if (woerter.length > 1 && 2 * zeile <= hoehePx) {
+    let beste: [string, string] | null = null;
+    for (let i = 1; i < woerter.length; i++) {
+      const a = woerter.slice(0, i).join('').trim();
+      const b = woerter.slice(i).join('').trim();
+      if (passt(a, g) && passt(b, g) && (!beste || Math.max(a.length, b.length) < Math.max(beste[0].length, beste[1].length))) beste = [a, b];
+    }
+    if (beste) return { groesse: g, zeilen: beste };
+  }
+  const max = Math.floor(breitePx / (ZEICHENBREITE * g));
+  if (max < 2) return { groesse: g, zeilen: [] };
+  return { groesse: g, zeilen: [`${text.slice(0, max - 1).trimEnd()}…`] };
+}
+
+/** Quadrat beim Ziehen an einer Ecke: Seitenlänge = größere Ausdehnung, gegenüberliegende Ecke bleibt fest */
+export function quadratAusEcke(
+  s: { x: number; y: number; b: number; t: number },
+  r: { x: number; y: number; b: number; t: number },
+  ecke: 'nw' | 'ne' | 'sw' | 'se',
+  bbox: { x0: number; y0: number; x1: number; y1: number },
+): { x: number; y: number; b: number; t: number } {
+  const fx = ecke === 'nw' || ecke === 'sw' ? s.x + s.b : s.x;
+  const fy = ecke === 'nw' || ecke === 'ne' ? s.y + s.t : s.y;
+  const links = ecke === 'nw' || ecke === 'sw';
+  const oben = ecke === 'nw' || ecke === 'ne';
+  const platz = Math.min(links ? fx - bbox.x0 : bbox.x1 - fx, oben ? fy - bbox.y0 : bbox.y1 - fy);
+  const d = Math.max(MIN_GROESSE, Math.min(Math.max(r.b, r.t), platz));
+  return { x: mmRunden(links ? fx - d : fx), y: mmRunden(oben ? fy - d : fy), b: mmRunden(d), t: mmRunden(d) };
+}
+
+/** Kreis: Durchmesser aus dem Abstand des Zeigers zur Mitte, Mitte bleibt, nie über die Umrandung */
+export function kreisAusZeiger(
+  s: { x: number; y: number; b: number; t: number },
+  p: { x: number; y: number },
+  bbox: { x0: number; y0: number; x1: number; y1: number },
+): { x: number; y: number; b: number; t: number } {
+  const cx = s.x + s.b / 2;
+  const cy = s.y + s.t / 2;
+  const platz = 2 * Math.min(cx - bbox.x0, bbox.x1 - cx, cy - bbox.y0, bbox.y1 - cy);
+  const d = Math.max(MIN_GROESSE, Math.min(2 * Math.max(Math.abs(p.x - cx), Math.abs(p.y - cy)), platz));
+  const dg = Math.round(d / 0.05) * 0.05 || MIN_GROESSE;
+  return { x: mmRunden(cx - dg / 2), y: mmRunden(cy - dg / 2), b: mmRunden(dg), t: mmRunden(dg) };
+}

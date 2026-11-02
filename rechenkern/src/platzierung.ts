@@ -86,6 +86,36 @@ export interface Sperrflaeche extends Rechteck {
   bezeichnung?: string;
   /** Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Standard des Objekts */
   hoehe?: number | null;
+  /** Form (Paket N4, „Sonstige Sperrfläche“): Rechteck, Quadrat oder rund (Kreis mit Durchmesser b = t); leer = Rechteck */
+  umriss?: 'rechteck' | 'quadrat' | 'rund' | null;
+  /** Kategorie abweichend von der Objektbibliothek (Paket N4, „Sonstige Sperrfläche“); leer = laut Bibliothek */
+  kategorie?: ObjektKategorie | null;
+}
+
+/** Runde Sperrfläche: Kreis im Quadrat x, y, b (= t) */
+export function istRund(s: Pick<Sperrflaeche, 'umriss'>): boolean {
+  return s.umriss === 'rund';
+}
+
+/** Kürzeste Entfernung Rechteck ↔ Kreisfläche (0 bei Überlappung) – nicht über die umschließende Box (Paket N4) */
+export function kreisAbstand(a: Rechteck, s: Rechteck): number {
+  const r = s.b / 2;
+  const cx = s.x + r;
+  const cy = s.y + s.t / 2;
+  const dx = Math.max(a.x - cx, 0, cx - (a.x + a.b));
+  const dy = Math.max(a.y - cy, 0, cy - (a.y + a.t));
+  return Math.max(0, Math.hypot(dx, dy) - r);
+}
+
+/** Abstand eines Moduls zum Kreisrand: außen wie kreisAbstand, ganz innen Radius − weiteste Modulecke, über den Rand 0 */
+export function kreisKantenAbstand(a: Rechteck, s: Rechteck): number {
+  const aussen = kreisAbstand(a, s);
+  if (aussen > 0) return aussen;
+  const r = s.b / 2;
+  const cx = s.x + r;
+  const cy = s.y + s.t / 2;
+  const weiteste = Math.max(...[[a.x, a.y], [a.x + a.b, a.y], [a.x, a.y + a.t], [a.x + a.b, a.y + a.t]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
+  return Math.max(0, r - weiteste);
 }
 
 /** Schlüssel des Bibliotheksobjekts einer Sperrfläche (auch für ältere Daten mit festem Typ) */
@@ -264,18 +294,21 @@ export function objektRegel(r: Regeln, s: Sperrflaeche): ObjektRegel | null {
 }
 
 export function objektName(r: Regeln, s: Sperrflaeche): string {
-  return objektRegel(r, s)?.name ?? (s.bezeichnung || `Objekt „${objektSchluessel(s) || 'ohne Angabe'}“`);
+  // eigener Name (z. B. Sonstige Sperrfläche „Kamin“, Paket N4) vor dem Bibliotheksnamen
+  return s.bezeichnung?.trim() || objektRegel(r, s)?.name || `Objekt „${objektSchluessel(s) || 'ohne Angabe'}“`;
 }
 
 /** Wie ein Objekt für Prüfung und Platzierung zählt; unbekannte Objekte vorsichtshalber als tabu ohne Mindestabstand */
 function objektWirkung(r: Regeln, s: Sperrflaeche): { name: string; kategorie: ObjektKategorie; min: number | null; bekannt: boolean } {
   const o = objektRegel(r, s);
-  return { name: objektName(r, s), kategorie: o?.kategorie ?? 'tabu', min: o?.abstand_m ?? null, bekannt: o !== null };
+  // eigene Kategorie (Sonstige Sperrfläche, Paket N4) vor der Bibliothek; Mindestabstand bleibt der der Bibliothek
+  return { name: objektName(r, s), kategorie: s.kategorie ?? o?.kategorie ?? 'tabu', min: o?.abstand_m ?? null, bekannt: o !== null };
 }
 
 /** Maßgeblicher Abstand Modul ↔ Objekt (0 = liegt darüber bzw. ragt über die Kante) */
 function objektAbstand(a: Rechteck, s: Sperrflaeche, kategorie: ObjektKategorie): number {
   if (istPunkt(s)) return abstand(a, s);
+  if (istRund(s)) return kategorie === 'abstand' ? kreisKantenAbstand(a, s) : kreisAbstand(a, s);
   if (kategorie === 'abstand') return kantenAbstand(a, s);
   return ueberlappt(a, s) ? 0 : abstand(a, s);
 }
@@ -329,7 +362,7 @@ export function pruefeModule(raum: PlatzierungsRaum, sperr: Sperrflaeche[], modu
       const punkt = istPunkt(s);
       const d = objektAbstand(a, s, kategorie);
       if (punkt || kategorie === 'tabu') {
-        const darueber = punkt ? d <= EPS : ueberlappt(a, s);
+        const darueber = punkt || istRund(s) ? d <= EPS : ueberlappt(a, s);
         if (darueber) {
           liste.push(punkt ? `liegt über ${name}` : `liegt über ${name} – dort ist kein Modul zulässig`);
           continue;

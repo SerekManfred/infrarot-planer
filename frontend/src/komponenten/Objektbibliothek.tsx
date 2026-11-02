@@ -6,7 +6,7 @@ import { OBJEKT_FORMEN, OBJEKT_GRUPPEN, OBJEKT_KATEGORIEN, type ObjektForm, type
 import { api, type BibliotheksObjekt, type Raumtyp, type VorschauAnfrage } from '../api';
 import { HILFE, zahl } from '../texte';
 import { masseText, objekteFuerRaum, regelText, zuletztLesen, zuletztMerken } from '../objekte';
-import { Dialog, Hilfe, Meldung } from './Felder';
+import { Dialog, Hilfe, Meldung, Schalter } from './Felder';
 import { ExcelTabelle } from './ExcelTabelle';
 import { VTabelle } from './VTabelle';
 
@@ -232,7 +232,7 @@ export function ObjektAuswahl({
   objekte: BibliotheksObjekt[];
   raumtypId: number | null;
   raumtyp: string | null;
-  onWahl: (o: BibliotheksObjekt) => void;
+  onWahl: (o: BibliotheksObjekt, extra?: SonstigeAngaben) => void;
 }) {
   const [offen, setOffen] = useState(false);
   const [suche, setSuche] = useState('');
@@ -242,11 +242,18 @@ export function ObjektAuswahl({
   const nach = new Map(objekte.map((o) => [o.schluessel, o]));
   const zuletztObjekte = zuletzt.map((s) => nach.get(s)).filter((o): o is BibliotheksObjekt => !!o && o.aktiv !== false);
 
-  function waehlen(o: BibliotheksObjekt) {
+  // „Sonstige Sperrfläche“ (Paket N4): erst Name, Form, Kategorie und Höhe festlegen
+  const [sonstige, setSonstige] = useState<BibliotheksObjekt | null>(null);
+  function waehlen(o: BibliotheksObjekt, extra?: SonstigeAngaben) {
+    if (o.schluessel === 'sonstiges' && !extra) {
+      setSonstige(o);
+      return;
+    }
     setZuletzt(zuletztMerken(o.schluessel));
     setOffen(false);
     setSuche('');
-    onWahl(o);
+    setSonstige(null);
+    onWahl(o, extra);
   }
 
   if (objekte.length === 0) {
@@ -258,6 +265,9 @@ export function ObjektAuswahl({
         + Objekt hinzufügen …
       </button>
     );
+  }
+  if (sonstige) {
+    return <SonstigeFormular objekt={sonstige} onAbbrechen={() => setSonstige(null)} onEinsetzen={(e) => waehlen(sonstige, e)} />;
   }
   const text = suche.trim().toLowerCase();
   const treffer = text ? [...passend, ...allgemein, ...weitere].filter((o) => o.name.toLowerCase().includes(text)) : [];
@@ -329,6 +339,68 @@ export function ObjektAuswahl({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** Angaben zur „Sonstigen Sperrfläche“ (Paket N4) */
+export interface SonstigeAngaben {
+  bezeichnung: string;
+  umriss: 'rechteck' | 'quadrat' | 'rund';
+  kategorie: ObjektKategorie;
+  hoehe: number | null;
+}
+
+export const UMRISSE = { rechteck: 'Rechteck', quadrat: 'Quadrat', rund: 'Rund' } as const;
+export const KATEGORIE_WAHL: Record<ObjektKategorie, string> = { tabu: 'Tabu', abstand: 'Abstand', neutral: 'Neutral' };
+
+function SonstigeFormular({ objekt, onAbbrechen, onEinsetzen }: { objekt: BibliotheksObjekt; onAbbrechen: () => void; onEinsetzen: (e: SonstigeAngaben) => void }) {
+  const [e, setE] = useState<SonstigeAngaben>({ bezeichnung: objekt.name, umriss: 'rechteck', kategorie: 'tabu', hoehe: null });
+  const [hoeheText, setHoeheText] = useState('');
+  const [fehler, setFehler] = useState('');
+  function einsetzen() {
+    const t = hoeheText.trim().replace(',', '.');
+    const h = t === '' ? null : Number(t);
+    if (h !== null && !(h >= 0 && h <= 5)) return setFehler('Höhe: Zahl von 0 bis 5 m');
+    if (!e.bezeichnung.trim()) return setFehler('Bitte einen Namen eingeben');
+    onEinsetzen({ ...e, bezeichnung: e.bezeichnung.trim(), hoehe: h });
+  }
+  return (
+    <div className="objekt-auswahl sonstige-formular" role="group" aria-label="Sonstige Sperrfläche">
+      <h4>Sonstige Sperrfläche</h4>
+      <div className="objekt-leiste">
+        <label className="leiste-feld">
+          <span>Name</span>
+          <input value={e.bezeichnung} maxLength={30} aria-label="Name der Sperrfläche" onChange={(x) => setE({ ...e, bezeichnung: x.target.value })} />
+        </label>
+        <div className="leiste-feld">
+          <span>Form</span>
+          <Schalter wert={e.umriss} optionen={UMRISSE} onWahl={(u) => setE({ ...e, umriss: u })} beschriftung="Form" />
+        </div>
+        <div className="leiste-feld">
+          <span>
+            Kategorie
+            <Hilfe begriff="Kategorie" text={HILFE.sperrflaeche} />
+          </span>
+          <Schalter wert={e.kategorie} optionen={KATEGORIE_WAHL} onWahl={(k) => setE({ ...e, kategorie: k })} beschriftung="Kategorie" />
+        </div>
+        <label className="leiste-feld">
+          <span>Höhe (optional)</span>
+          <span className="zahlfeld">
+            <input value={hoeheText} inputMode="decimal" aria-label="Höhe der Oberseite in m" placeholder={objekt.hoehe_m === null ? '–' : zahl(objekt.hoehe_m)} onChange={(x) => setHoeheText(x.target.value)} />
+            <span className="einheit">m</span>
+          </span>
+        </label>
+      </div>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      <div className="knopfreihe">
+        <button className="knopf" onClick={einsetzen}>
+          Einsetzen
+        </button>
+        <button className="knopf-leise" onClick={onAbbrechen}>
+          Zurück
+        </button>
+      </div>
     </div>
   );
 }

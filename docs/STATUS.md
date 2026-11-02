@@ -9,7 +9,7 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 | Container | Erreichbar | Zustand |
 |---|---|---|
 | `infrarot-db` (PostgreSQL 16, Volume `infrarot-db-daten`) | nur intern, kein Host-Port | healthy, Migration `f1c4d8a92b37` (Kalkulation, 02.11.2026) |
-| `infrarot-backend` (FastAPI + Rechenkern 0.11.0, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
+| `infrarot-backend` (FastAPI + Rechenkern 0.12.0, Volume `infrarot-uploads`) | `127.0.0.1:8091`, über Caddy `/api/*` | healthy |
 | `infrarot-frontend` (React-PWA, nginx) | `127.0.0.1:8090`, über Caddy | läuft |
 
 **Öffentlich:** https://ir-planer.mybase-test.de
@@ -43,6 +43,22 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
   - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
+
+## Nachtrag Paket N (02.11.2026): N4–N6
+
+**N5 Wärmeverteilung nicht sichtbar – Ursache:** Beim Einbau der Raumformen (M2) war die Farbschicht in den Zeichenzweig für Rechteckräume gerutscht. In L-, U- und Erker-Räumen wurde sie berechnet (Kennzahlen korrekt), aber nie gezeichnet. Behoben: Die Farbschicht wird für jede Raumform gezeichnet (unter Objekten und Modulen, Deckkraft-Regler wirkt) und per SVG-Maske exakt auf den Umriss zugeschnitten (Einsprung bleibt frei). Browser: Rechteck und L-Form, Skala automatisch und fest, mit und ohne Objekte – Färbung sichtbar.
+- Hinweis zur festen Skala: Sie beginnt bei 0–10 W/m²; liegen alle Werte darunter (wie hier, Max 5,7 W/m²), ist der ganze Raum in der hellsten Stufe – das sieht nach „keine Färbung“ aus. Die Autoskala (Standard) zeigt die Unterschiede.
+- „Min 0,0“: Oberseiten hoher Möbel (z. B. Kühlschrank/Hochschrank 2,15 m) liegen außerhalb des Abstrahlkegels von 120° und bekommen nichts ab – physikalisch so gewollt.
+- **Plausibilität** (L-Raum TESTRAUM, Projekt 2026-0002: 21,9 m², 2 × CL-540, Katalog: 90 °C, ε 0,3, 120°, Raumhöhe 2,5 m, Raumtemperatur 20 °C): Strahlungsdichte M = ε·σ·(T⁴ − T_R⁴) = 170 W/m²; Strahlungsleistung = 170 W/m² × 0,96 m² = 163 W = 15 % der 1 080 W elektrisch. Am Boden kommen an: Mittel 3,24 W/m² × 21,9 m² = 71 W = 43 % der Strahlung (der Rest trifft die Wände, die nicht dargestellt werden; mit 180° 44 %). Mittel × Fläche stimmt exakt mit der Summe über alle Zellen; Energiebilanz-Test im Rechenkern: sehr großer Boden, 180° → 97–100 % der Strahlung am Boden.
+- **Vorschlag (nicht umgesetzt):** Der Emissionsgrad 0,3 des CL-540 im Katalog ist für pulverbeschichtete Oberflächen sehr niedrig (typisch 0,90–0,95, siehe ⓘ). Mit 0,93 läge der Strahlungsanteil bei rund 47 % und alle W/m²-Werte rund 3,1-mal höher (Mittel etwa 10 W/m²). Bitte im Herstellerdatenblatt prüfen und ggf. im Modulkatalog ändern. Ebenso den Vorgabewert Emissionsgrad (zurzeit 0,5).
+
+**N4 Sonstige Sperrfläche:** „Sonstige Sperrfläche“ in „Objekt hinzufügen“ öffnet ein kleines Formular: Name (frei, Standard „Sonstige Sperrfläche“, max. 30 Zeichen), Form Rechteck | Quadrat | Rund, Kategorie Tabu | Abstand | Neutral (Standard Tabu), Höhe optional. Maße: Rechteck Breite × Tiefe, Quadrat Seitenlänge, Rund Durchmesser. Rund: Kreis, 4 Anfasser für den Durchmesser (Mitte bleibt), Abstandsring als Kreis; Quadrat bleibt beim Ziehen quadratisch; Drehen bei Quadrat und Rund ausgeblendet. Prüfung, Platzierung und Wärmeverteilung rechnen mit dem Kreis (Abstand Kreis ↔ Modulrechteck, nicht über die Box). Name und Form stehen im Deckenplan und im Ergebnisbericht (Kreis im Plan, Legendenzeile „Sonstige Sperrflächen: Kamin (rund, Ø 1,50 m, tabu)“). Datenfelder `umriss`, `kategorie`, `bezeichnung` an der Sperrfläche (ohne Migration, JSON). Mindestabstand bleibt der der Bibliothek (Sonstige Sperrfläche: 30 cm), auch bei Kategorie Abstand.
+
+**N6 Lesbarkeit:** Objektnamen werden eingepasst: Schrift bis 9 px verkleinern, dann zwei Zeilen, dann mit „…“ kürzen – nie breiter als das Objekt (geprüft). Voller Name im Tooltip und in der Bearbeitungsleiste; schwarz mit weißem Rand. Abstandsringe werden auf den Raumumriss zugeschnitten und liegen so nie mehr auf den Wandmaßen.
+
+**N3:** unverändert – M2 war vollständig; die Lücke „Türen/Fenster nur am Hauptrechteck“ ist mit N2 geschlossen. N2 entfällt laut Test (funktioniert).
+
+Tests: Rechenkern 114 (Kreisabstand, eigene Kategorie/Name, Energiebilanz), Backend 134 (Sonstige rund im Bericht), Frontend 73 (Einpassen, Quadrat/Kreis ziehen); Browser 18 von 19 Prüfungen bestanden, die eine Abweichung ist ein Messfehler des Tests (Pixel im Einsprung hat das Hellgrau des Hintergrunds, also wie gewünscht ungefärbt).
 
 ## Paket N (02.11.2026): Objekte, Türen und Fenster bearbeiten
 

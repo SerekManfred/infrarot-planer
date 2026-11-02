@@ -277,6 +277,9 @@ class Sperrflaeche(BaseModel):
     # Höhe der Oberseite über dem Fußboden in m (Wärmeverteilung); leer = Standard des Objekts
     hoehe: float | None = Field(default=None, ge=0, le=5)
     bezeichnung: str = Field(default="", max_length=100)
+    # Paket N4 („Sonstige Sperrfläche“): Form und eigene Kategorie; leer = Rechteck bzw. laut Objektbibliothek
+    umriss: Literal["rechteck", "quadrat", "rund"] | None = None
+    kategorie: Literal["tabu", "abstand", "neutral"] | None = None
 
     @model_validator(mode="after")
     def _objekt_aus_typ(self):

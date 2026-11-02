@@ -221,7 +221,27 @@ def _plan(d: BerichtDaten, rb: RaumBericht, s: int) -> Drawing | None:
     # Objekte (Sperrflächen) nach Kategorie
     for sp in rb.raum.sperrflaechen or []:
         obj = d.objekte.get(sp.get("objekt") or sp.get("typ") or "", {})
-        kat = obj.get("kategorie", "tabu")
+        kat = sp.get("kategorie") or obj.get("kategorie", "tabu")  # eigene Kategorie der Sonstigen Sperrfläche (Paket N4)
+        name = (sp.get("bezeichnung") or "").strip() or obj.get("name", "")
+        if sp.get("umriss") == "rund":
+            r = sp["b"] / 2
+            cx, cy = P(sp["x"] + r, sp["y"] + r)
+            farbe, fuell = {"tabu": ("#b42318", colors.Color(0.71, 0.14, 0.09, alpha=0.12)), "abstand": ("#e8662a", colors.Color(0.91, 0.4, 0.16, alpha=0.18))}.get(
+                kat, ("#5d6878", colors.Color(0.5, 0.5, 0.5, alpha=0.15)))
+            z.add(Circle(cx, cy, r * k, fillColor=fuell, strokeColor=colors.HexColor(farbe), strokeWidth=0.8, strokeDashArray=[2, 1.5] if kat == "neutral" else None))
+            if kat == "tabu":  # Schraffur im Kreis: Linien auf den Kreis zugeschnitten
+                c = -2 * r * k
+                while c < 2 * r * k:
+                    # Linie y − cy = (x − cx) + c, Schnitt mit dem Kreis
+                    disk = 2 * (r * k) ** 2 - c * c
+                    if disk > 0:
+                        w = math.sqrt(disk)
+                        x1, x2 = (-c - w) / 2, (-c + w) / 2
+                        z.add(Line(cx + x1, cy + x1 + c, cx + x2, cy + x2 + c, strokeColor=colors.HexColor(farbe), strokeWidth=0.5))
+                    c += 2.2 * mm
+            if 2 * r * k > 14 * mm:
+                z.add(String(cx, cy - 2, name[:30], fontName=SCHRIFT, fontSize=6, textAnchor="middle"))
+            continue
         if sp.get("b", 0) <= 0 and sp.get("t", 0) <= 0:
             cx, cy = P(sp["x"], sp["y"])
             z.add(Circle(cx, cy, 1.6 * mm, fillColor=colors.HexColor("#8a5a00"), strokeColor=colors.black, strokeWidth=0.4))
@@ -236,7 +256,7 @@ def _plan(d: BerichtDaten, rb: RaumBericht, s: int) -> Drawing | None:
         else:
             z.add(Rect(ax, ay, bx - ax, by - ay, fillColor=colors.Color(0.5, 0.5, 0.5, alpha=0.15), strokeColor=GRAU, strokeWidth=0.6, strokeDashArray=[2, 1.5]))
         if bx - ax > 14 * mm and by - ay > 4 * mm:
-            z.add(String((ax + bx) / 2, (ay + by) / 2 - 2, obj.get("name", ""), fontName=SCHRIFT, fontSize=6, textAnchor="middle"))
+            z.add(String((ax + bx) / 2, (ay + by) / 2 - 2, name[:30], fontName=SCHRIFT, fontSize=6, textAnchor="middle"))
     # Module mit Typ und Leistung
     for i, m in enumerate(rb.raum.module or []):
         b, t = (m["breite_m"], m["laenge_m"]) if m.get("gedreht") else (m["laenge_m"], m["breite_m"])
@@ -265,7 +285,16 @@ def _raumblatt(d: BerichtDaten, rb: RaumBericht, s: int, st: dict) -> list:
     plan = _plan(d, rb, s)
     if plan is not None:
         teile.append(plan)
-    teile.append(Paragraph(f"Maßstab 1:{s} – Legende siehe oben", st["klein"]))
+    # Sonstige Sperrflächen mit eigenem Namen und Form (Paket N4) in der Legende des Raums
+    sonstige = [sp for sp in rb.raum.sperrflaechen or [] if (sp.get("objekt") or sp.get("typ")) == "sonstiges"]
+    formtext = {"rechteck": "Rechteck", "quadrat": "Quadrat", "rund": "rund"}
+    kattext = {"tabu": "tabu", "abstand": "Abstand", "neutral": "neutral"}
+    zusatz = "; ".join(
+        f"{(sp.get('bezeichnung') or 'Sonstige Sperrfläche').strip()} ({formtext.get(sp.get('umriss') or 'rechteck')}"
+        f"{', Ø ' + zahl(sp['b']) + ' m' if sp.get('umriss') == 'rund' else ''}, {kattext.get(sp.get('kategorie') or 'tabu')})"
+        for sp in sonstige
+    )
+    teile.append(Paragraph(f"Maßstab 1:{s} – Legende siehe oben" + (f" · Sonstige Sperrflächen: {zusatz}" if zusatz else ""), st["klein"]))
     herkunft = HERKUNFT_TEXT.get((a.get("werte") or {}).get("pauschale_w_m2", {}).get("herkunft"), "")
     quelle = QUELLE_TEXT.get(a.get("quelle"), a.get("quelle") or "")
     raumdaten = [

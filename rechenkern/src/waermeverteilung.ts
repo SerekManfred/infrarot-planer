@@ -13,7 +13,7 @@
 // - Summe über alle Module. Keine Reflexionen, keine Abschattung, keine Konvektion.
 // Koordinaten wie im Deckenplan: x entlang der Länge, y entlang der Breite, Meter; z von Fußboden nach oben.
 
-import { istPunkt, modulRechteck, objektSchluessel, type PlatziertesModul, type Sperrflaeche } from './platzierung';
+import { istPunkt, istRund, modulRechteck, objektSchluessel, type PlatziertesModul, type Sperrflaeche } from './platzierung';
 import { punktImRaum, type Raumform } from './raumform';
 
 /** Stefan-Boltzmann-Konstante in W/(m²·K⁴) */
@@ -208,6 +208,7 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
       let flaeche: WaermeZelle['flaeche'] = 'boden';
       for (const { s, z: hz } of moebel) {
         if (px < s.x || px > s.x + s.b || py < s.y || py > s.y + s.t) continue;
+        if (istRund(s) && Math.hypot(px - (s.x + s.b / 2), py - (s.y + s.t / 2)) > s.b / 2) continue;
         // höchste Oberseite zählt; auch eine Fläche auf Bodenhöhe (z. B. Dusche) ist eine eigene Empfangsfläche
         if (flaeche === 'boden' || hz > z) {
           z = Math.max(z, hz);

@@ -532,3 +532,13 @@ body.ohne-bildlauf { overflow: hidden; }
 .plan-drehen { cursor: pointer; }
 .plan-drehen-knopf { fill: #fff; stroke: var(--blau); stroke-width: 2px; }
 .plan-drehen text { fill: var(--blau); stroke: none; }
+
+/* Sonstige Sperrfläche rund (Paket N4) – Farben wie bei Rechtecken je Kategorie */
+.plan-sperr .plan-kreis { stroke-width: 2.5px; cursor: grab; fill: rgba(51, 59, 71, 0.2); stroke: #1b1f27; }
+.plan-sperr.kat-tabu .plan-kreis { fill: rgba(180, 35, 24, 0.2); stroke: #8f1a12; }
+.plan-sperr.kat-abstand .plan-kreis { fill: rgba(138, 90, 0, 0.18); stroke: #6b4500; }
+.plan-sperr.kat-neutral .plan-kreis { fill: rgba(51, 59, 71, 0.12); stroke: #1b1f27; stroke-dasharray: 6 3; }
+.plan-sperr.gewaehlt > .plan-kreis { stroke: var(--orange); stroke-width: 3px; }
+.plan-halo-innen { fill: none; }
+.sonstige-formular h4 { margin: 0 0 0.4rem; }
+.sonstige-formular .leiste-feld input { height: 44px; margin: 0; }

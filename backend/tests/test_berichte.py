@@ -132,3 +132,14 @@ def test_preise_im_katalog_nur_mit_recht(client, admin, fachpruefer):
     assert "EK netto (€)" not in kopf and "VK netto (€)" not in kopf
     anmelden(client, admin.email)
     assert next(x for x in client.get("/api/bibliotheken/module").json() if x["artikel_nr"] == "T-9")["ek_netto"] == 100
+
+
+def test_sonstige_sperrflaeche_rund_im_bericht(client, db, geplant, aussendienst):
+    """Paket N4: Name, Form und eigene Kategorie gespeichert; Bericht mit runder Fläche wird erzeugt."""
+    anmelden(client, aussendienst.email)
+    raum = client.get(f"/api/objekte/{geplant['objekt']['id']}/auswertung").json()["raeume"][0]
+    kamin = {"id": "k", "objekt": "sonstiges", "bezeichnung": "Kamin", "umriss": "rund", "kategorie": "abstand", "x": 2, "y": 2, "b": 1, "t": 1}
+    r = _patch(client, f"/api/raeume/{raum['raum_id']}", {"sperrflaechen": [kamin]})
+    assert {k: r["sperrflaechen"][0][k] for k in ("bezeichnung", "umriss", "kategorie")} == {"bezeichnung": "Kamin", "umriss": "rund", "kategorie": "abstand"}
+    assert client.patch(f"/api/raeume/{raum['raum_id']}", json={"sperrflaechen": [{**kamin, "umriss": "oval"}]}).status_code == 422
+    assert client.get(f"/api/projekte/{geplant['projekt']['id']}/berichte/ergebnis.pdf").content.startswith(b"%PDF")

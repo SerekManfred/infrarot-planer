@@ -133,3 +133,45 @@ describe('Türen und Fenster an Wandsegmenten (Paket N2)', () => {
     expect(tuerGeometrie(tuer, 6, 4).blatt.y).toBeCloseTo(2.9); // schlägt in den Raum (nach unten)
   });
 });
+
+describe('Sonstige Sperrfläche rund/quadratisch (Paket N4)', () => {
+  it('Abstand Kreis ↔ Modul über den Kreis, nicht über die umschließende Box; eigene Kategorie und Name', async () => {
+    const { kreisAbstand, kreisKantenAbstand, pruefeModule, regelnAufloesen } = await import('../src');
+    const kreis = { x: 1, y: 1, b: 2, t: 2 }; // Mittelpunkt (2|2), Radius 1
+    // Modul diagonal vor der Box-Ecke: Box-Abstand 0, Kreis-Abstand √(0,2²+0,2²)… genauer: Ecke (0,8|0,8) → Abstand √2·1,2 − 1
+    const m = { x: 0.2, y: 0.2, b: 0.6, t: 0.6 };
+    expect(kreisAbstand(m, kreis)).toBeCloseTo(Math.hypot(1.2, 1.2) - 1);
+    expect(kreisAbstand({ x: 1.5, y: 1.5, b: 0.5, t: 0.5 }, kreis)).toBe(0);
+    expect(kreisKantenAbstand({ x: 1.8, y: 1.8, b: 0.4, t: 0.4 }, kreis)).toBeCloseTo(1 - Math.hypot(0.2, 0.2));
+    const R = regelnAufloesen([{ schluessel: 'abstand_wand_cm', bezeichnung: 'W', wert: 10, wert_text: '' }], [
+      { schluessel: 'sonstiges', name: 'Sonstige Sperrfläche', gruppe: 'moebel', raumtyp_ids: [], form: 'rechteck', breite_m: 1, tiefe_m: 1, hoehe_m: 0.75, kategorie: 'tabu', abstand_cm: 30 },
+    ]);
+    const raum = { laenge_m: 5, breite_m: 5, hoehe_m: 2.5, ist_bad: false };
+    const modul = (x: number, y: number) => ({ id: 'a', modul_id: null, artikel_nr: 'T', bezeichnung: 'T', leistung_w: 300, laenge_m: 0.6, breite_m: 0.6, schutzart: '', bad_geeignet: false, x, y, gedreht: false });
+    const kamin = { id: 'k', objekt: 'sonstiges', bezeichnung: 'Kamin', umriss: 'rund' as const, x: 1, y: 1, b: 2, t: 2 };
+    // in der Box-Ecke, aber 0,52 m vom Kreis entfernt → kein Verstoß (über die Box wäre es „liegt über“)
+    expect(pruefeModule(raum, [kamin], [modul(0.2, 0.2)], R).verstoesse.a).toEqual([]);
+    // Modul links neben dem Kreis, 0,25 m vom Kreisrand → unter 30 cm
+    expect(pruefeModule(raum, [kamin], [modul(0.15, 1.7)], R).verstoesse.a).toEqual(['Abstand zu Kamin 25 cm (mind. 30 cm)']);
+    expect(pruefeModule(raum, [kamin], [modul(1.7, 1.7)], R).verstoesse.a).toEqual(['liegt über Kamin – dort ist kein Modul zulässig']);
+    // eigene Kategorie neutral: keine Regel
+    expect(pruefeModule(raum, [{ ...kamin, kategorie: 'neutral' as const }], [modul(1.7, 1.7)], R).verstoesse.a).toEqual([]);
+  });
+});
+
+describe('Energiebilanz der Wärmeverteilung (Paket N5)', () => {
+  it('sehr großer Boden, Abstrahlwinkel 180°: am Boden kommt praktisch die ganze Strahlungsleistung an (Σ E·A ≈ M·A)', async () => {
+    const { strahlungsdichte, waermeverteilung } = await import('../src');
+    const modul = { id: 'm', modul_id: 1, artikel_nr: 'T', bezeichnung: 'T', leistung_w: 500, laenge_m: 1, breite_m: 1, schutzart: '', bad_geeignet: false, x: 49.5, y: 49.5, gedreht: false };
+    const w = waermeverteilung({
+      laenge_m: 100, breite_m: 100, hoehe_m: 2.5, raumtemperatur_c: 20, module: [modul], raster_m: 0.5, sperrflaechen: [], sperrhoehe: {},
+      kennwerte: new Map([[1, { temperatur_c: 90, emissionsgrad: 0.9, abstrahlwinkel_grad: 180 }]]),
+      vorgaben: { temperatur_c: null, emissionsgrad: null, abstrahlwinkel_grad: null },
+    });
+    const empfangen = w.zellen.reduce((s, z) => s + z.wert * z.b * z.t, 0);
+    const pRad = strahlungsdichte(90, 20, 0.9) * 1;
+    expect(empfangen / pRad).toBeGreaterThan(0.97);
+    expect(empfangen / pRad).toBeLessThan(1.001);
+    expect(w.mittel_w_m2 * 100 * 100).toBeCloseTo(empfangen, 6);
+  });
+});
