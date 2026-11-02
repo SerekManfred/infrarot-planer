@@ -166,7 +166,21 @@ export interface ObjektAuswertung {
     module: number;
     installiert_w: number;
     thermostate: number;
+    /** Fläche aller Räume mit Fläche in m² */
+    flaeche_m2: number;
+    /** Reserve gesamt: installierte Leistung minus Heizlast der Räume mit Modulen, in W und % */
+    reserve_w: number | null;
+    reserve_prozent: number | null;
   };
+}
+
+/** Reserve über alle Räume mit Modulen und Heizlast (Bericht, Paket M4) */
+function reserveGesamt(raeume: ObjektRaumAuswertung[]): { reserve_w: number | null; reserve_prozent: number | null } {
+  const mit = raeume.filter((r) => r.modulplanung.installiert_w > 0 && r.phi_massgeblich_w !== null && r.phi_massgeblich_w > 0);
+  if (mit.length === 0) return { reserve_w: null, reserve_prozent: null };
+  const inst = mit.reduce((s, r) => s + r.modulplanung.installiert_w, 0);
+  const last = mit.reduce((s, r) => s + (r.phi_massgeblich_w as number), 0);
+  return { reserve_w: inst - last, reserve_prozent: (inst / last - 1) * 100 };
 }
 
 function wert(w: number | null | undefined, herkunft: Herkunft): Wert {
@@ -387,6 +401,8 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
         module: raeume.reduce((s, x) => s + x.modulplanung.anzahl, 0),
         installiert_w: raeume.reduce((s, x) => s + x.modulplanung.installiert_w, 0),
         thermostate: raeume.reduce((s, x) => s + x.modulplanung.thermostate, 0),
+        flaeche_m2: raeume.reduce((s, x) => s + (x.flaeche_m2 ?? 0), 0),
+        ...reserveGesamt(raeume),
       },
     },
   };

@@ -56,6 +56,9 @@ class BenutzerLesen(Lesbar):
     name: str
     rollen: list[Rolle]
     aktiv: bool
+    # Paket M4c: Schalter je Benutzer; wirksam ist darf_kalkulation (Admins immer)
+    kalkulation_sehen: bool = False
+    darf_kalkulation: bool = False
 
 
 class BenutzerNeu(BaseModel):
@@ -69,6 +72,7 @@ class BenutzerAenderung(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     rollen: Rollen | None = None
     aktiv: bool | None = None
+    kalkulation_sehen: bool | None = None
 
 
 # ── Projekt ─────────────────────────────────────────────────────────────────
@@ -971,3 +975,24 @@ class FirmaLesen(FirmaDaten, Lesbar):
     id: int
     hat_logo: bool
     geaendert_am: datetime
+
+
+# ── Artikelstamm und Kalkulation (Paket M4c) ──
+
+
+class ArtikelLesen(Lesbar):
+    schluessel: str
+    bezeichnung: str
+    einheit: str
+    bezug: str
+    art_nr: str
+    ek_netto: float | None
+    vk_netto: float | None
+    reihenfolge: int
+
+
+class ArtikelAenderung(BaseModel):
+    bezeichnung: str | None = Field(default=None, min_length=1, max_length=200)
+    art_nr: str | None = Field(default=None, max_length=50)
+    ek_netto: float | None = Field(default=None, ge=0, le=1_000_000)
+    vk_netto: float | None = Field(default=None, ge=0, le=1_000_000)

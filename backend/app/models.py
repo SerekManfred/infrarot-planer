@@ -55,8 +55,14 @@ class Benutzer(Zeitstempel, Base):
     # Rollen sind kombinierbar, z. B. ["admin", "fachpruefer"]; gültige Werte siehe ROLLEN (geprüft in app/schemas.py)
     rollen: Mapped[list[str]] = mapped_column(JsonDaten, default=lambda: ["aussendienst"])
     aktiv: Mapped[bool] = mapped_column(default=True)
+    # Paket M4c: EK/VK/Marge und Kalkulation sehen (Admins immer; andere nur mit diesem Schalter)
+    kalkulation_sehen: Mapped[bool] = mapped_column(default=False, server_default="false")
     # Wird bei Passwortänderung und Deaktivierung erhöht; ältere Sitzungs-Token werden damit ungültig
     sitzungs_version: Mapped[int] = mapped_column(default=0, server_default="0")
+
+    @property
+    def darf_kalkulation(self) -> bool:
+        return self.hat_rolle("admin") or bool(self.kalkulation_sehen)
 
     def hat_rolle(self, *rollen: str) -> bool:
         return any(r in (self.rollen or []) for r in rollen)
@@ -260,6 +266,23 @@ class BibKlimadaten(Zeitstempel, Base):
 # ── Projektdaten ────────────────────────────────────────────────────────────
 
 
+class Artikel(Zeitstempel, Base):
+    """Artikelstamm für Pauschalen und Zubehör der Kalkulation (Paket M4c), z. B. Raumthermostat, Elektroanschluss,
+    Anfahrt. Preise pflegt der Admin; leer = „Preis fehlt“ (nie 0 €)."""
+
+    __tablename__ = "artikel"
+
+    schluessel: Mapped[str] = mapped_column(String(50), primary_key=True)
+    bezeichnung: Mapped[str] = mapped_column(String(200))
+    einheit: Mapped[str] = mapped_column(String(30), default="Stück")
+    # je Raum mit Modulen, einmal je Projekt
+    bezug: Mapped[str] = mapped_column(String(20), default="raum")
+    art_nr: Mapped[str] = mapped_column(String(50), default="")
+    ek_netto: Mapped[float | None] = mapped_column(Float, comment="€")
+    vk_netto: Mapped[float | None] = mapped_column(Float, comment="€")
+    reihenfolge: Mapped[int] = mapped_column(default=0)
+
+
 class Firma(Zeitstempel, Base):
     """Firmendaten für Berichte (Paket M3, 02.11.2026): nur Admins pflegen; eine Firma ist Standard für Berichte."""
 
@@ -298,6 +321,8 @@ class Projekt(Zeitstempel, Base):
     ersteller_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     # Zuständiger Außendienst, z. B. Vertretung bei Urlaub (Festlegung 31.10.2026); sieht das Projekt wie der Ersteller
     zugewiesen_an_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
+    # Preisstand der Kalkulation (Paket M4c): beim ersten Erzeugen eingefroren, nur bewusst aktualisiert
+    preisstand: Mapped[dict | None] = mapped_column(JsonDaten)
     # abweichende Berichtsfirma (Paket M3); leer = Standardfirma
     berichtsfirma_id: Mapped[int | None] = mapped_column(ForeignKey("firma.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(20), default="entwurf", server_default="entwurf")

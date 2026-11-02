@@ -6,7 +6,7 @@ Stand: 10.10.2026
 
 | | |
 |---|---|
-| **Inhalt** | Datenbank `infrarot` (Container `infrarot-db`, PostgreSQL-Custom-Format) und Uploads (Volume `infrarot-uploads`, tar.gz) |
+| **Inhalt** | Datenbank `infrarot` (Container `infrarot-db`, PostgreSQL-Custom-Format) und Uploads (Volume `infrarot-uploads`, tar.gz) – darin auch die Firmenlogos (`uploads/logos`, Paket M3) und die Sicherungen vor Importen |
 | **Zeitpunkt** | täglich 01:30 UTC (03:30 MESZ / 02:30 MEZ), cron des Benutzers `dev` |
 | **Ziel** | `~/backups/infrarot/` (Rechte 700, Dateien 600) |
 | **Dateien** | `infrarot_db_JJJJMMTT_hhmmss.dump`, `infrarot_uploads_JJJJMMTT_hhmmss.tar.gz` |

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type Benutzer, type Rolle } from '../api';
 import { ROLLEN, zeitpunkt } from '../texte';
-import { Meldung, PasswortFeld, Textfeld } from './Felder';
+import { Hilfe, Meldung, PasswortFeld, Textfeld } from './Felder';
 
 export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
   const [liste, setListe] = useState<Benutzer[] | null>(null);
@@ -44,6 +44,10 @@ export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
                 <th>Name</th>
                 <th>E-Mail</th>
                 <th>Rollen</th>
+                <th>
+                  Kalkulation sehen
+                  <Hilfe begriff="Kalkulation sehen" text="EK, VK, Marge und die interne Kalkulation. Admins sehen sie immer; für andere Benutzer hier einzeln freischalten (Standard: aus)." />
+                </th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -62,6 +66,20 @@ export function BenutzerVerwaltung({ benutzer: ich }: { benutzer: Benutzer }) {
                       fest={b.id === ich.id ? ['admin'] : []}
                       onWahl={(rollen) => aendern(() => api.patch(`/benutzer/${b.id}`, { rollen }))}
                     />
+                  </td>
+                  <td>
+                    {b.rollen.includes('admin') ? (
+                      <span>immer (Admin)</span>
+                    ) : (
+                      <label className="ankreuzen">
+                        <input
+                          type="checkbox"
+                          aria-label={`Kalkulation sehen: ${b.name}`}
+                          checked={!!b.kalkulation_sehen}
+                          onChange={(e) => aendern(() => api.patch(`/benutzer/${b.id}`, { kalkulation_sehen: e.target.checked }))}
+                        />
+                      </label>
+                    )}
                   </td>
                   <td>
                     <button

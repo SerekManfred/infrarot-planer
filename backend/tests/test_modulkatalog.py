@@ -14,6 +14,13 @@ MODUL = {
 }
 
 
+@pytest.fixture(autouse=True)
+def preise_fuer_fachpruefer(db, fachpruefer):
+    """Diese Tests pflegen auch EK/VK: der Fachprüfer bekommt dafür das Recht „Kalkulation sehen“ (Paket M4c)."""
+    fachpruefer.kalkulation_sehen = True
+    db.commit()
+
+
 def _modul_anlegen(client, fachpruefer, **teil):
     anmelden(client, fachpruefer.email)
     return _post(client, "/api/bibliotheken/module", MODUL | teil)
@@ -93,8 +100,12 @@ def test_export_excel_wie_importdatei(client, aussendienst, fachpruefer):
     assert antwort.status_code == 200 and "Modulkatalog_" in antwort.headers["content-disposition"]
     blatt = load_workbook(io.BytesIO(antwort.content))["Modulkatalog"]
     zeilen = list(blatt.iter_rows(values_only=True))
-    assert zeilen[0][: len(KOPF_MODULE)] == KOPF_MODULE and zeilen[0][-1] == "aktiv"
-    assert zeilen[1][:3] == ("T-900", "TESTMODUL 900", 900) and zeilen[1][8] == "ja" and zeilen[1][10] == 300.5
+    # Außendienst ohne Recht „Kalkulation sehen“: ohne Preisspalten (Paket M4c)
+    assert "EK netto (€)" not in zeilen[0] and "VK netto (€)" not in zeilen[0] and zeilen[0][-1] == "aktiv"
+    assert zeilen[1][:3] == ("T-900", "TESTMODUL 900", 900) and zeilen[1][8] == "ja"
+    anmelden(client, fachpruefer.email)  # mit Recht: Aufbau wie die Importdatei, mit Preisen
+    zeilen = list(load_workbook(io.BytesIO(client.get("/api/bibliotheken/module/export.xlsx").content))["Modulkatalog"].iter_rows(values_only=True))
+    assert zeilen[0][: len(KOPF_MODULE)] == KOPF_MODULE and zeilen[1][10] == 300.5
 
 
 # ── Moduldaten in laufenden Projekten ──

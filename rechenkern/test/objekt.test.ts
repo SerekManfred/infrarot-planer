@@ -108,7 +108,7 @@ describe('berechneObjekt – Quelle A und Herkunft', () => {
     expect(r.hinweise).toEqual([]);
     expect(r).toMatchObject({ raum_id: 1, geschoss_id: 3, geschoss: 'EG', raumtyp: 'TESTWOHNEN', quelle: 'A' });
     expect(auswertung.summe).toEqual({
-      phi_massgeblich_w: 660, raeume_mit_ergebnis: 1, raeume_ohne_ergebnis: 0, module: 0, installiert_w: 0, thermostate: 0,
+      phi_massgeblich_w: 660, raeume_mit_ergebnis: 1, raeume_ohne_ergebnis: 0, module: 0, installiert_w: 0, thermostate: 0, flaeche_m2: 20, reserve_w: null, reserve_prozent: null,
     });
   });
 

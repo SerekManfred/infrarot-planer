@@ -30,6 +30,21 @@ export interface Benutzer {
   /** kombinierbar, z. B. ['admin', 'fachpruefer'] */
   rollen: Rolle[];
   aktiv: boolean;
+  /** Paket M4c: Schalter „Kalkulation sehen“; wirksam ist darf_kalkulation (Admins immer) */
+  kalkulation_sehen?: boolean;
+  darf_kalkulation?: boolean;
+}
+
+/** Artikelstamm der Kalkulation (Pauschalen), Paket M4c */
+export interface Artikel {
+  schluessel: string;
+  bezeichnung: string;
+  einheit: string;
+  bezug: string;
+  art_nr: string;
+  ek_netto: number | null;
+  vk_netto: number | null;
+  reihenfolge: number;
 }
 
 export function hatRolle(b: Benutzer, ...rollen: Rolle[]): boolean {

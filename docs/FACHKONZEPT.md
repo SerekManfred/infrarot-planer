@@ -299,6 +299,14 @@ Die festen Sperrflächen-Typen sind durch eine **Objektbibliothek** ersetzt. Sie
   - Stand 01.11.2026: Weder Katalog- noch Vorgabewerte sind gepflegt.
 - **Raum:** Fehlen Raumhöhe oder Raumtemperatur, gibt es keine Darstellung, sondern einen Hinweis.
 
+## Firmendaten und Berichte (Festlegung 02.11.2026, Pakete M3/M4)
+
+- **Firmendaten** (nur Admin): mehrere Firmen mit Anschrift, Kontakt, Geschäftsführer, Handelsregister, USt-IdNr. und Logo (PNG, JPG oder SVG bis 2 MB; Inhalt geprüft, SVG bereinigt und in PNG umgewandelt). Eine Firma ist Standard für Berichte (Vorgabe: Mein Energie Haus GmbH); je Projekt kann eine andere gewählt werden. Ohne Logo steht der Firmenname im Kopf.
+- **Ergebnisbericht (PDF)** für alle, die das Projekt sehen: enthält nie EK, VK oder Marge. Status je Raum: **OK** = Reserve 0 bis 20 %, **Prüfen** = Reserve über 20 %, **Unterdeckt** = Modulleistung unter der Heizlast (immer als Text). Reserve = installierte Modulleistung / Raumheizlast − 1 (Rechenkern). Wasserzeichen ENTWURF bis „fachlich geprüft“. Deckenpläne in einem einheitlichen Maßstab für den ganzen Bericht.
+- **Bestellliste (Excel)** ohne Preise: Menge aus der Blattstückliste (Formel) plus „Zusatz (Reserve)“.
+- **Kalkulation intern (Excel)** nur mit Recht „Kalkulation sehen“ (Standard: nur Admin; Schalter je Benutzer). Positionen je Raum mit Modulen: Module, Raumthermostat, Elektroanschluss-Pauschale; je Projekt: Anfahrt; Montagezeit noch nicht. Marge = (VK − EK) / VK netto. Fehlende Preise: „Preis fehlt“, nie 0 €; Summen nur aus Positionen mit Preis. Der Preisstand wird je Projekt mit der ersten Kalkulation eingefroren und nur bewusst aktualisiert. EK/VK sind auch im Modulkatalog nur mit diesem Recht sichtbar und änderbar.
+- Erzeugt wird auf dem Server; offline zeigt die App einen Hinweis.
+
 ## Noch nicht Bestandteil
 
 Angebot und PDF-Platzierungsplan (Teil E), nicht rechteckige Räume, Grundriss-Import per KI, Hottgenroth-Import.

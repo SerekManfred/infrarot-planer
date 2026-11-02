@@ -4,9 +4,9 @@
 // Plausibilität prüft der Server (Leistung und Maße > 0, Schutzart IPxx, „Bad geeignet“ nur ab IP44).
 // Ändern sich Daten verwendeter Module, warten betroffene Projekte auf den Fachprüfer (Vorgaben-Abgleich).
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api, fachansicht, hatRolle, type AbgleichProjekt, type Benutzer, type KatalogModulDaten } from '../api';
+import { api, fachansicht, hatRolle, type AbgleichProjekt, type Artikel, type Benutzer, type KatalogModulDaten } from '../api';
 import { BEGRIFF, HILFE } from '../texte';
-import { Dialog, Hilfe, Meldung } from './Felder';
+import { Dialog, Hilfe, Meldung, Textfeld, Zahlfeld } from './Felder';
 import { ExcelTabelle } from './ExcelTabelle';
 import { VTabelle, zahlText } from './VTabelle';
 
@@ -47,17 +47,20 @@ const DIALOG_FELDER: { feld: Feld; name: string; art: 'text' | 'zahl' | 'janein'
 function ModulDialog({
   modul,
   darf,
+  preise,
   onSchliessen,
   aendern,
 }: {
   modul: KatalogModulDaten;
   darf: boolean;
+  preise: boolean;
   onSchliessen: () => void;
   aendern: (aktion: () => Promise<unknown>, erfolg?: string) => Promise<void>;
 }) {
+  const felder = DIALOG_FELDER.filter((f) => preise || (f.feld !== 'ek_netto' && f.feld !== 'vk_netto'));
   const [texte, setTexte] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      DIALOG_FELDER.map(({ feld, art }) => {
+      felder.map(({ feld, art }) => {
         const w = modul[feld];
         return [feld, art === 'janein' ? (w ? 'ja' : 'nein') : w === null || w === undefined ? '' : String(w).replace('.', art === 'zahl' ? ',' : '.')];
       }),
@@ -67,7 +70,7 @@ function ModulDialog({
 
   function speichern() {
     const aenderung: Record<string, unknown> = {};
-    for (const { feld, art, name, pflicht } of DIALOG_FELDER) {
+    for (const { feld, art, name, pflicht } of felder) {
       const t = texte[feld].trim();
       let wert: unknown;
       if (art === 'janein') wert = t === 'ja';
@@ -88,7 +91,7 @@ function ModulDialog({
   return (
     <Dialog titel={`${darf ? 'Modul bearbeiten' : 'Modul'}: ${modul.artikel_nr}`} onSchliessen={onSchliessen}>
       <div className="raster">
-        {DIALOG_FELDER.map(({ feld, name, art, hilfe }) => (
+        {felder.map(({ feld, name, art, hilfe }) => (
           <label key={feld} className={feld === 'quelle' || feld === 'bemerkung' || feld === 'bezeichnung' ? 'breit' : undefined}>
             <span>
               {name}
@@ -154,6 +157,7 @@ function ModulDialog({
 
 export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
   const darf = fachansicht(benutzer); // Admin und Fachprüfer
+  const preise = !!benutzer.darf_kalkulation;
   const [module, setModule] = useState<KatalogModulDaten[] | null>(null);
   const [fehler, setFehler] = useState('');
   const [hinweis, setHinweis] = useState('');
@@ -224,7 +228,8 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
             { kopf: 'Gewicht (kg)', zahl: true, wert: (m) => zahlText(m.gewicht_kg) },
             { kopf: 'Bad', wert: (m) => (m.bad_geeignet ? 'ja' : 'nein'), hilfe: { begriff: 'Bad geeignet', text: HILFE.badGeeignet } },
             { kopf: 'Oberfläche', wert: (m) => m.oberflaeche || '–', umbruch: true },
-            { kopf: 'EK / VK (€)', zahl: true, wert: (m) => `${zahlText(m.ek_netto, '', 'fehlt')} / ${zahlText(m.vk_netto, '', 'fehlt')}` },
+            // Preise nur mit Recht „Kalkulation sehen“ (Paket M4c, Standard: nur Admin)
+            ...(preise ? [{ kopf: 'EK / VK (€)', zahl: true, wert: (m: KatalogModulDaten) => `${zahlText(m.ek_netto, '', 'fehlt')} / ${zahlText(m.vk_netto, '', 'fehlt')}` }] : []),
             { kopf: 'Montage (min)', zahl: true, wert: (m) => zahlText(m.montagezeit_min, '', 'fehlt') },
             { kopf: 'Strahler', zahl: true, umbruch: true, wert: (m) => strahlerText(m), hilfe: { begriff: 'Strahlerkennwerte', text: HILFE.strahlerkennwerte } },
           ]}
@@ -236,6 +241,7 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
         <ModulDialog
           modul={bearbeiten}
           darf={darf}
+          preise={preise}
           onSchliessen={() => setBearbeiten(null)}
           aendern={async (aktion, erfolg) => {
             await aendern(aktion, erfolg);
@@ -244,6 +250,7 @@ export function ModulkatalogSeite({ benutzer }: { benutzer: Benutzer }) {
         />
       )}
       {darf && <NeuesModul onAngelegt={(nr) => aendern(async () => undefined, `Modul ${nr} angelegt.`)} />}
+      {preise && <Artikelstamm admin={hatRolle(benutzer, 'admin')} />}
       {darf && (
         <div className="karte">
           <h2>Katalog als Excel</h2>
@@ -326,3 +333,33 @@ function NeuesModul({ onAngelegt }: { onAngelegt: (artikelNr: string) => void })
   );
 }
 
+
+/** Artikelstamm für Pauschalen der Kalkulation (Paket M4c): Raumthermostat, Elektroanschluss je Raum, Anfahrt je Projekt.
+ *  Sichtbar mit Recht „Kalkulation sehen“, Preise pflegt der Admin. Leer = „Preis fehlt“ (nie 0 €). */
+function Artikelstamm({ admin }: { admin: boolean }) {
+  const [liste, setListe] = useState<Artikel[]>([]);
+  const [fehler, setFehler] = useState('');
+  const laden = () => api.get<Artikel[]>('/artikel').then(setListe).catch((e) => setFehler((e as Error).message));
+  useEffect(() => void laden(), []);
+  const setzen = (a: Artikel, feld: keyof Artikel) => (wert: unknown) =>
+    api.patch(`/artikel/${a.schluessel}`, { [feld]: wert }).then(laden).catch((e) => setFehler((e as Error).message));
+  return (
+    <div className="karte">
+      <h2>Artikelstamm (Pauschalen der Kalkulation)</h2>
+      <p className="leise">Preise netto. Leer = „Preis fehlt“ in der Kalkulation. Modulpreise stehen im Modulkatalog (Bearbeiten).</p>
+      {fehler && <Meldung>{fehler}</Meldung>}
+      <VTabelle
+        name="Artikelstamm"
+        zeilen={liste}
+        schluessel={(a) => a.schluessel}
+        spalten={[
+          { kopf: 'Artikel', wert: (a) => <strong>{a.bezeichnung}</strong> },
+          { kopf: 'Bezug', wert: (a) => (a.bezug === 'projekt' ? 'je Projekt' : 'je Raum mit Modulen') },
+          { kopf: 'Art.-Nr.', wert: (a) => (admin ? <Textfeld wert={a.art_nr} beschriftung={`Art.-Nr. ${a.bezeichnung}`} onSpeichern={setzen(a, 'art_nr')} /> : a.art_nr || '–') },
+          { kopf: 'EK netto (€)', zahl: true, wert: (a) => (admin ? <Zahlfeld wert={a.ek_netto} platzhalter="Preis fehlt" beschriftung={`EK ${a.bezeichnung}`} onSpeichern={setzen(a, 'ek_netto')} /> : zahlText(a.ek_netto, '', 'Preis fehlt')) },
+          { kopf: 'VK netto (€)', zahl: true, wert: (a) => (admin ? <Zahlfeld wert={a.vk_netto} platzhalter="Preis fehlt" beschriftung={`VK ${a.bezeichnung}`} onSpeichern={setzen(a, 'vk_netto')} /> : zahlText(a.vk_netto, '', 'Preis fehlt')) },
+        ]}
+      />
+    </div>
+  );
+}

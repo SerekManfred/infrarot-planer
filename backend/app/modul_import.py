@@ -79,7 +79,7 @@ def _gruende(fehler: ValidationError) -> str:
     return eingabefehler_text(fehler.errors()).removeprefix("Bitte Eingaben prüfen: ").removesuffix(".")
 
 
-def vorschau(db: Session, inhalt: bytes) -> dict:
+def vorschau(db: Session, inhalt: bytes, ohne: tuple[str, ...] = ()) -> dict:
     """Prüft die Datei und ermittelt die Änderungen, ohne etwas zu speichern."""
     try:
         mappe = load_workbook(io.BytesIO(inhalt), data_only=True, read_only=True)
@@ -90,7 +90,8 @@ def vorschau(db: Session, inhalt: bytes) -> dict:
     if not zeilen:
         raise ImportAbgelehnt("Die Datei ist leer.")
     kopf = [str(k).strip() if k is not None else "" for k in zeilen[0]]
-    spalten = {i: SPALTEN[k] for i, k in enumerate(kopf) if k in SPALTEN}
+    # ohne: Felder, die dieser Benutzer nicht ändern darf (z. B. Preise ohne Recht „Kalkulation sehen“) – ignoriert
+    spalten = {i: SPALTEN[k] for i, k in enumerate(kopf) if k in SPALTEN and SPALTEN[k] not in ohne}
     if "artikel_nr" not in spalten.values():
         raise ImportAbgelehnt("Spalte „Artikel-Nr.“ fehlt – bitte den exportierten Katalog als Vorlage verwenden.")
 
@@ -152,11 +153,11 @@ def vorschau(db: Session, inhalt: bytes) -> dict:
     }
 
 
-def uebernehmen(db: Session, inhalt: bytes, erwartete_pruefsumme: str) -> dict:
+def uebernehmen(db: Session, inhalt: bytes, erwartete_pruefsumme: str, ohne: tuple[str, ...] = ()) -> dict:
     """Übernimmt die geprüfte Datei (gleiche Prüfsumme, fehlerfrei); committet nicht."""
     if pruefsumme(inhalt) != erwartete_pruefsumme:
         raise ImportAbgelehnt("Die Datei wurde seit der Vorschau verändert – bitte erneut prüfen.")
-    v = vorschau(db, inhalt)
+    v = vorschau(db, inhalt, ohne)
     if v["fehler"]:
         raise ImportAbgelehnt(f"Die Datei enthält {len(v['fehler'])} Fehler – nichts übernommen.", v["fehler"])
     vorhanden = {m.artikel_nr: m for m in db.scalars(select(BibModul))}

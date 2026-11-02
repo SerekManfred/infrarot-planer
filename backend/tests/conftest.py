@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Benutzer, BibObjekt, Fachvorgaben, Platzierungsregel
+from app.models import Artikel, Benutzer, BibObjekt, Fachvorgaben, Platzierungsregel
 from app.objektbibliothek import START
 from app.platzierungsregeln import REGELN
 from app.sicherheit import passwort_hashen
@@ -45,6 +45,12 @@ def db():
                       abstand_cm=o.abstand_cm, quelle="TESTWERT", aktiv=True, reihenfolge=i)
             for i, o in enumerate(START)
         )
+        # Wie nach der Migration: Artikelstamm der Kalkulation ohne Preise
+        sitzung.add_all([
+            Artikel(schluessel="raumthermostat", bezeichnung="Raumthermostat", einheit="Stück", bezug="raum", reihenfolge=1),
+            Artikel(schluessel="elektroanschluss", bezeichnung="Elektroanschluss-Pauschale", einheit="Pauschale", bezug="raum", reihenfolge=2),
+            Artikel(schluessel="anfahrt", bezeichnung="Anfahrt", einheit="Pauschale", bezug="projekt", reihenfolge=3),
+        ])
         sitzung.commit()
         yield sitzung
     engine.dispose()

@@ -693,7 +693,29 @@ export interface ModulZusammenfassung {
   anzahl: number;
 }
 
+/** Grenze für den Berichtsstatus „Prüfen“ (Festlegung Auftraggeber 02.11.2026, Paket M4): Reserve über 20 % */
+export const BERICHT_RESERVE_GRENZE_PROZENT = 20;
+
+export type BerichtStatus = 'ok' | 'pruefen' | 'unterdeckt';
+
+export const BERICHT_STATUS_TEXT: Record<BerichtStatus, string> = { ok: 'OK', pruefen: 'Prüfen', unterdeckt: 'Unterdeckt' };
+
+/**
+ * Status je Raum für den Ergebnisbericht: Unterdeckt = Modulleistung unter der Heizlast; Prüfen = Reserve über 20 %;
+ * OK = Reserve 0 bis 20 %. Reserve = installierte Leistung / Heizlast − 1. Ohne Heizlast oder Module: null.
+ */
+export function berichtStatus(heizlastW: number | null, installiertW: number): { reserve_prozent: number | null; status: BerichtStatus | null } {
+  if (heizlastW === null || heizlastW <= 0 || installiertW <= 0) return { reserve_prozent: null, status: null };
+  const reserve = (installiertW / heizlastW - 1) * 100;
+  if (installiertW < heizlastW - EPS) return { reserve_prozent: reserve, status: 'unterdeckt' };
+  return { reserve_prozent: reserve, status: reserve > BERICHT_RESERVE_GRENZE_PROZENT + EPS ? 'pruefen' : 'ok' };
+}
+
 export interface RaumModulplanung {
+  /** Reserve der installierten Leistung gegenüber der Raumheizlast in % (Bericht); null ohne Heizlast/Module */
+  reserve_prozent: number | null;
+  /** Status für den Ergebnisbericht (OK / Prüfen / Unterdeckt) */
+  bericht_status: BerichtStatus | null;
   benoetigt_w: number | null;
   installiert_w: number;
   anzahl: number;
@@ -733,7 +755,10 @@ export function raumModulplanung(
     hinweise.push(...leistungPruefen(benoetigt, installiert, r).filter((h) => h.startsWith('Vorgabe fehlt')));
     if (r.thermostat_je_raum === null) hinweise.push(fehlt(r, 'thermostat_je_raum', 'Thermostat je Raum'));
   }
+  const bericht = berichtStatus(heizlastW, installiert);
   return {
+    reserve_prozent: bericht.reserve_prozent,
+    bericht_status: bericht.status,
     benoetigt_w: benoetigt,
     installiert_w: installiert,
     anzahl: module.length,

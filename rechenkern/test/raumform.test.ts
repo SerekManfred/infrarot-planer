@@ -103,3 +103,16 @@ describe('Raumform aus Rechtecken', () => {
     expect(w.min_w_m2).toBeGreaterThan(0);
   });
 });
+
+describe('Berichtsstatus je Raum (Paket M4)', () => {
+  it('OK bis 20 % Reserve, Prüfen darüber, Unterdeckt unter der Heizlast, ohne Module kein Status', async () => {
+    const { berichtStatus } = await import('../src');
+    expect(berichtStatus(1000, 1000)).toEqual({ reserve_prozent: 0, status: 'ok' });
+    expect(berichtStatus(1000, 1200).status).toBe('ok');
+    expect(berichtStatus(1000, 1210)).toMatchObject({ status: 'pruefen' });
+    expect(berichtStatus(1000, 950).status).toBe('unterdeckt');
+    expect(berichtStatus(1000, 950).reserve_prozent).toBeCloseTo(-5);
+    expect(berichtStatus(1000, 0)).toEqual({ reserve_prozent: null, status: null });
+    expect(berichtStatus(null, 500).status).toBeNull();
+  });
+});

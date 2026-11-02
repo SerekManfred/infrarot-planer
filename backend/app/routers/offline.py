@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.abhaengigkeiten import aktueller_benutzer
 from app.db import get_db
 from app.models import (
+    Benutzer,
     Bauteilflaeche, BibBauteil, BibKlimadaten, BibModul, BibRaumtyp, Fachvorgaben, Geschoss, HeizlastPauschale,
     Objekt, Platzierungsregel, Projekt, Raum,
 )
 from app.projektzugriff import sichtbarkeit_pruefen
+from app.routers.bibliotheken import ohne_preise
 from app.routers.fachvorgaben import lesen as fachvorgaben_lesen
 from app.schemas import OfflineVorgaben, ProjektPaket
 
@@ -19,7 +21,7 @@ router = APIRouter(prefix="/offline", tags=["Offline"], dependencies=[Depends(ak
 
 
 @router.get("/vorgaben", response_model=OfflineVorgaben)
-def vorgaben(db: Session = Depends(get_db)):
+def vorgaben(db: Session = Depends(get_db), benutzer: Benutzer = Depends(aktueller_benutzer)):
     # Stand = jüngste Änderung an Vorgaben oder Bibliotheken (zur Anzeige auf dem Gerät)
     zeiten = [
         z for m in (Fachvorgaben, BibRaumtyp, HeizlastPauschale, Platzierungsregel, BibBauteil, BibKlimadaten, BibModul)
@@ -31,7 +33,8 @@ def vorgaben(db: Session = Depends(get_db)):
         fachvorgaben=fachvorgaben_lesen(db),
         bauteile=db.scalars(select(BibBauteil).order_by(BibBauteil.kategorie, BibBauteil.bezeichnung)).all(),
         klimadaten=db.scalars(select(BibKlimadaten).order_by(BibKlimadaten.plz, BibKlimadaten.ort)).all(),
-        module=db.scalars(select(BibModul).where(BibModul.aktiv).order_by(BibModul.leistung_w, BibModul.artikel_nr)).all(),
+        # Preise nur mit Recht „Kalkulation sehen“ (Paket M4c)
+        module=[ohne_preise(m, benutzer) for m in db.scalars(select(BibModul).where(BibModul.aktiv).order_by(BibModul.leistung_w, BibModul.artikel_nr))],
     )
 
 
