@@ -116,3 +116,20 @@ describe('Berichtsstatus je Raum (Paket M4)', () => {
     expect(berichtStatus(null, 500).status).toBeNull();
   });
 });
+
+describe('Türen und Fenster an Wandsegmenten (Paket N2)', () => {
+  it('nächstes Segment: Ausrichtung nach innen, Wandlinie, Bereich; Hauptrechteck ohne eigene Linie', async () => {
+    const { naechstesSegment, oeffnungStrecke, tuerGeometrie } = await import('../src');
+    // L-Form 6 × 4 m, oben rechts 3 × 2 m ausgeschnitten: Innenwand y = 2 von x = 3 bis 6 (Raum darunter)
+    const innen = naechstesSegment({ x: 4.5, y: 2.1 }, L_FORM.segmente, 6, 4)!;
+    expect(innen).toMatchObject({ wand: 'oben', linie: 2, von: 3, bis: 6 });
+    // obere Wand des Hauptrechtecks ist nur noch 3 m lang
+    expect(naechstesSegment({ x: 1, y: 0.1 }, L_FORM.segmente, 6, 4)).toMatchObject({ wand: 'oben', linie: null, von: 0, bis: 3 });
+    expect(naechstesSegment({ x: 5.9, y: 3 }, L_FORM.segmente, 6, 4)).toMatchObject({ wand: 'rechts', linie: null, von: 2, bis: 4 });
+    // senkrechte Innenwand x = 3 (Raum links davon)
+    expect(naechstesSegment({ x: 3.05, y: 1 }, L_FORM.segmente, 6, 4)).toMatchObject({ wand: 'rechts', linie: 3, von: 0, bis: 2 });
+    const tuer = { id: 't', art: 'tuer' as const, wand: 'oben' as const, linie: 2, position: 4, breite: 0.9, aufschlag: 'innen' as const, band: 'links' as const };
+    expect(oeffnungStrecke(tuer, 6, 4)).toEqual([{ x: 4, y: 2 }, { x: 4.9, y: 2 }]);
+    expect(tuerGeometrie(tuer, 6, 4).blatt.y).toBeCloseTo(2.9); // schlägt in den Raum (nach unten)
+  });
+});

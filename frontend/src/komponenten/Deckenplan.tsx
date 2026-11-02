@@ -15,7 +15,7 @@ import {
   teilRechteck,
   wandAbstand,
   modulRechteck,
-  naechsteWand,
+  naechstesSegment,
   objektName,
   objektRegel,
   objektSchluessel,
@@ -28,6 +28,7 @@ import {
   vorschlagen,
   wandAbstaende,
   wandLaenge,
+  wandLinie,
   zulaessigeModule,
   type KatalogModul,
   type PlatzierungsRaum,
@@ -40,7 +41,7 @@ import { api, type AuswertungRaum, type BibliotheksObjekt, type Fachvorgaben, ty
 import { HILFE, watt, zahl } from '../texte';
 import { Hilfe, Meldung, Schalter, Zahlfeld } from './Felder';
 import { ObjektAuswahl } from './Objektbibliothek';
-import { hoeheText, streifenLage, streifenRechteck } from '../planhilfen';
+import { objektDrehen, objektMasse, streifenLage, streifenRechteck } from '../planhilfen';
 import {
   berechnen as waermeBerechnen,
   HINWEIS_WAERME,
@@ -52,6 +53,7 @@ import {
 } from './Waermeverteilung';
 
 type Aendern = (aktion: () => Promise<unknown>) => Promise<void>;
+type Schnappschuss = { sperr: Sperrflaeche[]; module: PlatziertesModul[]; oeffnungen: TuerFenster[] };
 
 interface Props {
   raum: Raum;
@@ -76,7 +78,8 @@ export function neueId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const rasten = (w: number) => Math.round(w / RASTER) * RASTER;
+// auf das 5-cm-Raster, auf mm gerundet (keine Gleitkommareste wie 2,5500000000000003)
+const rasten = (w: number) => Math.round(Math.round(w / RASTER) * RASTER * 1000) / 1000;
 const begrenzen = (w: number, min: number, max: number) => Math.min(Math.max(w, min), Math.max(min, max));
 const m = (w: number) => `${zahl(w)} m`;
 
@@ -122,14 +125,29 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const zug = useRef<Zug | null>(null);
   const svg = useRef<SVGSVGElement>(null);
 
+  // Rückgängig (Paket N1/N2): Stände vor jeder gespeicherten Änderung an Objekten, Modulen, Türen und Fenstern
+  const verlauf = useRef<Schnappschuss[]>([]);
+  const gespeichert = useRef<Schnappschuss>({ sperr: raum.sperrflaechen ?? [], module: raum.module ?? [], oeffnungen: raum.tueren_fenster ?? [] });
+  const [verlaufLaenge, setVerlaufLaenge] = useState(0);
+  // Tastatur: R = ausgewähltes Objekt bzw. Modul drehen, Strg+Z = rückgängig (aktuelle Funktionen über eine Referenz)
+  const tasten = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => tasten.current(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+
   // Stand vom Server bzw. Offline-Speicher übernehmen, solange nicht gerade gezogen wird
   useEffect(() => {
+    gespeichert.current = { ...gespeichert.current, sperr: raum.sperrflaechen ?? [] };
     if (!zug.current) setSperr(raum.sperrflaechen ?? []);
   }, [raum.sperrflaechen]);
   useEffect(() => {
+    gespeichert.current = { ...gespeichert.current, module: raum.module ?? [] };
     if (!zug.current) setModule(raum.module ?? []);
   }, [raum.module]);
   useEffect(() => {
+    gespeichert.current = { ...gespeichert.current, oeffnungen: raum.tueren_fenster ?? [] };
     if (!zug.current) setOeffnungen(raum.tueren_fenster ?? []);
   }, [raum.tueren_fenster]);
   useEffect(() => {
@@ -242,13 +260,37 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
   if (L <= 0 || B <= 0) return <p className="leise">Für den Deckenplan zuerst Länge und Breite des Raums eingeben.</p>;
 
-  const speichernSperr = (neu: Sperrflaeche[]) => aendern(() => api.patch(`/raeume/${raum.id}`, { sperrflaechen: neu }));
-  const speichernOeffnungen = (neu: TuerFenster[]) => aendern(() => api.patch(`/raeume/${raum.id}`, { tueren_fenster: neu }));
+  /** Stand vor der Änderung merken (Rückgängig), dann den neuen als gespeichert vormerken */
+  function merken(teil: Partial<Schnappschuss>) {
+    verlauf.current = [...verlauf.current.slice(-29), gespeichert.current];
+    gespeichert.current = { ...gespeichert.current, ...teil };
+    setVerlaufLaenge(verlauf.current.length);
+  }
+  const speichernSperr = (neu: Sperrflaeche[]) => {
+    merken({ sperr: neu });
+    return aendern(() => api.patch(`/raeume/${raum.id}`, { sperrflaechen: neu }));
+  };
+  const speichernOeffnungen = (neu: TuerFenster[]) => {
+    merken({ oeffnungen: neu });
+    return aendern(() => api.patch(`/raeume/${raum.id}`, { tueren_fenster: neu }));
+  };
   const speichernModule = (neu: PlatziertesModul[], vorschlagMeldung = false) => {
     // Meldung eines Vorschlags gilt nur, bis von Hand geändert wird
     if (!vorschlagMeldung) setMeldung(null);
+    merken({ module: neu });
     return aendern(() => api.patch(`/raeume/${raum.id}`, { module: neu }));
   };
+  function rueckgaengig() {
+    const vorher = verlauf.current.pop();
+    setVerlaufLaenge(verlauf.current.length);
+    if (!vorher) return;
+    gespeichert.current = vorher;
+    setSperr(vorher.sperr);
+    setModule(vorher.module);
+    setOeffnungen(vorher.oeffnungen);
+    setMeldung({ text: 'Letzte Änderung rückgängig gemacht.', art: 'hinweis' });
+    void aendern(() => api.patch(`/raeume/${raum.id}`, { sperrflaechen: vorher.sperr, module: vorher.module, tueren_fenster: vorher.oeffnungen }));
+  }
 
   function punkt(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const mat = svg.current!.getScreenCTM()!.inverse();
@@ -258,8 +300,13 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
   function anfassen(e: ReactPointerEvent, art: Art, id: string, modus: Zug['modus'] = 'schieben') {
     e.stopPropagation();
+    // „Tür/Fenster setzen“ aktiv: ein Tippen auf Objekt, Anfasser oder Modul setzt die Öffnung an der nächsten Wand,
+    // statt den Modus still zu beenden (Fehler aus dem Praxistest, Paket N2)
+    if (neueOeffnung) {
+      hintergrund(e);
+      return;
+    }
     setAuswahl({ art, id });
-    setNeueOeffnung(null);
     if (gesperrt) return;
     const p = punkt(e);
     let dx = 0;
@@ -267,9 +314,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     if (art === 'teil') {
       setTeileZug(teile);
     } else if (art === 'oeffnung') {
+      // Versatz entlang der eigenen Wand (nicht der nächstgelegenen – sonst springt die Öffnung an Ecken)
       const o = oeffnungen.find((x) => x.id === id)!;
-      const w = naechsteWand(p, L, B);
-      dx = (w.wand === o.wand ? w.s : o.position) - o.position;
+      dx = (o.wand === 'oben' || o.wand === 'unten' ? p.x : p.y) - o.position;
     } else {
       const obj = art === 'sperr' ? sperr.find((s) => s.id === id)! : module.find((x) => x.id === id)!;
       dx = p.x - obj.x;
@@ -325,15 +372,16 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         alt.map((o) => {
           if (o.id !== z.id) return o;
           const s = o.wand === 'oben' || o.wand === 'unten' ? p.x : p.y;
-          const laenge = wandLaenge(o.wand, L, B);
+          // innerhalb des eigenen Wandsegments (Raumform) bzw. der Wand des Hauptrechtecks
+          const [von, bis] = oeffnungBereich(o);
           if (z.modus === 'anfang') {
             // Ende bleibt, Anfang wandert: Lage und Breite ändern sich
             const ende = o.position + o.breite;
-            const anfang = rasten(begrenzen(s, 0, ende - MIN_GROESSE));
+            const anfang = rasten(begrenzen(s, von, ende - MIN_GROESSE));
             return { ...o, position: anfang, breite: ende - anfang };
           }
-          if (z.modus === 'ende') return { ...o, breite: rasten(begrenzen(s - o.position, MIN_GROESSE, laenge - o.position)) };
-          return { ...o, position: rasten(begrenzen(s - z.dx, 0, laenge - o.breite)) };
+          if (z.modus === 'ende') return { ...o, breite: rasten(begrenzen(s - o.position, MIN_GROESSE, bis - o.position)) };
+          return { ...o, position: rasten(begrenzen(s - z.dx, von, bis - o.breite)) };
         }),
       );
       return;
@@ -377,6 +425,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     setAuswahl(null);
     setMeldung(null);
     setNeueOeffnung(art);
+    // Die Knöpfe stehen unter dem Plan: Plan ganz in den Blick holen, damit jede Wand antippbar ist (Paket N2)
+    svg.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   /** Antippen der leeren Fläche: Auswahl aufheben – oder Tür/Fenster an der nächsten Wand setzen */
@@ -387,17 +437,24 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     }
     if (!neueOeffnung) return setAuswahl(null);
     const p = punkt(e);
-    const w = naechsteWand(p, L, B);
-    if (w.abstand > Math.max(0.6, px(40))) {
-      setMeldung({ text: 'Bitte direkt auf eine Wand tippen.', art: 'hinweis' });
+    // nächstes Wandsegment der Raumform (auch L-, U-Form und Erker)
+    const w = form ? naechstesSegment(p, form.segmente, L, B) : null;
+    if (!w || w.abstand > Math.max(0.6, px(40))) {
+      setMeldung({ text: `Bitte direkt auf eine Wand tippen (${neueOeffnung === 'tuer' ? 'Tür' : 'Fenster'} wird an der nächsten Wand gesetzt).`, art: 'hinweis' });
       return;
     }
-    const breite = Math.min(neueOeffnung === 'tuer' ? TUER_BREITE_M : FENSTER_BREITE_M, wandLaenge(w.wand, L, B));
+    const laenge = w.bis - w.von;
+    if (laenge < MIN_GROESSE * 2) {
+      setMeldung({ text: 'Dieses Wandstück ist zu kurz für eine Öffnung.', art: 'warnung' });
+      return;
+    }
+    const breite = Math.min(neueOeffnung === 'tuer' ? TUER_BREITE_M : FENSTER_BREITE_M, laenge);
     const neu: TuerFenster = {
       id: neueId(),
       art: neueOeffnung,
       wand: w.wand,
-      position: rasten(begrenzen(w.s - breite / 2, 0, wandLaenge(w.wand, L, B) - breite)),
+      ...(w.linie !== null ? { linie: w.linie } : {}),
+      position: rasten(begrenzen(w.s - breite / 2, w.von, w.bis - breite)),
       breite,
       ...(neueOeffnung === 'tuer' ? { aufschlag: 'innen' as const, band: 'links' as const } : {}),
     };
@@ -472,12 +529,53 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     void speichernSperr(sperr.map((s) => (s.id === neu.id ? neu : s)));
   }
 
-  function oeffnungAendern(neu: TuerFenster) {
-    const laenge = wandLaenge(neu.wand, L, B);
-    const breite = begrenzen(neu.breite, MIN_GROESSE, laenge);
-    const korrigiert = { ...neu, breite, position: begrenzen(neu.position, 0, laenge - breite) };
-    setOeffnungen(oeffnungen.map((o) => (o.id === neu.id ? korrigiert : o)));
-    void speichernOeffnungen(oeffnungen.map((o) => (o.id === neu.id ? korrigiert : o)));
+  /** Ausgewähltes Objekt um 90° drehen (Mitte bleibt, ggf. minimal verschoben); Meldung, wenn nicht möglich */
+  function sperrDrehen(): string | null {
+    if (!gewaehlteSperr || istPunkt(gewaehlteSperr) || gewaehlteSperr.wand || !form) return null;
+    const e = objektDrehen(gewaehlteSperr, form);
+    if (!e.ok) {
+      setMeldung({ text: e.meldung, art: 'warnung' });
+      return e.meldung;
+    }
+    sperrAendern({ ...gewaehlteSperr, ...e.r });
+    return null;
+  }
+
+  tasten.current = (e: KeyboardEvent) => {
+    const ziel = e.target as HTMLElement | null;
+    if (ziel && (ziel.tagName === 'INPUT' || ziel.tagName === 'SELECT' || ziel.tagName === 'TEXTAREA')) return;
+    if (gesperrt) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      rueckgaengig();
+    } else if (e.key === 'r' || e.key === 'R') {
+      if (gewaehlteSperr) sperrDrehen();
+      else if (gewaehltesModul) modulAendern({ gedreht: !gewaehltesModul.gedreht });
+    }
+  };
+
+  /** Bereich des Wandsegments einer Öffnung entlang der Wand (Raumform), sonst die ganze Wand des Hauptrechtecks */
+  function oeffnungBereich(o: TuerFenster): [number, number] {
+    const linie = wandLinie(o, L, B);
+    const waagerecht = o.wand === 'oben' || o.wand === 'unten';
+    const passend = (form?.segmente ?? [])
+      .filter((sg) => (waagerecht ? sg.y1 === sg.y2 && Math.abs(sg.y1 - linie) < 1e-6 : sg.x1 === sg.x2 && Math.abs(sg.x1 - linie) < 1e-6))
+      .map((sg): [number, number] => (waagerecht ? [Math.min(sg.x1, sg.x2), Math.max(sg.x1, sg.x2)] : [Math.min(sg.y1, sg.y2), Math.max(sg.y1, sg.y2)]));
+    const mitte = o.position + o.breite / 2;
+    return passend.find(([a, b]) => mitte >= a - 1e-6 && mitte <= b + 1e-6) ?? passend[0] ?? [0, wandLaenge(o.wand, L, B)];
+  }
+
+  /** Tür/Fenster ändern; unzulässige Werte → Meldung am Feld statt stillem Begrenzen (Paket N2) */
+  function oeffnungAendern(neu: TuerFenster): string | null {
+    const [von, bis] = oeffnungBereich(oeffnungen.find((o) => o.id === neu.id) ?? neu);
+    if (neu.breite < MIN_GROESSE) return `Mindestens ${zahl(MIN_GROESSE)} m`;
+    if (neu.breite > bis - von + 1e-9) return `Breiter als das Wandstück (höchstens ${zahl(bis - von)} m)`;
+    if (neu.position < von - 1e-9 || neu.position + neu.breite > bis + 1e-9) {
+      return `Liegt nicht mehr auf der Wand (Abstand höchstens ${zahl(bis - von - neu.breite)} m)`;
+    }
+    setOeffnungen(oeffnungen.map((o) => (o.id === neu.id ? neu : o)));
+    void speichernOeffnungen(oeffnungen.map((o) => (o.id === neu.id ? neu : o)));
+    return null;
   }
 
   const schrift = px(13);
@@ -609,9 +707,27 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                   {name}
                 </text>
                 {(gewaehlt || zieht === s.id) && (
-                  <text x={s.x + s.b / 2} y={s.y - px(8)} fontSize={schrift} textAnchor="middle" className="plan-mass-live plan-beschriftung">
+                  // Maße oberhalb der Eck-Anfasser (Anfasser 10 px Radius), nie darüber (Paket N1)
+                  <text x={s.x + s.b / 2} y={s.y - griffR - px(10)} fontSize={schrift} textAnchor="middle" className="plan-mass-live plan-beschriftung">
                     {schraege ? `Breite ${m(streifenLage(s, L, B).breite)}` : `${zahl(s.b)} × ${zahl(s.t)} m`}
                   </text>
+                )}
+                {gewaehlt && !gesperrt && !schraege && (
+                  <g
+                    className="plan-drehen"
+                    role="button"
+                    aria-label="Objekt um 90° drehen"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      sperrDrehen();
+                    }}
+                  >
+                    <circle cx={s.x + s.b + griffTreffer + px(6)} cy={s.y + s.t / 2} r={griffTreffer} className="plan-tippflaeche" />
+                    <circle cx={s.x + s.b + griffTreffer + px(6)} cy={s.y + s.t / 2} r={px(14)} className="plan-drehen-knopf" />
+                    <text x={s.x + s.b + griffTreffer + px(6)} y={s.y + s.t / 2} fontSize={px(16)} textAnchor="middle" dominantBaseline="central">
+                      ⟳
+                    </text>
+                  </g>
                 )}
                 {gewaehlt && !gesperrt && !schraege &&
                   ecken.map(([ecke, x, y]) => (
@@ -755,21 +871,29 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
               s={gewaehlteSperr}
               L={L}
               B={B}
+              form={form!}
               objekt={objektVon(gewaehlteSperr)}
               name={objektName(regeln, gewaehlteSperr)}
               objekte={objekte}
               onAendern={sperrAendern}
+              onDrehen={sperrDrehen}
               onLoeschen={() => void speichernSperr(sperr.filter((s) => s.id !== gewaehlteSperr.id)).then(() => setAuswahl(null))}
             />
           )}
           {gewaehlteOeffnung && (
             <OeffnungLeiste
               o={gewaehlteOeffnung}
+              bereich={oeffnungBereich(gewaehlteOeffnung)}
               onAendern={oeffnungAendern}
               onLoeschen={() => void speichernOeffnungen(oeffnungen.filter((o) => o.id !== gewaehlteOeffnung.id)).then(() => setAuswahl(null))}
             />
           )}
 
+          <div className="knopfreihe">
+            <button className="knopf-leise" disabled={verlaufLaenge === 0} onClick={rueckgaengig} title="Rückgängig (Strg+Z)">
+              ↶ Rückgängig
+            </button>
+          </div>
           <div className="werkzeuge">
             <span className="feldname">
               Möbel und Einbauten
@@ -918,9 +1042,11 @@ function Oeffnung({
   // Öffnung im Wandband (vom Raum nach außen)
   const lx = Math.min(a.x, e.x);
   const ly = Math.min(a.y, e.y);
+  // Wandausschnitt außen an der Wandlinie (Hauptrechteck oder Segment der Raumform)
+  const linie = wandLinie(o, L, B);
   const ausschnitt = waagerecht
-    ? { x: lx, y: aussen < 0 ? -wandStaerke : B, width: Math.abs(e.x - a.x), height: wandStaerke }
-    : { x: aussen < 0 ? -wandStaerke : L, y: ly, width: wandStaerke, height: Math.abs(e.y - a.y) };
+    ? { x: lx, y: aussen < 0 ? linie - wandStaerke : linie, width: Math.abs(e.x - a.x), height: wandStaerke }
+    : { x: aussen < 0 ? linie - wandStaerke : linie, y: ly, width: wandStaerke, height: Math.abs(e.y - a.y) };
   const klasse = `plan-oeffnung plan-${o.art}${gewaehlt ? ' gewaehlt' : ''}`;
   const tipp = waagerecht
     ? { x: lx, y: ausschnitt.y - treffer / 2, width: ausschnitt.width, height: wandStaerke + treffer }
@@ -990,98 +1116,116 @@ function SperrLeiste({
   s,
   L,
   B,
+  form,
   objekt,
   name,
   objekte,
   onAendern,
+  onDrehen,
   onLoeschen,
 }: {
   s: Sperrflaeche;
   L: number;
   B: number;
+  /** Raumform (Prüfung der Maße gegen Raum und Einsprünge) */
+  form: Raumform;
   /** Eintrag der Objektbibliothek (fehlt, wenn das Objekt im Projektstand unbekannt ist) */
   objekt: BibliotheksObjekt | undefined;
   name: string;
   objekte: BibliotheksObjekt[];
   onAendern: (s: Sperrflaeche) => void;
+  /** Drehen um 90°; gibt bei Unmöglichkeit eine Meldung zurück */
+  onDrehen: () => string | null;
   onLoeschen: () => void;
 }) {
   const punkt = istPunkt(s);
   const streifen = !!s.wand;
-  const form = punkt ? 'punkt' : streifen ? 'streifen' : 'rechteck';
-  const auswahl = objekte.filter((o) => o.form === form && (o.aktiv !== false || o.schluessel === objekt?.schluessel));
+  const art = punkt ? 'punkt' : streifen ? 'streifen' : 'rechteck';
+  const auswahl = objekte.filter((o) => o.form === art && (o.aktiv !== false || o.schluessel === objekt?.schluessel));
   const standardHoehe = objekt?.hoehe_m ?? null;
   const lage = streifen ? streifenLage(s, L, B) : null;
   const wand = s.wand ?? 'oben';
   const quer = wand === 'oben' || wand === 'unten' ? B : L;
+  const [drehMeldung, setDrehMeldung] = useState('');
+  /** Breite/Tiefe sofort wirksam: Mitte bleibt, sonst Meldung am Feld (Paket N1) */
+  const masse = (b: number, t: number): string | null => {
+    const e = objektMasse(s, b, t, form);
+    if (!e.ok) return e.meldung;
+    onAendern({ ...s, ...e.r });
+    return null;
+  };
   return (
-    <div className="knopfreihe auswahl-leiste">
-      <select
-        aria-label="Objekt"
-        value={objektSchluessel(s)}
-        onChange={(e) => {
-          // anderes Objekt: Lage und Maße bleiben, eine eigene Höhe gilt nicht mehr
-          const { typ: _typ, ...rest } = s;
-          onAendern({ ...rest, objekt: e.target.value, hoehe: null });
-        }}
-      >
-        {!objekt && <option value={objektSchluessel(s)}>{name}</option>}
-        {auswahl.map((o) => (
-          <option key={o.schluessel} value={o.schluessel}>
-            {o.name}
-          </option>
-        ))}
-      </select>
+    <div className="auswahl-leiste objekt-leiste">
+      <label className="leiste-feld">
+        <span>Objekt</span>
+        <select
+          aria-label="Objekt"
+          value={objektSchluessel(s)}
+          onChange={(e) => {
+            // anderes Objekt: Lage und Maße bleiben, eine eigene Höhe gilt nicht mehr
+            const { typ: _typ, ...rest } = s;
+            onAendern({ ...rest, objekt: e.target.value, hoehe: null });
+          }}
+        >
+          {!objekt && <option value={objektSchluessel(s)}>{name}</option>}
+          {auswahl.map((o) => (
+            <option key={o.schluessel} value={o.schluessel}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {!punkt && !streifen && (
         <>
-          <label className="inline">
-            Breite
-            <Zahlfeld
-              wert={Math.round(s.b * 100) / 100}
-              einheit="m"
-              beschriftung="Breite in m"
-              min={MIN_GROESSE}
-              onSpeichern={(w) => {
-                if (w !== null) onAendern({ ...s, b: begrenzen(w, MIN_GROESSE, L - s.x) });
-              }}
-            />
-          </label>
-          <span className="mal">×</span>
-          <label className="inline">
-            Tiefe
-            <Zahlfeld
-              wert={Math.round(s.t * 100) / 100}
-              einheit="m"
-              beschriftung="Tiefe in m"
-              min={MIN_GROESSE}
-              onSpeichern={(w) => {
-                if (w !== null) onAendern({ ...s, t: begrenzen(w, MIN_GROESSE, B - s.y) });
-              }}
-            />
-          </label>
-          <div className="hoehe-feld">
-            <span className="hoehe-text" aria-live="polite">
-              {hoeheText(s.hoehe, standardHoehe, name)}
-              <Hilfe begriff="Höhe" text={HILFE.objektHoehe} />
-            </span>
-            <span className="knopfreihe">
+          <div className="leiste-feld leiste-masse">
+            <span>Breite × Tiefe</span>
+            <span className="leiste-paar">
               <Zahlfeld
-                wert={s.hoehe ?? standardHoehe}
+                wert={Math.round(s.b * 100) / 100}
                 einheit="m"
-                beschriftung={`Höhe der Oberseite in m – ${s.hoehe != null ? 'angepasst' : `Standard für ${name}`}`}
-                hervorheben={s.hoehe !== undefined && s.hoehe !== null}
-                onSpeichern={(w) => {
-                  if (w !== null && w > 5) return;
-                  // gleich dem Standard (oder leer) = keine eigene Höhe
-                  onAendern({ ...s, hoehe: w === null || (standardHoehe !== null && Math.abs(w - standardHoehe) < 1e-9) ? null : w });
-                }}
+                beschriftung="Breite in m"
+                min={MIN_GROESSE}
+                onSpeichern={(w) => (w === null ? 'Bitte eine Breite eingeben' : masse(w, s.t))}
               />
-              {s.hoehe != null && (
-                <button className="knopf-leise klein" onClick={() => onAendern({ ...s, hoehe: null })}>
-                  Standard
-                </button>
-              )}
+              <span className="mal">×</span>
+              <Zahlfeld
+                wert={Math.round(s.t * 100) / 100}
+                einheit="m"
+                beschriftung="Tiefe in m"
+                min={MIN_GROESSE}
+                onSpeichern={(w) => (w === null ? 'Bitte eine Tiefe eingeben' : masse(s.b, w))}
+              />
             </span>
+          </div>
+          <label className="leiste-feld">
+            <span>
+              Höhe
+              <Hilfe
+                begriff="Höhe"
+                text={`${standardHoehe === null ? `Für ${name} ist keine Standardhöhe hinterlegt.` : `Standard für ${name}: ${zahl(standardHoehe)} m.`} Leer lassen = Standard. ${HILFE.objektHoehe}`}
+              />
+            </span>
+            <Zahlfeld
+              wert={s.hoehe ?? null}
+              einheit="m"
+              beschriftung="Höhe der Oberseite in m"
+              platzhalter={standardHoehe === null ? '–' : zahl(standardHoehe)}
+              onSpeichern={(w) => {
+                if (w !== null && w > 5) return 'Höchstens 5 m';
+                onAendern({ ...s, hoehe: w === null || (standardHoehe !== null && Math.abs(w - standardHoehe) < 1e-9) ? null : w });
+                return null;
+              }}
+            />
+          </label>
+          <div className="leiste-feld">
+            <span>&nbsp;</span>
+            <button
+              className="knopf-zweit"
+              title="Drehen um 90° (Taste R)"
+              onClick={() => setDrehMeldung(onDrehen() ?? '')}
+            >
+              Drehen 90°
+            </button>
           </div>
         </>
       )}
@@ -1128,49 +1272,108 @@ function SperrLeiste({
           </label>
         </>
       )}
-      <button className="knopf-gefahr" onClick={onLoeschen}>
-        Löschen
-      </button>
+      <div className="leiste-feld">
+        <span>&nbsp;</span>
+        <button className="knopf-gefahr" onClick={onLoeschen}>
+          Löschen
+        </button>
+      </div>
+      {drehMeldung && (
+        <p className="leiste-meldung" role="alert">
+          {drehMeldung}
+        </p>
+      )}
     </div>
   );
 }
 
-/** Auswahl einer Tür bzw. eines Fensters: Lage, Breite, Aufschlag, löschen */
-function OeffnungLeiste({ o, onAendern, onLoeschen }: { o: TuerFenster; onAendern: (o: TuerFenster) => void; onLoeschen: () => void }) {
+/** Auswahl einer Tür bzw. eines Fensters: Lage, Breite, Höhe, Brüstung, Aufschlag, löschen (Paket N2: eine Zeile, Meldungen am Feld) */
+function OeffnungLeiste({
+  o,
+  bereich,
+  onAendern,
+  onLoeschen,
+}: {
+  o: TuerFenster;
+  /** Wandstück der Öffnung entlang der Wand (von, bis) */
+  bereich: [number, number];
+  onAendern: (o: TuerFenster) => string | null;
+  onLoeschen: () => void;
+}) {
+  const [von] = bereich;
   return (
-    <div className="knopfreihe auswahl-leiste">
-      <strong>
-        {o.art === 'tuer' ? 'Tür' : 'Fenster'}, Wand {WAENDE[o.wand]}
-      </strong>
-      <label className="inline">
-        Abstand {WANDANFANG[o.wand]}
-        <Zahlfeld wert={Math.round(o.position * 100) / 100} einheit="m" beschriftung="Abstand vom Wandanfang in m" onSpeichern={(w) => {
-                if (w !== null) onAendern({ ...o, position: w });
-              }} />
+    <div className="auswahl-leiste objekt-leiste">
+      <div className="leiste-feld">
+        <span>{o.art === 'tuer' ? 'Tür' : 'Fenster'}</span>
+        <strong className="leiste-wert">Wand {WAENDE[o.wand]}</strong>
+      </div>
+      <label className="leiste-feld">
+        <span>Abstand {WANDANFANG[o.wand]}</span>
+        <Zahlfeld
+          wert={Math.round((o.position - von) * 100) / 100}
+          einheit="m"
+          beschriftung="Abstand vom Anfang des Wandstücks in m"
+          onSpeichern={(w) => (w === null ? 'Bitte einen Abstand eingeben' : onAendern({ ...o, position: von + w }))}
+        />
       </label>
-      <label className="inline">
-        Breite
-        <Zahlfeld wert={Math.round(o.breite * 100) / 100} einheit="m" beschriftung="Breite in m" min={MIN_GROESSE} onSpeichern={(w) => {
-                if (w !== null) onAendern({ ...o, breite: w });
-              }} />
+      <label className="leiste-feld">
+        <span>Breite</span>
+        <Zahlfeld
+          wert={Math.round(o.breite * 100) / 100}
+          einheit="m"
+          beschriftung="Breite in m"
+          min={MIN_GROESSE}
+          onSpeichern={(w) => (w === null ? 'Bitte eine Breite eingeben' : onAendern({ ...o, breite: w }))}
+        />
       </label>
+      <label className="leiste-feld">
+        <span>Höhe</span>
+        <Zahlfeld
+          wert={o.hoehe ?? null}
+          einheit="m"
+          beschriftung="lichte Höhe in m"
+          platzhalter="–"
+          onSpeichern={(w) => (w !== null && w > 5 ? 'Höchstens 5 m' : onAendern({ ...o, hoehe: w }))}
+        />
+      </label>
+      {o.art === 'fenster' && (
+        <label className="leiste-feld">
+          <span>Brüstung</span>
+          <Zahlfeld
+            wert={o.bruestung ?? null}
+            einheit="m"
+            beschriftung="Brüstungshöhe in m"
+            platzhalter="–"
+            onSpeichern={(w) => (w !== null && w > 3 ? 'Höchstens 3 m' : onAendern({ ...o, bruestung: w }))}
+          />
+        </label>
+      )}
       {o.art === 'tuer' && (
         <>
-          <Schalter
-            wert={o.aufschlag ?? 'innen'}
-            optionen={{ innen: 'öffnet nach innen', aussen: 'nach außen' }}
-            onWahl={(a: 'innen' | 'aussen') => onAendern({ ...o, aufschlag: a })}
-          />
-          <Schalter
-            wert={o.band ?? 'links'}
-            optionen={{ links: 'Band links', rechts: 'Band rechts' }}
-            onWahl={(b: 'links' | 'rechts') => onAendern({ ...o, band: b })}
-          />
+          <div className="leiste-feld">
+            <span>Aufschlag</span>
+            <Schalter
+              wert={o.aufschlag ?? 'innen'}
+              optionen={{ innen: 'nach innen', aussen: 'nach außen' }}
+              onWahl={(a: 'innen' | 'aussen') => void onAendern({ ...o, aufschlag: a })}
+            />
+          </div>
+          <div className="leiste-feld">
+            <span>Band</span>
+            <Schalter
+              wert={o.band ?? 'links'}
+              optionen={{ links: 'links', rechts: 'rechts' }}
+              onWahl={(b: 'links' | 'rechts') => void onAendern({ ...o, band: b })}
+            />
+          </div>
         </>
       )}
-      <button className="knopf-gefahr" onClick={onLoeschen}>
-        Löschen
-      </button>
+      <div className="leiste-feld">
+        <span>&nbsp;</span>
+        <button className="knopf-gefahr" onClick={onLoeschen}>
+          Löschen
+        </button>
+      </div>
     </div>
   );
 }

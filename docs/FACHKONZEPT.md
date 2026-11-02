@@ -207,7 +207,7 @@ Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern
 - Heizlast wie bisher je Raumtyp aus der **Gesamtfläche** der Form; Volumen = Fläche × Höhe.
 - Modulprüfung: Ein Modul muss ganz im Raum liegen („ragt über den Raum hinaus“, z. B. über einem Einsprung) und den Wandabstand zu **jedem** Wandsegment einhalten, gemessen als kürzeste euklidische Entfernung – an Innenecken zählt die Ecke. Die automatische Platzierung beachtet dasselbe.
 - Wärmeverteilung nur innerhalb der Form; Deckenplan mit Bemaßung jedes Wandsegments.
-- Türen, Fenster und Dachschrägen-Streifen beziehen sich weiter auf die Wände des Hauptrechtecks.
+- Türen und Fenster sitzen an jedem Wandsegment der Form (Paket N2); Dachschrägen-Streifen beziehen sich weiter auf die Wände des Hauptrechtecks.
 
 ### Objekte im Raum: Objektbibliothek (Festlegung 01.11.2026)
 
@@ -255,13 +255,13 @@ Die festen Sperrflächen-Typen sind durch eine **Objektbibliothek** ersetzt. Sie
   - „+ Objekt hinzufügen“ öffnet eine Auswahl mit Suche: oben die zuletzt verwendeten (je Gerät, bis zu 6), dann „Passend für <Raumtyp>“ (die speziellsten zuerst, im Bad also Dusche, Badewanne, Waschtisch, WC …), dann „Für alle Räume“, auf Wunsch die Objekte anderer Räume. Neue Objekte erscheinen mittig mit den Standardmaßen.
   - Anfasser an allen vier Ecken, Größe in jede Richtung änderbar, Trefferfläche 44 px.
   - Beim Antippen lassen sich ein anderes Objekt gleicher Form wählen, Breite × Tiefe (m) und Höhe eingeben oder das Objekt löschen; beim Streifen Wand, Abstand zur Wand und Breite.
-  - **Höhe verständlich beschriftet** (Praxistest 01.11.2026): „Höhe: 0,45 m (Standard für Sofa)“, nach einer Änderung „Höhe: 0,50 m (angepasst)“, mit Knopf „Standard“ zum Zurücksetzen. Das Feld ist auch am Handy breit genug.
+  - **Bearbeiten (Paket N1, 02.11.2026):** Leiste in einer Zeile „Objekt | Breite × Tiefe | Höhe | Drehen 90°“. Breite/Tiefe wirken sofort, die Mitte des Objekts bleibt; ragt es dann über die Raumgrenze, wird es minimal in den Raum geschoben; passt es nicht, erscheinen rote Markierung und Meldung (nie still verworfen). Höhe ohne Zusatztext, Standardwert als Platzhalter und im ⓘ. Drehen um 90° per Knopf, Knopf am Objekt oder Taste R (Mitte bleibt, sonst Hinweis). Rückgängig per Knopf oder Strg+Z.
   - Darstellung nach Kategorie: tabu rot, Abstand braun, neutral gestrichelt grau; gestrichelter Rand außen = Mindestabstand, bei „Abstand“ innen die Linie, innerhalb derer ein Modul liegen darf.
   - Während des Ziehens werden die aktuellen Maße angezeigt.
 - **Bemaßung wie im Bauplan:** Länge oben und unten, Breite links und rechts. Beim gewählten Modul stehen die Abstände zu den beiden nächstgelegenen Wänden in m daneben, je eine in x- und y-Richtung (`rechenkern/src/plan.ts`, `wandAbstaende`). Diese Abstände sind für den PDF-Platzierungsplan vorgesehen.
 - **Tür und Fenster** nur zur Orientierung:
   - **Keine Sperrflächen**, ohne Einfluss auf Platzierung und Regelprüfung.
-  - Anlegen: „+ Tür“ oder „+ Fenster“ tippen, dann die Wand antippen. Die Lage wird als Abstand vom Wandanfang gespeichert (oben/unten von links, links/rechts von oben), dazu die Breite. Startwerte (Bedienkomfort, danach änderbar): Tür 0,90 m, Fenster 1,00 m.
+  - Anlegen: „+ Tür“ oder „+ Fenster“ tippen (der Plan rollt in den Blick), dann die Wand antippen – auch über einem Objekt; gesetzt wird am nächstgelegenen Wandsegment der Raumform. Breite, Abstand, Höhe und (Fenster) Brüstung in der Leiste; unzulässige Werte werden gemeldet, nicht begrenzt. Die Lage wird als Abstand vom Wandanfang gespeichert (oben/unten von links, links/rechts von oben), dazu die Breite. Startwerte (Bedienkomfort, danach änderbar): Tür 0,90 m, Fenster 1,00 m.
   - Tür: öffnet nach innen oder außen, Band links oder rechts (vom Raum aus gesehen); dargestellt mit Türblatt und Viertelkreis. Fenster: Doppellinie in der Wand.
   - Mehrere je Raum möglich, offline-fähig, synchronisiert mit dem Projekt (`raum.tueren_fenster`).
 - **Raumliste** (Reiter im Projekt): je Raum Heizlast, benötigte Leistung, Module (Typ × Anzahl), installierte Leistung, Thermostat und Prüfergebnis, dazu die Summen.

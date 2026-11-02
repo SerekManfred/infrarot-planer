@@ -19,6 +19,15 @@ export interface TuerFenster {
   aufschlag?: 'innen' | 'aussen' | null;
   /** nur Tür: Seite der Bänder, vom Raum aus auf die Wand geschaut */
   band?: 'links' | 'rechts' | null;
+  /**
+   * Raumform (Paket N2): Lage der Wandlinie (oben/unten: y, links/rechts: x), wenn die Öffnung an einem Wandsegment
+   * außerhalb des Hauptrechtecks sitzt; die Position zählt dann ebenfalls ab x = 0 bzw. y = 0. Leer = Hauptrechteck.
+   */
+  linie?: number | null;
+  /** lichte Höhe der Öffnung in m (nur Angabe, ohne Einfluss auf die Planung) */
+  hoehe?: number | null;
+  /** nur Fenster: Brüstungshöhe in m (nur Angabe) */
+  bruestung?: number | null;
 }
 
 export interface Punkt {
@@ -40,20 +49,66 @@ export function nachInnen(wand: Wand): Punkt {
   return { oben: { x: 0, y: 1 }, unten: { x: 0, y: -1 }, links: { x: 1, y: 0 }, rechts: { x: -1, y: 0 } }[wand];
 }
 
-/** Punkt auf der Wandlinie im Abstand s vom Wandanfang */
-export function wandPunkt(wand: Wand, s: number, L: number, B: number): Punkt {
-  if (wand === 'oben') return { x: s, y: 0 };
-  if (wand === 'unten') return { x: s, y: B };
-  if (wand === 'links') return { x: 0, y: s };
-  return { x: L, y: s };
+/** Lage der Wandlinie einer Öffnung (Hauptrechteck oder Segment der Raumform) */
+export function wandLinie(o: { wand: Wand; linie?: number | null }, L: number, B: number): number {
+  if (o.linie !== null && o.linie !== undefined) return o.linie;
+  return o.wand === 'oben' || o.wand === 'links' ? 0 : o.wand === 'unten' ? B : L;
 }
 
-/** Anfang und Ende der Öffnung auf der Wandlinie (Position und Breite auf die Wand begrenzt) */
-export function oeffnungStrecke(o: Pick<TuerFenster, 'wand' | 'position' | 'breite'>, L: number, B: number): [Punkt, Punkt] {
+/** Punkt auf der Wandlinie im Abstand s vom Wandanfang */
+export function wandPunkt(wand: Wand, s: number, L: number, B: number, linie?: number | null): Punkt {
+  const l = wandLinie({ wand, linie }, L, B);
+  return wand === 'oben' || wand === 'unten' ? { x: s, y: l } : { x: l, y: s };
+}
+
+/** Anfang und Ende der Öffnung auf der Wandlinie (am Hauptrechteck auf die Wand begrenzt; an Segmenten prüft die Eingabe) */
+export function oeffnungStrecke(o: Pick<TuerFenster, 'wand' | 'position' | 'breite' | 'linie'>, L: number, B: number): [Punkt, Punkt] {
+  if (o.linie !== null && o.linie !== undefined) {
+    return [wandPunkt(o.wand, o.position, L, B, o.linie), wandPunkt(o.wand, o.position + o.breite, L, B, o.linie)];
+  }
   const laenge = wandLaenge(o.wand, L, B);
   const breite = Math.min(o.breite, laenge);
   const anfang = Math.min(Math.max(o.position, 0), laenge - breite);
   return [wandPunkt(o.wand, anfang, L, B), wandPunkt(o.wand, anfang + breite, L, B)];
+}
+
+export interface WandStelle {
+  wand: Wand;
+  /** Wandlinie; null = Wand des Hauptrechtecks */
+  linie: number | null;
+  /** Lage entlang der Wand (x bzw. y) */
+  s: number;
+  /** Bereich des Wandsegments entlang der Wand */
+  von: number;
+  bis: number;
+  abstand: number;
+}
+
+/**
+ * Nächstes Wandsegment einer Raumform zu einem Punkt (Paket N2): Ausrichtung nach der Richtung in den Raum
+ * (Raum unterhalb = „oben“ usw.), Lage entlang der Wand und Bereich des Segments.
+ */
+export function naechstesSegment(
+  p: Punkt,
+  segmente: { x1: number; y1: number; x2: number; y2: number; innen: Punkt }[],
+  L: number,
+  B: number,
+): WandStelle | null {
+  let beste: WandStelle | null = null;
+  for (const sg of segmente) {
+    const waagerecht = sg.y1 === sg.y2;
+    const von = waagerecht ? Math.min(sg.x1, sg.x2) : Math.min(sg.y1, sg.y2);
+    const bis = waagerecht ? Math.max(sg.x1, sg.x2) : Math.max(sg.y1, sg.y2);
+    const s = Math.min(Math.max(waagerecht ? p.x : p.y, von), bis);
+    const q = waagerecht ? { x: s, y: sg.y1 } : { x: sg.x1, y: s };
+    const abstand = Math.hypot(p.x - q.x, p.y - q.y);
+    if (beste && abstand >= beste.abstand) continue;
+    const wand: Wand = waagerecht ? (sg.innen.y > 0 ? 'oben' : 'unten') : sg.innen.x > 0 ? 'links' : 'rechts';
+    const linieWert = waagerecht ? sg.y1 : sg.x1;
+    const basis = wandLinie({ wand }, L, B);
+    beste = { wand, linie: Math.abs(linieWert - basis) < 1e-9 ? null : linieWert, s, von, bis, abstand };
+  }
+  return beste;
 }
 
 export interface TuerGeometrie {
@@ -72,6 +127,7 @@ export interface TuerGeometrie {
  * „aussen“ zeichnet das Türblatt auf der anderen Seite der Wand.
  */
 export function tuerGeometrie(o: TuerFenster, L: number, B: number): TuerGeometrie {
+  // gilt unverändert auch an Segmenten der Raumform (oeffnungStrecke berücksichtigt die Wandlinie)
   const [anfang, ende] = oeffnungStrecke(o, L, B);
   // Vom Raum aus gesehen liegt „links“ bei oben/rechts am Wandanfang, bei unten/links am Wandende
   const bandAmAnfang = o.wand === 'oben' || o.wand === 'rechts' ? (o.band ?? 'links') === 'links' : (o.band ?? 'links') === 'rechts';

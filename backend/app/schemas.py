@@ -316,6 +316,11 @@ class TuerFenster(BaseModel):
     breite: float = Field(gt=0, le=20)
     aufschlag: Literal["innen", "aussen"] | None = None
     band: Literal["links", "rechts"] | None = None
+    # Raumform (Paket N2): Wandlinie eines Segments außerhalb des Hauptrechtecks; leer = Hauptrechteck
+    linie: float | None = Field(default=None, ge=-100, le=200)
+    # nur Angaben (ohne Einfluss auf die Planung): lichte Höhe, Brüstung (Fenster)
+    hoehe: float | None = Field(default=None, ge=0, le=5)
+    bruestung: float | None = Field(default=None, ge=0, le=3)
 
 
 class RaumTeil(BaseModel):

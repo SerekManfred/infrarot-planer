@@ -509,3 +509,26 @@ body.ohne-bildlauf { overflow: hidden; }
 /* Berichte im Projekt (Paket M3/M4) */
 .berichte .knopfreihe { margin: 0.25rem 0; }
 .berichte select { width: auto; margin: 0; }
+
+/* Bearbeitungsleiste Objekte (Paket N1): eine Zeile, Beschriftung über dem Feld, gleiche Feldhöhe; schmal als Blöcke */
+.objekt-leiste { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 1rem; }
+.leiste-feld { display: flex; flex-direction: column; gap: 0.2rem; margin: 0; }
+.leiste-feld > span:first-child { font-size: 0.85rem; font-weight: 600; height: 1.6rem; display: inline-flex; align-items: center; overflow: visible; }
+.leiste-feld select, .leiste-feld .zahlfeld input, .leiste-feld button { height: 44px; min-height: 44px; margin: 0; }
+.leiste-paar { display: inline-flex; align-items: center; gap: 0.35rem; }
+.objekt-leiste .zahlfeld input { width: 5.5rem; }
+.leiste-meldung { flex-basis: 100%; margin: 0; color: var(--warnung); font-weight: 600; }
+@media (max-width: 640px) {
+  .objekt-leiste > .leiste-feld { flex: 1 1 100%; }
+  .objekt-leiste select { width: 100%; }
+}
+/* Fehlermeldung direkt am Zahlfeld (nie still verwerfen) */
+.zahlfeld { position: relative; }
+.zahlfeld .feld-meldung {
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: 6; white-space: nowrap; padding: 0.15rem 0.4rem; border-radius: 4px;
+  background: var(--fehler-hell); color: var(--fehler); font-size: 0.8rem; font-weight: 600; border: 1px solid var(--fehler);
+}
+/* Drehknopf am ausgewählten Objekt */
+.plan-drehen { cursor: pointer; }
+.plan-drehen-knopf { fill: #fff; stroke: var(--blau); stroke-width: 2px; }
+.plan-drehen text { fill: var(--blau); stroke: none; }

@@ -5,7 +5,8 @@ import { GEBAEUDESTANDARDS, GEBAEUDESTANDARDS_KURZ, HILFE, HILFE_GEBAEUDESTANDAR
 
 interface ZahlfeldProps {
   wert: number | null;
-  onSpeichern: (wert: number | null) => void | Promise<void>;
+  /** Rückgabe eines Textes = Wert unzulässig: Feld bleibt rot mit dieser Meldung (nie still verwerfen) */
+  onSpeichern: (wert: number | null) => void | string | null | Promise<void>;
   einheit?: string;
   platzhalter?: string;
   gesperrt?: boolean;
@@ -19,22 +20,42 @@ interface ZahlfeldProps {
 export function Zahlfeld({ wert, onSpeichern, einheit, platzhalter, gesperrt, min = 0, hervorheben, beschriftung, pflicht }: ZahlfeldProps) {
   const [text, setText] = useState(alsText(wert));
   const [ungueltig, setUngueltig] = useState(false);
+  const [meldung, setMeldung] = useState('');
   useEffect(() => setText(alsText(wert)), [wert]);
 
   function verlassen() {
     const neu = leseZahl(text);
-    if (neu !== null && (Number.isNaN(neu) || neu < min)) {
+    if (neu !== null && Number.isNaN(neu)) {
       setUngueltig(true);
+      setMeldung('Bitte eine Zahl eingeben (Komma oder Punkt)');
+      return;
+    }
+    if (neu !== null && neu < min) {
+      setUngueltig(true);
+      setMeldung(`Mindestens ${alsText(min)}`);
+      return;
+    }
+    if (neu === wert) {
+      setUngueltig(false);
+      setMeldung('');
+      setText(alsText(wert)); // z. B. „0,750“ → „0,75“
+      return;
+    }
+    const ergebnis = onSpeichern(neu);
+    if (typeof ergebnis === 'string' && ergebnis) {
+      setUngueltig(true);
+      setMeldung(ergebnis);
       return;
     }
     setUngueltig(false);
-    if (neu !== wert) void onSpeichern(neu);
+    setMeldung('');
   }
 
   return (
     <span className={`zahlfeld${hervorheben ? ' abweichung' : ''}${ungueltig || (pflicht && wert === null) ? ' ungueltig' : ''}`}>
       <input
         aria-label={beschriftung}
+        aria-invalid={ungueltig || undefined}
         inputMode="decimal"
         value={text}
         placeholder={platzhalter ?? (pflicht ? 'Pflicht' : undefined)}
@@ -45,6 +66,11 @@ export function Zahlfeld({ wert, onSpeichern, einheit, platzhalter, gesperrt, mi
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
       {einheit && <span className="einheit">{einheit}</span>}
+      {meldung && (
+        <span className="feld-meldung" role="alert">
+          {meldung}
+        </span>
+      )}
     </span>
   );
 }

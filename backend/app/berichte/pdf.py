@@ -208,12 +208,14 @@ def _plan(d: BerichtDaten, rb: RaumBericht, s: int) -> Drawing | None:
                 z.add(g)
             else:
                 z.add(String(mx, my - 2, f"{zahl(laenge)} m", fontName=SCHRIFT, fontSize=6.5, textAnchor="middle"))
-    # Türen und Fenster (an den Wänden des Hauptrechtecks)
+    # Türen und Fenster
     L, B = rb.raum.laenge_m or 0, rb.raum.breite_m or 0
     for o in rb.raum.tueren_fenster or []:
         w, pos, br = o["wand"], o["position"], o["breite"]
-        a, e = {"oben": ((pos, 0), (pos + br, 0)), "unten": ((pos, B), (pos + br, B)), "links": ((0, pos), (0, pos + br)),
-                "rechts": ((L, pos), (L, pos + br))}[w]
+        # Wandlinie: Hauptrechteck oder Segment der Raumform (Paket N2)
+        li = o.get("linie")
+        li = li if li is not None else {"oben": 0, "unten": B, "links": 0, "rechts": L}[w]
+        a, e = ((pos, li), (pos + br, li)) if w in ("oben", "unten") else ((li, pos), (li, pos + br))
         farbe = colors.HexColor("#e8662a") if o["art"] == "tuer" else colors.HexColor("#3b82c4")
         z.add(Line(*P(*a), *P(*e), strokeColor=farbe, strokeWidth=3.2))
     # Objekte (Sperrflächen) nach Kategorie

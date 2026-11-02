@@ -95,7 +95,8 @@ export function objektSchluessel(s: Pick<Sperrflaeche, 'objekt' | 'typ'>): strin
 
 /** Punktobjekt (Deckeneinbau): keine Ausdehnung */
 export function istPunkt(s: Rechteck): boolean {
-  return s.b <= EPS && s.t <= EPS;
+  // fehlende Ausdehnung (ältere bzw. per Schnittstelle gespeicherte Punkte ohne b/t) zählt als Punkt
+  return !((s.b ?? 0) > EPS) && !((s.t ?? 0) > EPS);
 }
 
 export interface KatalogModul {
