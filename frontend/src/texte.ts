@@ -30,6 +30,15 @@ export const GEBAEUDESTANDARDS: Record<Gebaeudestandard, string> = {
   sonstiger_bestand: 'Altbau (nicht Effizienzhaus)',
 };
 
+/** Kurzbezeichnungen für die Segment-Auswahl (Paket M1); Langform im Tooltip */
+export const GEBAEUDESTANDARDS_KURZ: Record<Gebaeudestandard, string> = {
+  neubau: 'Neubau',
+  effizienzhaus_sanierung: 'EH-Sanierung',
+  sonstiger_bestand: 'Altbau',
+};
+
+export const HINWEIS_ALTBAU_KURZ = 'IR als alleiniges System nicht empfohlen';
+
 export const HINWEIS_SONSTIGER_BESTAND =
   'Infrarot als alleiniges Heizsystem wird für diesen Gebäudestandard nicht empfohlen.';
 

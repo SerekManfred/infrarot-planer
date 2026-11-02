@@ -467,3 +467,26 @@ body.ohne-bildlauf { overflow: hidden; }
   .vtabelle td.aktionen { width: auto; justify-content: flex-end; }
   .vtabelle td.aktionen::before { content: none; }
 }
+
+/* Projektmaske kompakt (Paket M1, 02.11.2026): zwei Zeilen, Labels auf gleicher Höhe; am Handy untereinander */
+.projektmaske { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 1rem; }
+.projektmaske .knopf { align-self: flex-start; margin: 0; }
+.maske-zeile { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-start; }
+.maske-feld { display: flex; flex-direction: column; gap: 0.2rem; margin: 0; min-width: 0; flex: 1 1 12rem; }
+.maske-feld.nummer-feld { flex: 0 0 auto; }
+.maske-feld .feldname { min-height: 1.3rem; display: inline-flex; align-items: center; margin: 0; }
+.maske-feld input, .maske-feld select, .maske-feld .textfeld input { margin: 0; width: 100%; }
+.maske-wert { min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+.chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.9rem; border-radius: 999px; background: var(--blau-hell); color: var(--blau); font-weight: 700; white-space: nowrap; }
+.standard-auswahl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; flex: 1 1 30rem; }
+.standard-auswahl .feldname { margin: 0; }
+.maske-zeile2 { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1rem; }
+.schalter.segmente { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1 1 22rem; max-width: 32rem; }
+.schalter.segmente button { min-height: 44px; }
+.altbau-hinweis { color: var(--warnung); font-weight: 700; }
+.pflicht-text { color: var(--fehler); font-weight: 600; }
+.metazeile { color: var(--leise); font-size: 0.8rem; }
+@media (max-width: 700px) {
+  .maske-zeile { flex-direction: column; align-items: stretch; }
+  .maske-feld { flex: 0 0 auto; }
+}

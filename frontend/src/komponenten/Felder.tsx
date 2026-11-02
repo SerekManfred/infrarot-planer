@@ -1,7 +1,7 @@
 // Eingabefelder, die erst beim Verlassen speichern – angenehm am Tablet und schonend für das Protokoll.
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Gebaeudestandard } from '../api';
-import { GEBAEUDESTANDARDS, HILFE, HILFE_GEBAEUDESTANDARD, leseZahl } from '../texte';
+import { GEBAEUDESTANDARDS, GEBAEUDESTANDARDS_KURZ, HILFE, HILFE_GEBAEUDESTANDARD, HINWEIS_ALTBAU_KURZ, leseZahl } from '../texte';
 
 interface ZahlfeldProps {
   wert: number | null;
@@ -88,14 +88,19 @@ export function Schalter<T extends string>({
   optionen,
   onWahl,
   gesperrt,
+  segmente,
+  beschriftung,
 }: {
   wert: T;
   optionen: Record<T, string>;
   onWahl: (wert: T) => void;
   gesperrt?: boolean;
+  /** gleich breite Segmente über die ganze Breite (Paket M1) */
+  segmente?: boolean;
+  beschriftung?: string;
 }) {
   return (
-    <span className="schalter" role="radiogroup">
+    <span className={`schalter${segmente ? ' segmente' : ''}`} role="radiogroup" aria-label={beschriftung}>
       {(Object.keys(optionen) as T[]).map((schluessel) => (
         <button
           key={schluessel}
@@ -174,6 +179,32 @@ export function Hilfe({ text, begriff }: { text: ReactNode; begriff?: string }) 
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Gebäudestandard als waagrechte Segment-Auswahl mit Kurzbezeichnungen (Paket M1, 02.11.2026): ohne Vorauswahl,
+ * Langbezeichnungen nur im ⓘ; bei Altbau der Hinweis darunter.
+ */
+export function StandardAuswahl({
+  wert,
+  onWahl,
+  gesperrt,
+}: {
+  wert: Gebaeudestandard | '';
+  onWahl: (wert: Gebaeudestandard) => void;
+  gesperrt?: boolean;
+}) {
+  return (
+    <div className="standard-auswahl">
+      <span className="feldname">
+        Gebäudestandard (Pflicht)
+        <GebaeudestandardHilfe />
+      </span>
+      <Schalter wert={wert as Gebaeudestandard} optionen={GEBAEUDESTANDARDS_KURZ} onWahl={onWahl} gesperrt={gesperrt} segmente beschriftung="Gebäudestandard" />
+      {wert === '' && <small className="pflicht-text">Bitte wählen – die Heizlast hängt stark davon ab.</small>}
+      {wert === 'sonstiger_bestand' && <small className="altbau-hinweis">{HINWEIS_ALTBAU_KURZ}</small>}
+    </div>
   );
 }
 

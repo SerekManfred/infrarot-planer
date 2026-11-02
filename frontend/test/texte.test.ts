@@ -30,3 +30,12 @@ describe('Beschriftungen', () => {
     expect(HILFE.altbau).toContain('legt der Fachprüfer fest');
   });
 });
+
+describe('Gebäudestandard kompakt (Paket M1)', () => {
+  it('kurze Segmente, Langform bleibt für den Tooltip, Altbau-Hinweis', async () => {
+    const t = await import('../src/texte');
+    expect(Object.values(t.GEBAEUDESTANDARDS_KURZ)).toEqual(['Neubau', 'EH-Sanierung', 'Altbau']);
+    expect(t.GEBAEUDESTANDARDS.sonstiger_bestand).toBe('Altbau (nicht Effizienzhaus)');
+    expect(t.HINWEIS_ALTBAU_KURZ).toBe('IR als alleiniges System nicht empfohlen');
+  });
+});

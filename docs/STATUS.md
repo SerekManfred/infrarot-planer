@@ -1,6 +1,6 @@
 # Status
 
-Stand: 01.11.2026, Phase 1 Teil D; Praxistest E–I (Objektbibliothek u. a.) und J–L (einheitliche Tabellen, Emissionsgrad, Excel für alle Tabellen der Fachvorgaben)
+Stand: 02.11.2026, Phase 1 Teil D; Paket M in Arbeit; Praxistest E–I (Objektbibliothek u. a.) und J–L (einheitliche Tabellen, Emissionsgrad, Excel für alle Tabellen der Fachvorgaben)
 
 Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst der MEH, Fachvorgaben und Prüfung durch die Energieberatung Serek. Fachregeln: `docs/FACHKONZEPT.md`. Betrieb und HTTPS: `docs/BETRIEB.md`.
 
@@ -43,6 +43,10 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
   - ΔU_WB: 0,05 W/(m²K)
 
 **Alte Docker-Volumes** der früheren Installation sind gelöscht, nach Prüfung, dass kein Container sie nutzt. Inhalte wurden nicht angesehen. Gelöscht wurden `infrarot-data`, `infrarot-planer_app-{data,uploads,outputs}` und `infrarot-planer-new_app-{data,uploads,outputs}`. Übrig sind nur `infrarot-db-daten` und `infrarot-uploads`.
+
+## Paket M (02.11.2026)
+
+**M1 Projektmaske kompakt:** Projektkopf in zwei Zeilen (gemessen 150 px statt rund 450 px; der Rest sind 44-px-Tippflächen): Projektnummer als Chip (nicht mehr in der Maske änderbar), Kunde, Zuständig (Herkunft „angelegt von … zugewiesen an …“ im ⓘ); darunter der Gebäudestandard als drei gleich breite Segmente „Neubau | EH-Sanierung | Altbau“ (Langformen im ⓘ) und die Metazeile „Fachvorgaben-Stand“. Bei Altbau steht „IR als alleiniges System nicht empfohlen“ darunter. Anlegen-Maske ebenso kompakt (172 px), Gebäudestandard ohne Vorauswahl, „Anlegen“ erst nach Auswahl. Wechsel des Standards bei erfassten Räumen nur nach Bestätigung („Heizlasten aller n Räume werden neu berechnet“); die Heizlast rechnet danach sofort neu (Test: 800 → 1 400 W bei Neubau → EH-Sanierung). Handy: Felder untereinander, ohne waagrechten Bildlauf. Bestehende Projekte behalten ihren Standard.
 
 ## Paket J–L (01.11.2026, vierte Runde)
 

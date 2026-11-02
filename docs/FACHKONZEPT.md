@@ -41,6 +41,8 @@ Vor-Ort-Entwurf ──(Fachprüfer: geprüft)──▶ fachlich geprüft ──(
 
 ## Gebäudestandard (Pflichtfeld)
 
+Auswahl als drei gleich breite Segmente „Neubau | EH-Sanierung | Altbau“ ohne Vorauswahl (Festlegung 02.11.2026, Paket M1): Eine Fehlauswahl (z. B. Neubau 40 W/m² statt Altbau 150 W/m²) führt zu massiver Unterdimensionierung. Die Langbezeichnungen stehen im ⓘ. Wird der Standard eines Projekts mit erfassten Räumen geändert, fragt die App vorher nach; danach werden alle Heizlasten neu berechnet.
+
 | Wert | Bezeichnung |
 |---|---|
 | `neubau` | Neubau |

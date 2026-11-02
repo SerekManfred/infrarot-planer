@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type Gebaeudestandard, type Projekt, type ProjektDetail } from '../api';
 import { gehe } from '../navigation';
 import { useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HINWEIS_SONSTIGER_BESTAND, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, zeitpunkt } from '../texte';
-import { GebaeudestandardHilfe, Meldung, Schalter } from './Felder';
+import { GEBAEUDESTANDARDS, statusAnzeige, zeitpunkt } from '../texte';
+import { Meldung, StandardAuswahl } from './Felder';
 
 export function Projektliste() {
   const [projekte, setProjekte] = useState<Projekt[] | null>(null);
@@ -103,36 +103,32 @@ function NeuesProjekt() {
   }
 
   return (
-    <form className="karte formular" onSubmit={absenden}>
-      <p className="leise ganze-breite">Die Projektnummer wird automatisch vergeben (fortlaufend, z. B. 2026-0004).</p>
-      <label>
-        Bezeichnung
-        <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} required maxLength={300} />
-      </label>
-      <label>
-        Kunde
-        <input value={kunde} onChange={(e) => setKunde(e.target.value)} maxLength={300} />
-      </label>
-      <label>
-        Ort
-        <input value={ort} onChange={(e) => setOrt(e.target.value)} maxLength={200} />
-      </label>
-      <div className="ganze-breite">
-        <span className="feldname">
-          Gebäudestandard (Pflicht)
-          <GebaeudestandardHilfe />
-        </span>
-        <Schalter wert={standard as Gebaeudestandard} optionen={GEBAEUDESTANDARDS} onWahl={setStandard} />
-        {standard === 'sonstiger_bestand' && (
-          <Meldung art="warnung">
-            {HINWEIS_SONSTIGER_BESTAND} {PAUSCHALE_DURCH_FACHPRUEFER}; bis dahin ist das Projekt für Angebote gesperrt.
-          </Meldung>
-        )}
+    <form className="karte projektmaske" onSubmit={absenden}>
+      <div className="maske-zeile">
+        <div className="maske-feld nummer-feld">
+          <span className="feldname">Projektnummer</span>
+          <span className="chip" title="wird beim Anlegen automatisch vergeben, z. B. 2026-0004">automatisch</span>
+        </div>
+        <label className="maske-feld">
+          <span className="feldname">Bezeichnung</span>
+          <input value={bezeichnung} onChange={(e) => setBezeichnung(e.target.value)} required maxLength={300} />
+        </label>
+        <label className="maske-feld">
+          <span className="feldname">Kunde</span>
+          <input value={kunde} onChange={(e) => setKunde(e.target.value)} maxLength={300} />
+        </label>
+        <label className="maske-feld">
+          <span className="feldname">Ort</span>
+          <input value={ort} onChange={(e) => setOrt(e.target.value)} maxLength={200} />
+        </label>
+      </div>
+      <div className="maske-zeile2">
+        <StandardAuswahl wert={standard} onWahl={setStandard} />
+        <button className="knopf" type="submit" disabled={!standard}>
+          Anlegen und erfassen
+        </button>
       </div>
       {fehler && <Meldung>{fehler}</Meldung>}
-      <button className="knopf" type="submit">
-        Anlegen und erfassen
-      </button>
     </form>
   );
 }

@@ -14,8 +14,8 @@ import {
 } from '../api';
 import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
-import { GEBAEUDESTANDARDS, HILFE, HINWEIS_SONSTIGER_BESTAND, HINWEIS_MODULE_AKTUALISIERT, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
-import { GebaeudestandardHilfe, Hilfe, Meldung, Schalter, Textfeld } from './Felder';
+import { GEBAEUDESTANDARDS, HILFE, HINWEIS_MODULE_AKTUALISIERT, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
+import { Hilfe, Meldung, StandardAuswahl, Textfeld } from './Felder';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
 import { Raeume } from './Raeume';
@@ -76,6 +76,25 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
   const status_ = statusAnzeige(projekt);
   // Projektvorgaben (Pauschalen je Projekt, Kontrollrechnung) nur in der Fachansicht
   const reiterListe = (Object.keys(REITER) as Reiter[]).filter((r) => r !== 'vorgaben' || fach);
+
+  /** Gebäudestandard ändern; mit erfassten Räumen erst nach Bestätigung (Heizlasten werden neu berechnet) */
+  async function standardAendern(neu: Gebaeudestandard) {
+    let raeume = 0;
+    try {
+      raeume = (await api.get<{ raeume: unknown[] }>(`/objekte/${objekt.id}/auswertung`)).raeume.length;
+    } catch {
+      raeume = 0;
+    }
+    if (
+      raeume > 0 &&
+      !window.confirm(
+        `Gebäudestandard auf „${GEBAEUDESTANDARDS[neu]}“ ändern?\n\nDie Heizlasten aller ${raeume} erfassten Räume werden danach neu berechnet ` +
+          '(Pauschalen und Rückfallwerte des neuen Standards). Module bleiben, die Leistungsprüfung kann sich ändern.',
+      )
+    )
+      return;
+    await aendern(() => api.patch(`/objekte/${objekt.id}`, { gebaeudestandard: neu }));
+  }
 
   function status(neu: Projektstatus) {
     void aendern(() => api.post(`/projekte/${projektId}/status`, { status: neu }));
@@ -156,40 +175,33 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
         ablehnen={(bemerkung) => aendern(() => api.post(`/projekte/${projektId}/module/ablehnen`, { bemerkung }))}
       />
 
-      <div className="karte kopfdaten">
-        <label>
-          Projektnummer
-          {/* wird automatisch vergeben; nur Admins dürfen sie im Ausnahmefall ändern */}
-          <Textfeld
-            wert={projekt.nummer}
-            pflicht
-            gesperrt={gesperrt || !hatRolle(benutzer, 'admin')}
-            onSpeichern={(v) => aendern(() => api.patch(`/projekte/${projektId}`, { nummer: v }))}
-          />
-        </label>
-        <Zustaendig projekt={projekt} benutzer={benutzer} onZuweisen={(id) => aendern(() => api.put(`/projekte/${projektId}/zuweisung`, { benutzer_id: id }))} />
-        <label>
-          Kunde
-          <Textfeld
-            wert={projekt.kunde_name}
-            gesperrt={gesperrt}
-            onSpeichern={(v) => aendern(() => api.patch(`/projekte/${projektId}`, { kunde_name: v }))}
-          />
-        </label>
-        <div>
-          <span className="feldname">
-            Gebäudestandard
-            <GebaeudestandardHilfe />
-          </span>
-          <Schalter
+      {/* Projektkopf kompakt (Paket M1, 02.11.2026): Zeile 1 Nummer (Chip), Kunde, Zuständig; Zeile 2 Gebäudestandard */}
+      <div className="karte projektmaske">
+        <div className="maske-zeile">
+          <div className="maske-feld nummer-feld">
+            <span className="feldname">Projektnummer</span>
+            <span className="chip" title="wird automatisch vergeben">{projekt.nummer}</span>
+          </div>
+          <label className="maske-feld">
+            <span className="feldname">Kunde</span>
+            <Textfeld
+              wert={projekt.kunde_name}
+              gesperrt={gesperrt}
+              beschriftung="Kunde"
+              onSpeichern={(v) => aendern(() => api.patch(`/projekte/${projektId}`, { kunde_name: v }))}
+            />
+          </label>
+          <Zustaendig projekt={projekt} benutzer={benutzer} onZuweisen={(id) => aendern(() => api.put(`/projekte/${projektId}/zuweisung`, { benutzer_id: id }))} />
+        </div>
+        <div className="maske-zeile2">
+          <StandardAuswahl
             wert={objekt.gebaeudestandard}
-            optionen={GEBAEUDESTANDARDS}
             gesperrt={gesperrt}
-            onWahl={(v: Gebaeudestandard) => aendern(() => api.patch(`/objekte/${objekt.id}`, { gebaeudestandard: v }))}
+            onWahl={(v) => void standardAendern(v)}
           />
+          <small className="metazeile">Fachvorgaben-Stand: {zeitpunkt(projektVorgaben.stand_am)}</small>
         </div>
       </div>
-      {objekt.gebaeudestandard === 'sonstiger_bestand' && <Meldung art="warnung">{HINWEIS_SONSTIGER_BESTAND}</Meldung>}
       {projekt.wartet_auf_fachpruefer && (
         <Meldung art="hinweis">
           {hatRolle(benutzer, 'fachpruefer')
@@ -488,16 +500,20 @@ function Zustaendig({
       .then((l) => setKandidaten(l.filter((b) => b.aktiv && b.rollen.includes('aussendienst'))))
       .catch(() => setKandidaten([]));
   }, [admin]);
+  const herkunft = `angelegt von ${projekt.ersteller_name ?? '–'}${projekt.zugewiesen_an_name ? `, zugewiesen an ${projekt.zugewiesen_an_name}` : ''}`;
   return (
-    <div>
-      <span className="feldname">Zuständig (Außendienst)</span>
+    <div className="maske-feld">
+      <span className="feldname">
+        Zuständig (Außendienst)
+        <Hilfe begriff="Zuständig" text={herkunft} />
+      </span>
       {admin ? (
         <select
           aria-label="Projekt zuweisen"
           value={projekt.zugewiesen_an_id ?? ''}
           onChange={(e) => void onZuweisen(e.target.value ? Number(e.target.value) : null)}
         >
-          <option value="">– keine Zuweisung (nur {projekt.ersteller_name ?? 'Ersteller'}) –</option>
+          <option value="">{projekt.ersteller_name ?? 'Ersteller'} (keine Zuweisung)</option>
           {kandidaten.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -505,12 +521,8 @@ function Zustaendig({
           ))}
         </select>
       ) : (
-        <span>{projekt.zugewiesen_an_name ?? projekt.ersteller_name ?? '–'}</span>
+        <span className="maske-wert">{projekt.zugewiesen_an_name ?? projekt.ersteller_name ?? '–'}</span>
       )}
-      <small className="leise">
-        angelegt von {projekt.ersteller_name ?? '–'}
-        {projekt.zugewiesen_an_name && `, zugewiesen an ${projekt.zugewiesen_an_name}`}
-      </small>
     </div>
   );
 }
