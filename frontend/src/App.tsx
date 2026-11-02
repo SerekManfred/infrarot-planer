@@ -5,6 +5,7 @@ import { AbgleichSeite } from './komponenten/Abgleich';
 import { Aktualisierung } from './komponenten/Aktualisierung';
 import { Anmeldung } from './komponenten/Anmeldung';
 import { BenutzerVerwaltung } from './komponenten/Benutzer';
+import { FirmendatenSeite } from './komponenten/Firmendaten';
 import { FachvorgabenSeite } from './komponenten/Fachvorgaben';
 import { Konto } from './komponenten/Konto';
 import { ModulkatalogSeite } from './komponenten/Modulkatalog';
@@ -91,6 +92,7 @@ export function App() {
         // Sammelansicht: Entscheidungen über neue Fachvorgaben, nur Fachprüfer
         ['abgleich', 'Vorgaben-Abgleich', hatRolle(benutzer, 'fachpruefer')],
         ['benutzer', 'Benutzer', hatRolle(benutzer, 'admin')],
+        ['firmen', 'Firmendaten', hatRolle(benutzer, 'admin')],
         ['konto', 'Konto', true],
       ]
     : [];
@@ -140,6 +142,7 @@ export function App() {
         {benutzer && seite === 'module' && <ModulkatalogSeite benutzer={benutzer} />}
         {benutzer && seite === 'abgleich' && hatRolle(benutzer, 'fachpruefer') && <AbgleichSeite />}
         {benutzer && seite === 'benutzer' && hatRolle(benutzer, 'admin') && <BenutzerVerwaltung benutzer={benutzer} />}
+        {benutzer && seite === 'firmen' && hatRolle(benutzer, 'admin') && <FirmendatenSeite />}
         {benutzer && seite === 'konto' && <Konto benutzer={benutzer} />}
         {benutzer && !seite && <Projektliste />}
       </main>

@@ -260,6 +260,32 @@ class BibKlimadaten(Zeitstempel, Base):
 # ── Projektdaten ────────────────────────────────────────────────────────────
 
 
+class Firma(Zeitstempel, Base):
+    """Firmendaten für Berichte (Paket M3, 02.11.2026): nur Admins pflegen; eine Firma ist Standard für Berichte."""
+
+    __tablename__ = "firma"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    rechtsform: Mapped[str] = mapped_column(String(100), default="")
+    strasse: Mapped[str] = mapped_column(String(200), default="")
+    plz: Mapped[str] = mapped_column(String(10), default="")
+    ort: Mapped[str] = mapped_column(String(200), default="")
+    telefon: Mapped[str] = mapped_column(String(100), default="")
+    email: Mapped[str] = mapped_column(String(254), default="")
+    web: Mapped[str] = mapped_column(String(200), default="")
+    geschaeftsfuehrer: Mapped[str] = mapped_column(String(300), default="")
+    handelsregister: Mapped[str] = mapped_column(String(200), default="")
+    ust_idnr: Mapped[str] = mapped_column(String(50), default="")
+    # Dateiname im Volume (uploads/logos), vom Server vergeben; immer PNG oder JPEG (SVG wird umgewandelt)
+    logo_datei: Mapped[str | None] = mapped_column(String(100))
+    standard: Mapped[bool] = mapped_column(default=False, comment="Standardfirma für Berichte")
+
+    @property
+    def hat_logo(self) -> bool:
+        return bool(self.logo_datei)
+
+
 class Projekt(Zeitstempel, Base):
     __tablename__ = "projekt"
     __table_args__ = (CheckConstraint(_erlaubt("status", PROJEKTSTATUS), name="ck_projekt_status"),)
@@ -272,6 +298,8 @@ class Projekt(Zeitstempel, Base):
     ersteller_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     # Zuständiger Außendienst, z. B. Vertretung bei Urlaub (Festlegung 31.10.2026); sieht das Projekt wie der Ersteller
     zugewiesen_an_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
+    # abweichende Berichtsfirma (Paket M3); leer = Standardfirma
+    berichtsfirma_id: Mapped[int | None] = mapped_column(ForeignKey("firma.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(20), default="entwurf", server_default="entwurf")
     geprueft_von_id: Mapped[int | None] = mapped_column(ForeignKey("benutzer.id", ondelete="SET NULL"))
     geprueft_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

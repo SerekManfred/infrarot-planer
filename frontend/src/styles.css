@@ -500,3 +500,12 @@ body.ohne-bildlauf { overflow: hidden; }
 .raumteil label.inline { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; }
 .raumteil .zahlfeld input { width: 5rem; }
 .raumteil select { width: auto; margin: 0; }
+
+/* Firmendaten (Paket M3) */
+.firma-kopf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.firma-kopf h2 { margin: 0; }
+.logo-bereich { margin-top: 0.5rem; }
+.logo-vorschau { display: block; max-height: 80px; max-width: 320px; margin: 0.25rem 0; padding: 0.25rem; background: #fff; border: 1px solid var(--rand); border-radius: 6px; }
+/* Berichte im Projekt (Paket M3/M4) */
+.berichte .knopfreihe { margin: 0.25rem 0; }
+.berichte select { width: auto; margin: 0; }

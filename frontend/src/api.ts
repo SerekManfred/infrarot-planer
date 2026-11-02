@@ -53,6 +53,8 @@ export interface Projekt {
   /** zuständiger Außendienst (Zuweisung durch Admin, z. B. Urlaubsvertretung) */
   zugewiesen_an_id: number | null;
   zugewiesen_an_name: string | null;
+  /** abweichende Berichtsfirma (Paket M3); null = Standardfirma */
+  berichtsfirma_id?: number | null;
   geprueft_von_id: number | null;
   geprueft_am: string | null;
   freigegeben_von_id: number | null;
@@ -406,3 +408,22 @@ export const api = {
   put: <T>(pfad: string, daten: unknown) => anfrage<T>('PUT', pfad, daten),
   loeschen: (pfad: string) => anfrage<void>('DELETE', pfad),
 };
+
+/** Firmendaten für Berichte (Paket M3) */
+export interface Firma {
+  id: number;
+  name: string;
+  rechtsform: string;
+  strasse: string;
+  plz: string;
+  ort: string;
+  telefon: string;
+  email: string;
+  web: string;
+  geschaeftsfuehrer: string;
+  handelsregister: string;
+  ust_idnr: string;
+  standard: boolean;
+  hat_logo: boolean;
+  geaendert_am: string;
+}

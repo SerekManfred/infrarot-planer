@@ -27,7 +27,7 @@ from app.auswertung import objekt_auswerten
 from app.vorgabenabgleich import vergleich
 from app.vorgabenstand import mit_texten, offene_unterschiede, projekt_stand, schnappschuss, unterschiede
 from app.db import get_db
-from app.models import Benutzer, Berechnung, Objekt, Projekt, Protokoll
+from app.models import Firma, Benutzer, Berechnung, Objekt, Projekt, Protokoll
 from app.projektzugriff import bearbeitung_pruefen, haelt_sperre, sichtbarkeit_filter, sichtbarkeit_pruefen, sperre_hash, sperre_pruefen
 from app.schemas import (
     Auschecken, AuscheckenAntwort, ProjektAenderung, ProjektDetail, ProjektLesen, ProjektNeu, ProjektVorgaben,
@@ -121,6 +121,8 @@ def aendern(
         if not benutzer.hat_rolle("admin"):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Die Projektnummer wird automatisch vergeben; ändern darf sie nur ein Admin.")
         nummer_frei_pruefen(db, werte["nummer"], projekt.id)
+    if werte.get("berichtsfirma_id") is not None and db.get(Firma, werte["berichtsfirma_id"]) is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Diese Firma gibt es nicht")
     for name, wert in werte.items():
         setattr(projekt, name, wert)
     db.commit()

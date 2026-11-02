@@ -16,6 +16,7 @@ import { gehe } from '../navigation';
 import { offline, useOffline } from '../offline/daten';
 import { GEBAEUDESTANDARDS, HILFE, HINWEIS_MODULE_AKTUALISIERT, HINWEIS_VORGABEN_AKTUALISIERT, PAUSCHALE_DURCH_FACHPRUEFER, statusAnzeige, watt, zahl, zeitpunkt } from '../texte';
 import { Hilfe, Meldung, StandardAuswahl, Textfeld } from './Felder';
+import { Berichte } from './Berichte';
 import { Projektvorgaben } from './Projektvorgaben';
 import { Protokoll } from './Protokoll';
 import { Raeume } from './Raeume';
@@ -33,7 +34,7 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
   // Zähler, damit Unteransichten nach Änderungen neu laden (z. B. Status, Auswertung)
   const [stand, setStand] = useState(0);
   // neu zeichnen, wenn sich der Offline-Speicher ändert (auschecken, einchecken)
-  const { projekte: lokaleProjekte } = useOffline();
+  const { projekte: lokaleProjekte, online } = useOffline();
   const lokal = lokaleProjekte.includes(projektId);
 
   const laden = useCallback(async () => {
@@ -202,6 +203,7 @@ export function ProjektSeite({ projektId, benutzer }: { projektId: number; benut
           <small className="metazeile">Fachvorgaben-Stand: {zeitpunkt(projektVorgaben.stand_am)}</small>
         </div>
       </div>
+      <Berichte projekt={projekt} gesperrt={gesperrt} online={online} lokal={lokal} benutzer={benutzer} aendern={aendern} />
       {projekt.wartet_auf_fachpruefer && (
         <Meldung art="hinweis">
           {hatRolle(benutzer, 'fachpruefer')

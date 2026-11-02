@@ -92,6 +92,8 @@ class ProjektAenderung(BaseModel):
     bezeichnung: str | None = Field(default=None, min_length=1, max_length=300)
     kunde_name: str | None = None
     notizen: str | None = None
+    # abweichende Berichtsfirma (Paket M3); null = Standardfirma
+    berichtsfirma_id: int | None = None
 
 
 class ProjektLesen(Lesbar):
@@ -106,6 +108,7 @@ class ProjektLesen(Lesbar):
     # zuständiger Außendienst (Zuweisung durch Admin)
     zugewiesen_an_id: int | None
     zugewiesen_an_name: str | None
+    berichtsfirma_id: int | None = None
     geprueft_von_id: int | None
     geprueft_am: datetime | None
     freigegeben_von_id: int | None
@@ -929,3 +932,42 @@ class TabellenImportErgebnis(BaseModel):
     unveraendert: int
     sicherung: str | None
     projekte_warten: int
+
+
+# ── Firmendaten (Paket M3) ──
+
+
+class FirmaDaten(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    rechtsform: str = Field(default="", max_length=100)
+    strasse: str = Field(default="", max_length=200)
+    plz: str = Field(default="", max_length=10)
+    ort: str = Field(default="", max_length=200)
+    telefon: str = Field(default="", max_length=100)
+    email: str = Field(default="", max_length=254)
+    web: str = Field(default="", max_length=200)
+    geschaeftsfuehrer: str = Field(default="", max_length=300)
+    handelsregister: str = Field(default="", max_length=200)
+    ust_idnr: str = Field(default="", max_length=50)
+    standard: bool = False
+
+
+class FirmaAenderung(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    rechtsform: str | None = Field(default=None, max_length=100)
+    strasse: str | None = Field(default=None, max_length=200)
+    plz: str | None = Field(default=None, max_length=10)
+    ort: str | None = Field(default=None, max_length=200)
+    telefon: str | None = Field(default=None, max_length=100)
+    email: str | None = Field(default=None, max_length=254)
+    web: str | None = Field(default=None, max_length=200)
+    geschaeftsfuehrer: str | None = Field(default=None, max_length=300)
+    handelsregister: str | None = Field(default=None, max_length=200)
+    ust_idnr: str | None = Field(default=None, max_length=50)
+    standard: bool | None = None
+
+
+class FirmaLesen(FirmaDaten, Lesbar):
+    id: int
+    hat_logo: bool
+    geaendert_am: datetime
