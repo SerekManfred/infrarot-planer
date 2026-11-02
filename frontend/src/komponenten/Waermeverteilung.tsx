@@ -3,7 +3,7 @@
 // stufenlos), Deckkraft der Farbfläche einstellbar. Standard ist die Autoskala (kleinster bis größter Wert im Raum); die feste Skala bleibt für Vergleiche
 // zwischen Räumen wählbar. Gerechnet wird im Browser mit dem Rechenkern (offline möglich).
 // Vereinfachte Veranschaulichung der Strahlungsverteilung – keine Behaglichkeitsberechnung nach Norm.
-import { waermeverteilung, type BibObjekt, type Regel, type Sperrflaeche, type StrahlerWerte, type Waermeverteilung as Ergebnis } from '@infrarot/rechenkern';
+import { waermeverteilung, type BibObjekt, type Raumform, type Regel, type Sperrflaeche, type StrahlerWerte, type Waermeverteilung as Ergebnis } from '@infrarot/rechenkern';
 import { useMemo } from 'react';
 import type { KatalogModulDaten, PlatziertesModul } from '../api';
 import { zahl } from '../texte';
@@ -73,23 +73,24 @@ export function farbeStetig(wert: number, s: Skala): [number, number, number] {
 }
 
 /** Rastergröße aus den Zellen (Zellen liegen spaltenweise: erst alle y zu x = 0, dann x = 1 …) */
-export function rasterMasse(ergebnis: Pick<Ergebnis, 'zellen'>): { nx: number; ny: number; laenge: number; breite: number } {
+export function rasterMasse(ergebnis: Pick<Ergebnis, 'zellen'>): { nx: number; ny: number; laenge: number; breite: number; x0: number; y0: number } {
   const z = ergebnis.zellen;
-  if (z.length === 0) return { nx: 0, ny: 0, laenge: 0, breite: 0 };
+  if (z.length === 0) return { nx: 0, ny: 0, laenge: 0, breite: 0, x0: 0, y0: 0 };
   const ny = z.filter((c) => c.x === z[0].x).length;
   const nx = z.length / ny;
   const letzte = z[z.length - 1];
-  return { nx, ny, laenge: letzte.x + letzte.b, breite: letzte.y + letzte.t };
+  // Raumformen mit Anbau oben/links beginnen bei negativen Koordinaten (Paket M2)
+  return { nx, ny, laenge: letzte.x + letzte.b - z[0].x, breite: letzte.y + letzte.t - z[0].y, x0: z[0].x, y0: z[0].y };
 }
 
 /** Interpolation zwischen den Zellmittelpunkten (bilinear, am Rand gehalten); null ohne Zellen */
 export function interpolator(ergebnis: Pick<Ergebnis, 'zellen'>): ((x: number, y: number) => number) | null {
-  const { nx, ny, laenge, breite } = rasterMasse(ergebnis);
+  const { nx, ny, laenge, breite, x0, y0 } = rasterMasse(ergebnis);
   if (nx === 0) return null;
   const werte = Float64Array.from(ergebnis.zellen, (c) => c.wert);
   return (x, y) => {
-    const u = Math.min(nx - 1, Math.max(0, (x / laenge) * nx - 0.5));
-    const v = Math.min(ny - 1, Math.max(0, (y / breite) * ny - 0.5));
+    const u = Math.min(nx - 1, Math.max(0, ((x - x0) / laenge) * nx - 0.5));
+    const v = Math.min(ny - 1, Math.max(0, ((y - y0) / breite) * ny - 0.5));
     const i0 = Math.floor(u);
     const j0 = Math.floor(v);
     const i1 = Math.min(nx - 1, i0 + 1);
@@ -112,7 +113,7 @@ export function wertAn(ergebnis: Pick<Ergebnis, 'zellen'>, x: number, y: number)
  * Werte bilinear interpoliert, Farbe stufenlos – keine Treppenstufen.
  */
 export function waermeBild(ergebnis: Pick<Ergebnis, 'zellen'>, s: Skala, faktor = 6): { breite: number; hoehe: number; daten: Uint8ClampedArray } {
-  const { nx, ny, laenge, breite } = rasterMasse(ergebnis);
+  const { nx, ny, laenge, breite, x0, y0 } = rasterMasse(ergebnis);
   const wert = interpolator(ergebnis);
   const bw = nx * faktor;
   const bh = ny * faktor;
@@ -120,13 +121,15 @@ export function waermeBild(ergebnis: Pick<Ergebnis, 'zellen'>, s: Skala, faktor 
   if (!wert) return { breite: 0, hoehe: 0, daten };
   for (let py = 0; py < bh; py++) {
     for (let px = 0; px < bw; px++) {
-      const w = wert(((px + 0.5) / bw) * laenge, ((py + 0.5) / bh) * breite);
+      const w = wert(x0 + ((px + 0.5) / bw) * laenge, y0 + ((py + 0.5) / bh) * breite);
+      // außerhalb eines nicht rechteckigen Raums durchsichtig
+      const zelle = ergebnis.zellen[Math.min(nx - 1, Math.floor(px / faktor)) * ny + Math.min(ny - 1, Math.floor(py / faktor))];
       const [r, g, b] = farbeStetig(w, s);
       const k = (py * bw + px) * 4;
       daten[k] = r;
       daten[k + 1] = g;
       daten[k + 2] = b;
-      daten[k + 3] = 255;
+      daten[k + 3] = zelle?.innen === false ? 0 : 255;
     }
   }
   return { breite: bw, hoehe: bh, daten };
@@ -151,6 +154,7 @@ export function berechnen(eingabe: {
   katalog: KatalogModulDaten[];
   regeln: Regel[] | undefined;
   objekte: Pick<BibObjekt, 'schluessel' | 'hoehe_m'>[] | undefined;
+  form?: Raumform | null;
 }): Ergebnis {
   const kennwerte = new Map<number, StrahlerWerte>(
     eingabe.katalog.map((k) => [k.id, { temperatur_c: k.oberflaechentemperatur_c, emissionsgrad: k.emissionsgrad, abstrahlwinkel_grad: k.abstrahlwinkel_grad }]),
@@ -169,8 +173,9 @@ export function berechnen(eingabe: {
     },
     sperrflaechen: eingabe.sperrflaechen,
     sperrhoehe: sperrhoehen(eingabe.objekte),
+    form: eingabe.form ?? null,
     // höchstens etwa 72 Zellen je Richtung (dazwischen interpoliert), damit es auf dem Tablet flüssig bleibt
-    raster_m: Math.max(0.08, Math.max(eingabe.laenge_m, eingabe.breite_m) / 72),
+    raster_m: Math.max(0.08, Math.max(eingabe.form ? eingabe.form.bbox.x1 - eingabe.form.bbox.x0 : eingabe.laenge_m, eingabe.form ? eingabe.form.bbox.y1 - eingabe.form.bbox.y0 : eingabe.breite_m) / 72),
   });
 }
 
@@ -190,11 +195,11 @@ export function WaermeSchicht({ ergebnis, skala: s, deckkraft }: { ergebnis: Erg
     ctx.putImageData(new ImageData(b.daten, b.breite, b.hoehe), 0, 0);
     return leinwand.toDataURL('image/png');
   }, [ergebnis, s]);
-  const { laenge, breite } = rasterMasse(ergebnis);
+  const { laenge, breite, x0, y0 } = rasterMasse(ergebnis);
   if (!bild) return null;
   return (
     <g className="waerme-schicht" aria-hidden="true" opacity={deckkraft}>
-      <image href={bild} x={0} y={0} width={laenge} height={breite} preserveAspectRatio="none" />
+      <image href={bild} x={x0} y={y0} width={laenge} height={breite} preserveAspectRatio="none" />
     </g>
   );
 }

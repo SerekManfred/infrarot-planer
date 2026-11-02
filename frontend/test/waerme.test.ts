@@ -60,7 +60,9 @@ describe('Wärmeverteilung', () => {
     const e = { zellen: [zelle(0, 0, 0), zelle(0, 1, 10), zelle(1, 0, 20), zelle(1, 1, 30)] };
 
     it('Raster erkannt, Werte zwischen den Zellmittelpunkten bilinear, am Rand gehalten', () => {
-      expect(rasterMasse(e)).toEqual({ nx: 2, ny: 2, laenge: 2, breite: 2 });
+      expect(rasterMasse(e)).toEqual({ nx: 2, ny: 2, laenge: 2, breite: 2, x0: 0, y0: 0 });
+      // Raumform mit Anbau oben: Raster beginnt bei negativem y
+      expect(rasterMasse({ zellen: e.zellen.map((z) => ({ ...z, y: z.y - 1 })) })).toMatchObject({ y0: -1, breite: 2 });
       expect(wertAn(e, 0.5, 0.5)).toBeCloseTo(0);
       expect(wertAn(e, 1, 1)).toBeCloseTo(15);
       expect(wertAn(e, 1.5, 0.5)).toBeCloseTo(20);

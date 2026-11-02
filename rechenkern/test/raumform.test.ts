@@ -1,0 +1,105 @@
+// Räume aus Rechtecken (Paket M2, 02.11.2026). Alle Maße und Regeln sind TESTWERTE.
+import { describe, expect, it } from 'vitest';
+import {
+  berechneObjekt,
+  enthaeltRechteck,
+  platziertesModul,
+  pruefeModule,
+  raumform,
+  regelnAufloesen,
+  vorschlagen,
+  waermeverteilung,
+  wandAbstand,
+  type KatalogModul,
+  type Regel,
+} from '../src';
+
+const regel = (schluessel: string, wert: number | null, wert_text = ''): Regel => ({ schluessel, bezeichnung: `TEST ${schluessel}`, wert, wert_text });
+const R = regelnAufloesen([regel('abstand_wand_cm', 50), regel('abstand_modul_cm', 40), regel('leistungsreserve_prozent', 10), regel('ueberdimensionierung_prozent', 50)]);
+const MODUL: KatalogModul = { id: 1, artikel_nr: 'T-1', bezeichnung: 'TESTMODUL', leistung_w: 500, laenge_mm: 1000, breite_mm: 600, schutzart: 'IP44', bad_geeignet: true };
+
+// L-Form: 6 × 4 m, oben rechts 3 × 2 m ausgeschnitten → 24 − 6 = 18 m²
+const L_FORM = raumform({ basis: { w: 6, h: 4 }, teile: [{ op: 'sub', wand: 'oben', versatz: 3, laenge: 3, tiefe: 2 }] });
+
+describe('Raumform aus Rechtecken', () => {
+  it('Rechteck ohne Teile: Fläche, Umfang, 4 Wände', () => {
+    const f = raumform({ basis: { w: 5, h: 4 }, teile: [] });
+    expect([f.flaeche_m2, f.umfang_m, f.segmente.length, f.rechteck]).toEqual([20, 18, 4, true]);
+  });
+
+  it('L-Form: Fläche 18 m², Umfang 20 m, 6 Wandsegmente, Innenecke bei (3 | 2)', () => {
+    expect(L_FORM.flaeche_m2).toBe(18);
+    expect(L_FORM.umfang_m).toBe(20);
+    expect(L_FORM.segmente).toHaveLength(6);
+    expect(L_FORM.umriss[0]).toContainEqual({ x: 3, y: 2 });
+  });
+
+  it('Abstand an der Innenecke euklidisch: Modul schräg vor der Ecke', () => {
+    // Modul links unterhalb der Innenecke (3 | 2): Ecke liegt 0,3 m rechts und 0,4 m oberhalb → 0,5 m
+    const m = { x: 1.7, y: 2.4, b: 1.0, t: 0.6 };
+    expect(enthaeltRechteck(L_FORM, m)).toBe(true);
+    expect(wandAbstand(L_FORM, m)).toBeCloseTo(0.5);
+    // näher an die Ecke: 0,3 m bzw. 0,2 m → 0,36 m
+    expect(wandAbstand(L_FORM, { x: 1.7, y: 2.2, b: 1.0, t: 0.6 })).toBeCloseTo(Math.hypot(0.3, 0.2));
+  });
+
+  it('Modul über dem Einsprung unzulässig, daneben mit Wandabstand zulässig', () => {
+    const raum = { laenge_m: 6, breite_m: 4, hoehe_m: 2.5, ist_bad: false, form: L_FORM };
+    const ueber = platziertesModul(MODUL, 3.5, 0.6, false, 'a'); // liegt im ausgeschnittenen Bereich
+    const nahEcke = platziertesModul(MODUL, 2.2, 2.2, false, 'b'); // 0,2 m unter der Innenwand
+    const gut = platziertesModul(MODUL, 1.0, 1.0, false, 'c');
+    const p = pruefeModule(raum, [], [ueber, nahEcke, gut], R);
+    expect(p.verstoesse.a).toEqual(['ragt über den Raum hinaus']);
+    expect(p.verstoesse.b[0]).toBe('Abstand zur Wand 20 cm (mind. 50 cm)');
+    expect(p.verstoesse.c).toEqual([]);
+  });
+
+  it('automatische Platzierung bleibt im L und hält die Abstände auch an der Innenecke', () => {
+    const raum = { laenge_m: 6, breite_m: 4, hoehe_m: 2.5, ist_bad: false, form: L_FORM };
+    let n = 0;
+    const v = vorschlagen(raum, [], [MODUL], R, 1300, () => `m${++n}`);
+    expect(v.module!.length).toBeGreaterThan(1);
+    expect(Object.values(pruefeModule(raum, [], v.module!, R).verstoesse).flat()).toEqual([]);
+  });
+
+  it('U-Form: Ausschnitt in der Mitte der oberen Wand', () => {
+    const f = raumform({ basis: { w: 6, h: 4 }, teile: [{ op: 'sub', wand: 'oben', versatz: 2, laenge: 2, tiefe: 2.5 }] });
+    expect(f.flaeche_m2).toBe(24 - 5);
+    expect(f.segmente).toHaveLength(8);
+    expect(enthaeltRechteck(f, { x: 2.5, y: 0.5, b: 1, t: 1 })).toBe(false);
+    expect(enthaeltRechteck(f, { x: 0.5, y: 0.5, b: 1, t: 1 })).toBe(true);
+  });
+
+  it('Ausschnitt in einer Ecke und Erker als Anbau (negative Koordinaten an der oberen Wand)', () => {
+    const ecke = raumform({ basis: { w: 4, h: 3 }, teile: [{ op: 'sub', wand: 'rechts', versatz: 2, laenge: 1, tiefe: 1 }] });
+    expect(ecke.flaeche_m2).toBe(11);
+    const erker = raumform({ basis: { w: 4, h: 3 }, teile: [{ op: 'add', wand: 'oben', versatz: 1, laenge: 2, tiefe: 0.8 }] });
+    expect(erker.flaeche_m2).toBeCloseTo(13.6);
+    expect(erker.bbox).toEqual({ x0: 0, y0: -0.8, x1: 4, y1: 3 });
+    expect(enthaeltRechteck(erker, { x: 1.2, y: -0.6, b: 0.5, t: 0.5 })).toBe(true);
+  });
+
+  it('Heizlast aus der Gesamtfläche; Wärmeverteilung nur im Raum', () => {
+    const raum = {
+      id: 1, bezeichnung: 'L', raumtyp_id: null, laenge_m: 6, breite_m: 4, flaeche_m2: 24, hoehe_m: 2.5, volumen_m3: null,
+      heizlastquelle: 'A' as const, hottgenroth_w: null, pauschale_w_m2: 50, theta_int: null, luftwechsel: null, flaechen: [],
+      geometrie: { basis: { w: 6, h: 4 }, teile: [{ op: 'sub' as const, wand: 'oben' as const, versatz: 3, laenge: 3, tiefe: 2 }] },
+    };
+    const a = berechneObjekt({
+      art: 'objekt',
+      objekt: { id: 1, bezeichnung: 'O', gebaeudestandard: 'neubau', gebaeudestandard_text: 'Neubau', delta_u_wb: null, pauschale_abweichungen: {}, theta_e: null },
+      vorgaben: { rueckfall_neubau_w_m2: 40, rueckfall_effizienzhaus_sanierung_w_m2: null, rueckfall_sonstiger_bestand_w_m2: null, hoehe_hinweis_m: null, delta_u_wb: null },
+      pauschalen: [], raumtypen: [], bauteile: [], geschosse: [{ id: 1, bezeichnung: 'EG', raeume: [raum] }],
+    }).auswertung.raeume[0];
+    expect(a.flaeche_m2).toBe(18);
+    expect(a.phi_massgeblich_w).toBe(900);
+    expect(a.umfang_m).toBe(20);
+    const w = waermeverteilung({
+      laenge_m: 6, breite_m: 4, hoehe_m: 2.5, raumtemperatur_c: 20, form: L_FORM, raster_m: 0.5, sperrflaechen: [], sperrhoehe: {},
+      module: [platziertesModul(MODUL, 1, 2, false, 'x')], kennwerte: new Map([[1, { temperatur_c: 90, emissionsgrad: 0.9, abstrahlwinkel_grad: 180 }]]),
+      vorgaben: { temperatur_c: null, emissionsgrad: null, abstrahlwinkel_grad: null },
+    });
+    expect(w.zellen.filter((z) => z.innen === false)).toHaveLength(24); // 3 × 2 m ausgeschnitten = 6 × 4 Zellen à 0,5 m
+    expect(w.min_w_m2).toBeGreaterThan(0);
+  });
+});

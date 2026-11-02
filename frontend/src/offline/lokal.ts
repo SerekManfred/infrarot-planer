@@ -5,7 +5,7 @@
 // Warteschlange. Neu angelegte Daten bekommen vorläufige negative IDs; die Synchronisierung ersetzt sie
 // beim Übertragen durch die IDs des Servers (pfadAufloesen).
 
-import { berechneObjekt, type ObjektPlanung } from '@infrarot/rechenkern';
+import { berechneObjekt, raumform, type ObjektPlanung, type RaumTeil } from '@infrarot/rechenkern';
 import type { Fachvorgaben, Gebaeudestandard, ObjektPaket, OfflineVorgaben, ProjektPaket, ProjektVorgaben } from '../api';
 import { GEBAEUDESTANDARDS } from '../texte';
 
@@ -71,7 +71,7 @@ const NEU: Record<Exclude<Art, 'projekte'>, Record<string, unknown>> = {
   },
   geschosse: { reihenfolge: 0 },
   raeume: {
-    raumtyp_id: null, laenge_m: null, breite_m: null, flaeche_m2: null, hoehe_m: null, volumen_m3: null,
+    raumtyp_id: null, laenge_m: null, breite_m: null, flaeche_m2: null, hoehe_m: null, volumen_m3: null, geometrie: null,
     heizlastquelle: 'A', hottgenroth_w: null, pauschale_w_m2: null, theta_int: null, luftwechsel: null,
     sperrflaechen: [], module: [], tueren_fenster: [],
   },
@@ -155,9 +155,13 @@ function sortiert(art: Art, liste: Knoten[]): Knoten[] {
 }
 
 function raumFlaeche(raum: Knoten) {
-  // wie app/routers/hierarchie.py: Fläche des Rechteckraums aus Länge × Breite
+  // wie app/routers/hierarchie.py: Hauptrechteck = Länge × Breite; mit Anbauten/Ausschnitten Fläche aus dem Rechenkern
   if (raum.laenge_m !== null && raum.breite_m !== null && raum.laenge_m !== undefined && raum.breite_m !== undefined) {
-    raum.flaeche_m2 = (raum.laenge_m as number) * (raum.breite_m as number);
+    const w = raum.laenge_m as number;
+    const h = raum.breite_m as number;
+    const teile = ((raum.geometrie as { teile?: RaumTeil[] } | null | undefined)?.teile ?? []) as RaumTeil[];
+    raum.geometrie = { basis: { w, h }, teile };
+    raum.flaeche_m2 = teile.length > 0 ? raumform({ basis: { w, h }, teile }).flaeche_m2 : w * h;
   }
 }
 

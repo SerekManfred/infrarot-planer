@@ -425,6 +425,9 @@ class Raum(Zeitstempel, Base):
     )
     # Türen und Fenster nur zur Orientierung (Festlegung 31.10.2026): keine Sperrflächen, ohne Einfluss auf die Planung
     tueren_fenster: Mapped[list] = mapped_column(JsonDaten, default=list, server_default="[]")
+    # Raumform aus Rechtecken (Paket M2, 02.11.2026): {basis: {w, h}, teile: [{op, wand, versatz, laenge, tiefe}]};
+    # basis = Länge × Breite; ohne Teile ein Rechteck. Fläche wird mit dem Rechenkern bestimmt.
+    geometrie: Mapped[dict | None] = mapped_column(JsonDaten)
 
     geschoss: Mapped[Geschoss] = relationship(back_populates="raeume")
     raumtyp: Mapped[BibRaumtyp | None] = relationship()

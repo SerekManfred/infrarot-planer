@@ -6,5 +6,6 @@ export * from './objekt';
 export * from './platzierung';
 export * from './plan';
 export * from './waermeverteilung';
+export * from './raumform';
 export { RECHENKERN_VERSION } from './version';
 export { verarbeiteJson } from './json';

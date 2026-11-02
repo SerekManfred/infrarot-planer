@@ -260,8 +260,9 @@ class Sperrflaeche(BaseModel):
     # veraltet (feste Typen bis 01.11.2026): ältere Geräte senden noch „typ“ – wird in „objekt“ übernommen
     typ: SperrflaecheTyp | None = Field(default=None, exclude=True)
     # Rechteck: linke obere Ecke und Ausdehnung; Punkt (Deckeneinbau): b = t = 0
-    x: float = Field(ge=0, le=100)
-    y: float = Field(ge=0, le=100)
+    # Anbauten an der oberen/linken Wand liegen bei negativen Koordinaten (Paket M2)
+    x: float = Field(ge=-100, le=100)
+    y: float = Field(ge=-100, le=100)
     b: float = Field(default=0, ge=0, le=100)
     t: float = Field(default=0, ge=0, le=100)
     # nur Streifen (Dachschräge, Unterzug): Wand, zu der der Streifen parallel liegt
@@ -292,8 +293,8 @@ class ModulPlatziert(BaseModel):
     schutzart: str = Field(default="", max_length=10)
     bad_geeignet: bool = False
     # linke obere Ecke; gedreht = False: Modullänge entlang der Raumlänge (x)
-    x: float = Field(ge=-10, le=100)
-    y: float = Field(ge=-10, le=100)
+    x: float = Field(ge=-100, le=100)
+    y: float = Field(ge=-100, le=100)
     gedreht: bool = False
 
 
@@ -308,6 +309,26 @@ class TuerFenster(BaseModel):
     breite: float = Field(gt=0, le=20)
     aufschlag: Literal["innen", "aussen"] | None = None
     band: Literal["links", "rechts"] | None = None
+
+
+class RaumTeil(BaseModel):
+    """Anbau (add) bzw. Ausschnitt (sub) an einer Wand des Hauptrechtecks (Paket M2)."""
+
+    op: Literal["add", "sub"]
+    wand: Literal["oben", "unten", "links", "rechts"]
+    versatz: float = Field(ge=0, le=100)
+    laenge: float = Field(gt=0, le=100)
+    tiefe: float = Field(gt=0, le=100)
+
+
+class RaumBasis(BaseModel):
+    w: float = Field(gt=0, le=100)
+    h: float = Field(gt=0, le=100)
+
+
+class RaumGeometrie(BaseModel):
+    basis: RaumBasis
+    teile: list[RaumTeil] = Field(default_factory=list, max_length=12)
 
 
 class RaumNeu(BaseModel):
@@ -326,6 +347,7 @@ class RaumNeu(BaseModel):
     sperrflaechen: list[Sperrflaeche] = Field(default_factory=list, max_length=100)
     module: list[ModulPlatziert] = Field(default_factory=list, max_length=60)
     tueren_fenster: list[TuerFenster] = Field(default_factory=list, max_length=40)
+    geometrie: RaumGeometrie | None = None
 
 
 class RaumAenderung(RaumNeu):
@@ -351,6 +373,7 @@ class RaumLesen(Lesbar):
     sperrflaechen: list[dict]
     module: list[dict]
     tueren_fenster: list[dict]
+    geometrie: dict | None = None
 
 
 # ── Bauteilfläche ───────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@
 
 import { berechneAuswertung, type AuswertungEingabe, type AuswertungRaumEingabe, type AuswertungRaumErgebnis, type Heizlastquelle } from './auswertung';
 import type { PauschalEingabe } from './pauschal';
+import { formVonRaum, type RaumGeometrie } from './raumform';
 import { raumModulplanung, regelnAufloesen, type BibObjekt, type PlatziertesModul, type RaumModulplanung, type Regel, type Sperrflaeche } from './platzierung';
 import type { Angrenzung, BauteilflaecheEingabe, OeffnungEingabe, RaumEingabe } from './typen';
 
@@ -72,6 +73,8 @@ export interface PlanungRaum {
   /** Draufsicht der Decke (Festlegung 14.10.2026); fehlt bei älteren Eingaben */
   sperrflaechen?: Sperrflaeche[];
   module?: PlatziertesModul[];
+  /** zusammengesetzte Raumform (Paket M2); fehlt sie oder hat keine Teile, ist der Raum ein Rechteck */
+  geometrie?: RaumGeometrie | null;
 }
 
 export interface PlanungGeschoss {
@@ -134,6 +137,10 @@ export interface ObjektRaumAuswertung extends Omit<AuswertungRaumErgebnis, 'id' 
   breite_m: number | null;
   flaeche_m2: number | null;
   hoehe_m: number | null;
+  /** Umfang in m (aus der Raumform) */
+  umfang_m: number | null;
+  /** Umriss der Raumform (Eckpunkte), null ohne Maße */
+  umriss: { x: number; y: number }[][] | null;
   quelle: Heizlastquelle;
   werte: { pauschale_w_m2: Wert; theta_int: Wert; luftwechsel: Wert };
   hinweise: string[];
@@ -270,7 +277,10 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
   const infos: Omit<ObjektRaumAuswertung, keyof Omit<AuswertungRaumErgebnis, 'id' | 'bezeichnung' | 'quelle' | 'fehler'> | 'modulplanung'>[] = [];
   const raeumeEingabe: AuswertungRaumEingabe[] = [];
   for (const geschoss of planung.geschosse) {
-    for (const raum of geschoss.raeume) {
+    for (const raumRoh of geschoss.raeume) {
+      // Fläche aus der Raumform (Hauptrechteck ± Teile); ohne Teile wie bisher Länge × Breite bzw. eingegebene Fläche
+      const form = formVonRaum(raumRoh);
+      const raum: PlanungRaum = form && !form.rechteck ? { ...raumRoh, flaeche_m2: form.flaeche_m2 } : raumRoh;
       const raumtyp = raum.raumtyp_id !== null ? raumtypen.get(raum.raumtyp_id) : undefined;
       const hinweise: string[] = [];
       const werte = {
@@ -333,6 +343,8 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
         breite_m: raum.breite_m,
         flaeche_m2: raum.flaeche_m2,
         hoehe_m: raum.hoehe_m,
+        umfang_m: form?.umfang_m ?? null,
+        umriss: form?.umriss ?? null,
         quelle: raum.heizlastquelle,
         werte,
         hinweise,
@@ -353,7 +365,7 @@ export function berechneObjekt(planung: ObjektPlanung): { eingabe: AuswertungEin
     const { id: _id, bezeichnung: _b, quelle: _q, fehler, ...rest } = ergebnis.raeume[i];
     const pr = planungsRaeume[i];
     const modulplanung = raumModulplanung(
-      { laenge_m: pr.laenge_m ?? 0, breite_m: pr.breite_m ?? 0, hoehe_m: pr.hoehe_m, ist_bad: istBad(info.raumtyp) },
+      { laenge_m: pr.laenge_m ?? 0, breite_m: pr.breite_m ?? 0, hoehe_m: pr.hoehe_m, ist_bad: istBad(info.raumtyp), form: formVonRaum(pr) },
       pr.sperrflaechen ?? [],
       pr.module ?? [],
       regeln,

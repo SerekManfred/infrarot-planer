@@ -14,6 +14,7 @@
 // Koordinaten wie im Deckenplan: x entlang der Länge, y entlang der Breite, Meter; z von Fußboden nach oben.
 
 import { istPunkt, modulRechteck, objektSchluessel, type PlatziertesModul, type Sperrflaeche } from './platzierung';
+import { punktImRaum, type Raumform } from './raumform';
 
 /** Stefan-Boltzmann-Konstante in W/(m²·K⁴) */
 export const SIGMA = 5.670374419e-8;
@@ -107,6 +108,8 @@ export interface WaermeZelle {
   flaeche: 'boden' | 'moebel';
   /** Höhe der Empfangsfläche in m */
   z: number;
+  /** false: Zelle liegt außerhalb eines nicht rechteckigen Raums (nur für das lückenlose Raster, nicht dargestellt) */
+  innen?: boolean;
 }
 
 export interface Waermeverteilung {
@@ -135,6 +138,8 @@ export interface WaermeEingabe {
   sperrhoehe: Record<string, number | null>;
   /** Kantenlänge der Rasterzellen in m */
   raster_m?: number;
+  /** zusammengesetzte Raumform (Paket M2); Raster über ihre Umrandung, Zellen außerhalb ohne Wert */
+  form?: Raumform | null;
 }
 
 /**
@@ -178,10 +183,14 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
   if (fehlt.length > 0 || !e.hoehe_m) return { zellen: [], max_w_m2: 0, min_w_m2: 0, mittel_w_m2: 0, mit_vorgabewerten: mitVorgabe, fehlt };
 
   const raster = e.raster_m ?? 0.1;
-  const nx = Math.max(1, Math.round(e.laenge_m / raster));
-  const ny = Math.max(1, Math.round(e.breite_m / raster));
-  const bx = e.laenge_m / nx;
-  const by = e.breite_m / ny;
+  const x0 = e.form?.bbox.x0 ?? 0;
+  const y0 = e.form?.bbox.y0 ?? 0;
+  const L = e.form ? e.form.bbox.x1 - x0 : e.laenge_m;
+  const B = e.form ? e.form.bbox.y1 - y0 : e.breite_m;
+  const nx = Math.max(1, Math.round(L / raster));
+  const ny = Math.max(1, Math.round(B / raster));
+  const bx = L / nx;
+  const by = B / ny;
   const moebel = e.sperrflaechen
     .map((s) => ({ s, z: sperrHoehe(s, e.sperrhoehe) }))
     .filter((x): x is { s: Sperrflaeche; z: number } => x.z !== null && x.s.b > 0 && x.s.t > 0);
@@ -189,8 +198,12 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
   let max = 0;
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
-      const px = (i + 0.5) * bx;
-      const py = (j + 0.5) * by;
+      const px = x0 + (i + 0.5) * bx;
+      const py = y0 + (j + 0.5) * by;
+      if (e.form && !e.form.rechteck && !punktImRaum(e.form, px, py)) {
+        zellen.push({ x: x0 + i * bx, y: y0 + j * by, b: bx, t: by, wert: 0, flaeche: 'boden', z: 0, innen: false });
+        continue;
+      }
       let z = 0;
       let flaeche: WaermeZelle['flaeche'] = 'boden';
       for (const { s, z: hz } of moebel) {
@@ -203,10 +216,11 @@ export function waermeverteilung(e: WaermeEingabe): Waermeverteilung {
       }
       const wert = bestrahlung(px, py, e.hoehe_m - z, strahler);
       if (wert > max) max = wert;
-      zellen.push({ x: i * bx, y: j * by, b: bx, t: by, wert, flaeche, z });
+      zellen.push({ x: x0 + i * bx, y: y0 + j * by, b: bx, t: by, wert, flaeche, z, innen: true });
     }
   }
-  const min = zellen.reduce((m, z) => Math.min(m, z.wert), Infinity);
-  const mittel = zellen.reduce((s, z) => s + z.wert, 0) / zellen.length;
+  const drin = zellen.filter((z) => z.innen !== false);
+  const min = drin.reduce((m, z) => Math.min(m, z.wert), Infinity);
+  const mittel = drin.reduce((s, z) => s + z.wert, 0) / drin.length;
   return { zellen, max_w_m2: max, min_w_m2: min, mittel_w_m2: mittel, mit_vorgabewerten: mitVorgabe, fehlt: [] };
 }

@@ -16,7 +16,7 @@ from app.schemas import GEBAEUDESTANDARD_TEXT
 from app.vorgabenstand import schnappschuss
 RAUM_FELDER = (
     "id", "bezeichnung", "raumtyp_id", "laenge_m", "breite_m", "flaeche_m2", "hoehe_m", "volumen_m3",
-    "heizlastquelle", "hottgenroth_w", "pauschale_w_m2", "theta_int", "luftwechsel", "sperrflaechen", "module",
+    "heizlastquelle", "hottgenroth_w", "pauschale_w_m2", "theta_int", "luftwechsel", "sperrflaechen", "module", "geometrie",
 )
 FLAECHE_FELDER = (
     "id", "bezeichnung", "bauteil_id", "u_wert", "flaeche_brutto_m2", "angrenzung", "angrenzender_raumtyp_id",

@@ -94,8 +94,17 @@ def _ebene(
 
 
 def _raum_flaeche(raum: Raum) -> None:
-    """Schnellerfassung: Fläche des Rechteckraums aus Länge × Breite."""
-    if raum.laenge_m is not None and raum.breite_m is not None:
+    """Schnellerfassung: Fläche des Rechteckraums aus Länge × Breite.
+
+    Raumform aus Rechtecken (Paket M2): Das Hauptrechteck der Geometrie folgt immer Länge × Breite. Mit Anbauten oder
+    Ausschnitten bestimmt der Rechenkern die Fläche (die Oberfläche schickt sie mit); die Auswertung rechnet ohnehin
+    mit der Fläche der Raumform.
+    """
+    if raum.laenge_m is None or raum.breite_m is None:
+        return
+    teile = (raum.geometrie or {}).get("teile") or []
+    raum.geometrie = {"basis": {"w": raum.laenge_m, "h": raum.breite_m}, "teile": teile}
+    if not teile:
         raum.flaeche_m2 = raum.laenge_m * raum.breite_m
 
 

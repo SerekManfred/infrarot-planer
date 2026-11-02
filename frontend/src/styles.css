@@ -490,3 +490,13 @@ body.ohne-bildlauf { overflow: hidden; }
   .maske-zeile { flex-direction: column; align-items: stretch; }
   .maske-feld { flex: 0 0 auto; }
 }
+
+/* Raumform aus Rechtecken (Paket M2) */
+.plan-wand-linie { fill: none; stroke: var(--text); stroke-linejoin: miter; }
+.plan-teil-griff .plan-griff-punkt { fill: var(--blau); }
+.raumform-zu { margin: 0.25rem 0; }
+.raumform { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border: 1px solid var(--rand); border-radius: 8px; background: var(--grau); }
+.raumteil { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; padding: 0.3rem 0; border-bottom: 1px solid var(--rand); }
+.raumteil label.inline { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; }
+.raumteil .zahlfeld input { width: 5rem; }
+.raumteil select { width: auto; margin: 0; }

@@ -1,6 +1,6 @@
 // Zugriff auf die Backend-API. Die Sitzung liegt im HttpOnly-Cookie; das Frontend sieht kein Token.
 // Typen der API-Daten; Schlüssel wie im Backend (snake_case).
-import type { BibObjekt, PlatziertesModul, RaumModulplanung, Regel, Sperrflaeche, TuerFenster } from '@infrarot/rechenkern';
+import type { BibObjekt, PlatziertesModul, RaumGeometrie, RaumModulplanung, Regel, Sperrflaeche, TuerFenster } from '@infrarot/rechenkern';
 import { anfrage } from './offline/daten';
 
 export type { PlatziertesModul, Sperrflaeche, TuerFenster };
@@ -121,6 +121,8 @@ export interface Raum {
   module: PlatziertesModul[];
   /** Türen und Fenster nur zur Orientierung (keine Sperrflächen) */
   tueren_fenster: TuerFenster[];
+  /** Raumform aus Rechtecken (Paket M2); null/ohne Teile = Rechteck Länge × Breite */
+  geometrie?: RaumGeometrie | null;
 }
 
 export interface Flaeche {
@@ -254,6 +256,8 @@ export interface AuswertungRaum {
   raumtyp: string | null;
   flaeche_m2: number | null;
   hoehe_m: number | null;
+  umfang_m?: number | null;
+  umriss?: { x: number; y: number }[][] | null;
   quelle: Heizlastquelle;
   werte: { pauschale_w_m2: Wert; theta_int: Wert; luftwechsel: Wert };
   hinweise: string[];

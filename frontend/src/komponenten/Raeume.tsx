@@ -28,7 +28,9 @@ import {
   watt,
   zahl,
 } from '../texte';
+import { raumform } from '@infrarot/rechenkern';
 import { Bauteile } from './Bauteile';
+import { Raumform } from './Raumform';
 import { Deckenplan, LeistungWarnung, PlanVorschau } from './Deckenplan';
 import { Hilfe, Meldung, Schalter, Textfeld, Zahlfeld } from './Felder';
 
@@ -192,7 +194,17 @@ function RaumKarte({
   // Außendienst: vereinfachte Karte; W/m² setzt nur der Fachprüfer (Festlegung 13.10.2026, Server prüft ebenso)
   const fach = fachansicht(benutzer);
   const pauschaleGesperrt = gesperrt || !hatRolle(benutzer, 'fachpruefer');
-  const speichern = (feld: keyof Raum) => (wert: unknown) => aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert }));
+  const speichern = (feld: keyof Raum) => (wert: unknown) => {
+    // Raumform mit Teilen: Länge/Breite ändern das Hauptrechteck – Fläche der ganzen Form mitschicken (Rechenkern)
+    const teile = raum.geometrie?.teile ?? [];
+    if ((feld === 'laenge_m' || feld === 'breite_m') && teile.length > 0 && typeof wert === 'number') {
+      const w = feld === 'laenge_m' ? wert : (raum.laenge_m ?? 0);
+      const h = feld === 'breite_m' ? wert : (raum.breite_m ?? 0);
+      const flaeche = w > 0 && h > 0 ? raumform({ basis: { w, h }, teile }).flaeche_m2 : null;
+      return aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert, flaeche_m2: flaeche }));
+    }
+    return aendern(() => api.patch(`/raeume/${raum.id}`, { [feld]: wert }));
+  };
   const pauschale = ergebnis?.werte.pauschale_w_m2.wert ?? null;
   // Altbau: Orientierungswert des Raumtyps für den Fachprüfer (nur Platzhalter, nie automatisch verwendet)
   const richtwert = vorgaben.raumtypen.find((t) => t.id === raum.raumtyp_id)?.richtwert_altbau_w_m2 ?? null;
@@ -234,8 +246,8 @@ function RaumKarte({
         </label>
         <span className="mal">=</span>
         <span className="flaeche">
-          <small>Fläche</small>
-          {zahl(raum.flaeche_m2)} m²
+          <small>{(raum.geometrie?.teile ?? []).length > 0 ? 'Fläche (Raumform)' : 'Fläche'}</small>
+          {zahl(ergebnis?.flaeche_m2 ?? raum.flaeche_m2)} m²
         </span>
         <label>
           Höhe
@@ -268,6 +280,7 @@ function RaumKarte({
           )
         )}
       </div>
+      <Raumform raum={raum} gesperrt={gesperrt} speichern={(daten) => aendern(() => api.patch(`/raeume/${raum.id}`, daten))} />
 
       {fach && (
         <div className="quelle">

@@ -8,8 +8,12 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import {
   bevorzugtGedreht,
   FENSTER_BREITE_M,
+  formVonRaum,
   istBad,
   istPunkt,
+  punktImRaum,
+  teilRechteck,
+  wandAbstand,
   modulRechteck,
   naechsteWand,
   objektName,
@@ -27,6 +31,8 @@ import {
   zulaessigeModule,
   type KatalogModul,
   type PlatzierungsRaum,
+  type Raumform,
+  type RaumTeil,
   type TuerFenster,
   type Wand,
 } from '@infrarot/rechenkern';
@@ -61,7 +67,7 @@ const WAENDE: Record<Wand, string> = { oben: 'oben', unten: 'unten', links: 'lin
 const WANDANFANG: Record<Wand, string> = { oben: 'von links', unten: 'von links', links: 'von oben', rechts: 'von oben' };
 
 type Ecke = 'nw' | 'ne' | 'sw' | 'se';
-type Art = 'sperr' | 'modul' | 'oeffnung';
+type Art = 'sperr' | 'modul' | 'oeffnung' | 'teil';
 type Auswahl = { art: Art; id: string } | null;
 /** schieben; Rechteck: Ecke ziehen; Streifen: Kante ziehen (Breite); Tür/Fenster: Anfang oder Ende ziehen (Breite) */
 type Zug = { art: Art; id: string; modus: 'schieben' | Ecke | 'kante' | 'anfang' | 'ende'; dx: number; dy: number; bewegt: boolean };
@@ -81,16 +87,16 @@ function katalogFuerRechenkern(k: KatalogModulDaten[]): KatalogModul[] {
 }
 
 /** Rechteck aus festem Gegeneck und Zeigerposition (Größe ändern an jeder Ecke) */
-function eckeZiehen(s: Sperrflaeche, ecke: Ecke, p: { x: number; y: number }, L: number, B: number): Pick<Sperrflaeche, 'x' | 'y' | 'b' | 't'> {
+function eckeZiehen(s: Sperrflaeche, ecke: Ecke, p: { x: number; y: number }, bb: Raumform['bbox']): Pick<Sperrflaeche, 'x' | 'y' | 'b' | 't'> {
   const fx = ecke === 'nw' || ecke === 'sw' ? s.x + s.b : s.x;
   const fy = ecke === 'nw' || ecke === 'ne' ? s.y + s.t : s.y;
-  const px = rasten(begrenzen(p.x, 0, L));
-  const py = rasten(begrenzen(p.y, 0, B));
+  const px = rasten(begrenzen(p.x, bb.x0, bb.x1));
+  const py = rasten(begrenzen(p.y, bb.y0, bb.y1));
   const x0 = Math.min(px, fx);
   const y0 = Math.min(py, fy);
   return {
-    x: x0 === fx ? Math.min(fx, L - MIN_GROESSE) : x0,
-    y: y0 === fy ? Math.min(fy, B - MIN_GROESSE) : y0,
+    x: x0 === fx ? Math.min(fx, bb.x1 - MIN_GROESSE) : x0,
+    y: y0 === fy ? Math.min(fy, bb.y1 - MIN_GROESSE) : y0,
     b: Math.max(MIN_GROESSE, Math.abs(px - fx)),
     t: Math.max(MIN_GROESSE, Math.abs(py - fy)),
   };
@@ -99,6 +105,11 @@ function eckeZiehen(s: Sperrflaeche, ecke: Ecke, p: { x: number; y: number }, L:
 export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Props) {
   const L = raum.laenge_m ?? 0;
   const B = raum.breite_m ?? 0;
+  // Raumform aus Rechtecken (Paket M2): Umrandung kann bei Anbauten oben/links negative Koordinaten haben
+  const [teileZug, setTeileZug] = useState<RaumTeil[] | null>(null);
+  const teile = teileZug ?? raum.geometrie?.teile ?? [];
+  const form = useMemo(() => formVonRaum({ laenge_m: L, breite_m: B, geometrie: { basis: { w: L, h: B }, teile } }), [L, B, teile]);
+  const bb = form?.bbox ?? { x0: 0, y0: 0, x1: L, y1: B };
   const [sperr, setSperr] = useState<Sperrflaeche[]>(raum.sperrflaechen ?? []);
   const [module, setModule] = useState<PlatziertesModul[]>(raum.module ?? []);
   const [oeffnungen, setOeffnungen] = useState<TuerFenster[]>(raum.tueren_fenster ?? []);
@@ -133,7 +144,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const masslinie = wandStaerke + px(14);
   const aussenTuer = Math.max(0, ...oeffnungen.filter((o) => o.art === 'tuer' && o.aufschlag === 'aussen').map((o) => o.breite));
   const rand = Math.max(masslinie + px(24), aussenTuer + px(16));
-  const vbBreite = L + 2 * rand;
+  const vbBreite = bb.x1 - bb.x0 + 2 * rand;
 
   // Maßstab (Bildschirmpixel je Meter), damit Schrift und Anfasser unabhängig von der Raumgröße fingerfreundlich bleiben
   useEffect(() => {
@@ -141,7 +152,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     if (!el) return;
     const messen = () => {
       const r = el.getBoundingClientRect();
-      const vbHoehe = B + 2 * rand;
+      const vbHoehe = bb.y1 - bb.y0 + 2 * rand;
       // preserveAspectRatio meet: der kleinere Maßstab gilt; gerundet, damit sich Rand und Maßstab schnell einpendeln
       if (r.width > 0) setPxProM(Math.round(Math.min(r.width / vbBreite, r.height > 0 ? r.height / vbHoehe : Infinity) * 2) / 2);
     };
@@ -149,13 +160,13 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     const beobachter = new ResizeObserver(messen);
     beobachter.observe(el);
     return () => beobachter.disconnect();
-  }, [vbBreite, B, rand]);
+  }, [vbBreite, bb.y0, bb.y1, rand]);
 
   const objekte = useMemo(() => vorgaben.objekte ?? [], [vorgaben.objekte]);
   const regeln = useMemo(() => regelnAufloesen(vorgaben.regeln, objekte), [vorgaben.regeln, objekte]);
   const objektVon = (s: Sperrflaeche) => objekte.find((o) => o.schluessel === objektSchluessel(s));
   const raumtyp = vorgaben.raumtypen.find((t) => t.id === raum.raumtyp_id)?.bezeichnung ?? null;
-  const geometrie: PlatzierungsRaum = { laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, ist_bad: istBad(raumtyp) };
+  const geometrie: PlatzierungsRaum = { laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, ist_bad: istBad(raumtyp), form };
   const heizlast = ergebnis?.phi_massgeblich_w ?? null;
   const planung = raumModulplanung(geometrie, sperr, module, regeln, heizlast);
   // Wärmeverteilung: Schalter je Gerät merken; gerechnet wird nur, wenn nicht gerade gezogen wird
@@ -172,9 +183,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   const waerme = useMemo(
     () =>
       waermeAn && zieht === null && L > 0 && B > 0
-        ? waermeBerechnen({ laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, raumtemperatur_c: raumtemperatur, module, sperrflaechen: sperr, katalog, regeln: vorgaben.regeln, objekte })
+        ? waermeBerechnen({ laenge_m: L, breite_m: B, hoehe_m: raum.hoehe_m, raumtemperatur_c: raumtemperatur, module, sperrflaechen: sperr, katalog, regeln: vorgaben.regeln, objekte, form })
         : null,
-    [waermeAn, zieht, L, B, raum.hoehe_m, raumtemperatur, module, sperr, katalog, vorgaben.regeln, objekte],
+    [waermeAn, zieht, L, B, raum.hoehe_m, raumtemperatur, module, sperr, katalog, vorgaben.regeln, objekte, form],
   );
   const letzteWaerme = useRef(waerme);
   if (waerme) letzteWaerme.current = waerme;
@@ -253,7 +264,9 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     const p = punkt(e);
     let dx = 0;
     let dy = 0;
-    if (art === 'oeffnung') {
+    if (art === 'teil') {
+      setTeileZug(teile);
+    } else if (art === 'oeffnung') {
       const o = oeffnungen.find((x) => x.id === id)!;
       const w = naechsteWand(p, L, B);
       dx = (w.wand === o.wand ? w.s : o.position) - o.position;
@@ -271,7 +284,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     const z = zug.current;
     if (waermeAn && !z) {
       const q = punkt(e);
-      setZeiger(q.x >= 0 && q.y >= 0 && q.x <= L && q.y <= B ? q : null);
+      setZeiger(form && punktImRaum(form, q.x, q.y) ? q : null);
     }
     if (!z) return;
     const p = punkt(e);
@@ -281,7 +294,28 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         alt.map((x) => {
           if (x.id !== z.id) return x;
           const r = modulRechteck(x);
-          return { ...x, x: rasten(begrenzen(p.x - z.dx, 0, L - r.b)), y: rasten(begrenzen(p.y - z.dy, 0, B - r.t)) };
+          return { ...x, x: rasten(begrenzen(p.x - z.dx, bb.x0, bb.x1 - r.b)), y: rasten(begrenzen(p.y - z.dy, bb.y0, bb.y1 - r.t)) };
+        }),
+      );
+      return;
+    }
+    if (z.art === 'teil') {
+      // Anfasser an der äußeren Ecke eines Anbaus/Ausschnitts: Länge entlang der Wand und Tiefe quer dazu
+      const i = Number(z.id);
+      setTeileZug((alt) =>
+        (alt ?? teile).map((t, n) => {
+          if (n !== i) return t;
+          const entlang = t.wand === 'oben' || t.wand === 'unten' ? p.x : p.y;
+          const wandLinie = t.wand === 'oben' ? 0 : t.wand === 'unten' ? B : t.wand === 'links' ? 0 : L;
+          const quer = t.wand === 'oben' || t.wand === 'unten' ? p.y : p.x;
+          const nachAussen = t.wand === 'oben' || t.wand === 'links' ? -1 : 1;
+          const tiefe = (quer - wandLinie) * nachAussen * (t.op === 'add' ? 1 : -1);
+          const wandLaengeT = t.wand === 'oben' || t.wand === 'unten' ? L : B;
+          return {
+            ...t,
+            laenge: rasten(begrenzen(entlang - t.versatz, MIN_GROESSE, wandLaengeT - t.versatz)),
+            tiefe: rasten(begrenzen(tiefe, MIN_GROESSE, t.op === 'sub' ? (t.wand === 'oben' || t.wand === 'unten' ? B : L) - MIN_GROESSE : 20)),
+          };
         }),
       );
       return;
@@ -316,8 +350,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           const versatz = w === 'oben' ? z.dy : w === 'unten' ? s.t - z.dy : w === 'links' ? z.dx : s.b - z.dx;
           return { ...s, ...streifenRechteck(w, rasten(ab - versatz), lage.breite, L, B) };
         }
-        if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') return { ...s, ...eckeZiehen(s, z.modus, p, L, B) };
-        return { ...s, x: rasten(begrenzen(p.x - z.dx, 0, L - s.b)), y: rasten(begrenzen(p.y - z.dy, 0, B - s.t)) };
+        if (z.modus === 'nw' || z.modus === 'ne' || z.modus === 'sw' || z.modus === 'se') return { ...s, ...eckeZiehen(s, z.modus, p, bb) };
+        return { ...s, x: rasten(begrenzen(p.x - z.dx, bb.x0, bb.x1 - s.b)), y: rasten(begrenzen(p.y - z.dy, bb.y0, bb.y1 - s.t)) };
       }),
     );
   }
@@ -326,8 +360,15 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
     const z = zug.current;
     zug.current = null;
     setZieht(null);
+    if (z?.art === 'teil' && !z.bewegt) setTeileZug(null);
     if (!z?.bewegt) return;
-    if (z.art === 'modul') void speichernModule(module);
+    if (z.art === 'teil') {
+      const neu = teileZug ?? teile;
+      const f = formVonRaum({ laenge_m: L, breite_m: B, geometrie: { basis: { w: L, h: B }, teile: neu } });
+      void aendern(() => api.patch(`/raeume/${raum.id}`, { geometrie: { basis: { w: L, h: B }, teile: neu }, flaeche_m2: f?.flaeche_m2 ?? null })).then(() =>
+        setTeileZug(null),
+      );
+    } else if (z.art === 'modul') void speichernModule(module);
     else if (z.art === 'oeffnung') void speichernOeffnungen(oeffnungen);
     else void speichernSperr(sperr);
   }
@@ -342,7 +383,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
   function hintergrund(e: ReactPointerEvent) {
     if (waermeAn) {
       const q = punkt(e);
-      setZeiger(q.x >= 0 && q.y >= 0 && q.x <= L && q.y <= B ? q : null);
+      setZeiger(form && punktImRaum(form, q.x, q.y) ? q : null);
     }
     if (!neueOeffnung) return setAuswahl(null);
     const p = punkt(e);
@@ -449,7 +490,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
         <svg
           ref={svg}
           className={`plan${neueOeffnung ? ' plan-wand-waehlen' : ''}`}
-          viewBox={`${-rand} ${-rand} ${vbBreite} ${B + 2 * rand}`}
+          viewBox={`${bb.x0 - rand} ${bb.y0 - rand} ${vbBreite} ${bb.y1 - bb.y0 + 2 * rand}`}
           preserveAspectRatio="xMidYMid meet"
           onPointerMove={ziehen}
           onPointerUp={loslassen}
@@ -458,20 +499,49 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           role="img"
           aria-label={`Deckenplan ${zahl(L)} × ${zahl(B)} m`}
         >
+          {form && !form.rechteck ? (
+            <>
+              {/* Raumform: Umriss mit kräftiger Wandlinie, Fläche weiß */}
+              <path className="plan-wand-linie" d={umrissPfad(form)} style={{ strokeWidth: `${Math.max(6, wandStaerke * pxProM * 2)}px` }} />
+              <path className="plan-raum" d={umrissPfad(form)} />
+            </>
+          ) : (
+            <>
           {/* Wände als Band außen um den Raum */}
-          <path
-            className="plan-wand"
-            fillRule="evenodd"
-            d={`M${-wandStaerke},${-wandStaerke}H${L + wandStaerke}V${B + wandStaerke}H${-wandStaerke}Z M0,0V${B}H${L}V0Z`}
-          />
-          <rect x={0} y={0} width={L} height={B} className="plan-raum" />
-          {/* Wärmeverteilung unter Objekten und Modulen: Umrisse und Beschriftungen bleiben obenauf lesbar */}
-          {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} deckkraft={deckkraft} />}
-          {regeln.wand_m !== null && L > 2 * regeln.wand_m && B > 2 * regeln.wand_m && (
-            <rect x={regeln.wand_m} y={regeln.wand_m} width={L - 2 * regeln.wand_m} height={B - 2 * regeln.wand_m} className="plan-wandabstand" />
-          )}
+              <path
+                className="plan-wand"
+                fillRule="evenodd"
+                d={`M${-wandStaerke},${-wandStaerke}H${L + wandStaerke}V${B + wandStaerke}H${-wandStaerke}Z M0,0V${B}H${L}V0Z`}
+              />
+              <rect x={0} y={0} width={L} height={B} className="plan-raum" />
+              {/* Wärmeverteilung unter Objekten und Modulen: Umrisse und Beschriftungen bleiben obenauf lesbar */}
+              {waermeAnzeige && waermeAnzeige.fehlt.length === 0 && <WaermeSchicht ergebnis={waermeAnzeige} skala={waermeSkala!} deckkraft={deckkraft} />}
+              {regeln.wand_m !== null && L > 2 * regeln.wand_m && B > 2 * regeln.wand_m && (
+                <rect x={regeln.wand_m} y={regeln.wand_m} width={L - 2 * regeln.wand_m} height={B - 2 * regeln.wand_m} className="plan-wandabstand" />
+              )}
 
-          <Bemassung L={L} B={B} abstand={masslinie} schrift={schrift} strich={px(6)} />
+            </>
+          )}
+          {form && !form.rechteck ? (
+            <SegmentBemassung form={form} abstand={masslinie} schrift={schrift} />
+          ) : (
+            <Bemassung L={L} B={B} abstand={masslinie} schrift={schrift} strich={px(6)} />
+          )}
+          {/* Anfasser je Anbau/Ausschnitt an der äußeren Ecke: Länge und Tiefe ziehen */}
+          {!gesperrt &&
+            teile.map((t, i) => {
+              const r = teilRechteck(t, L, B);
+              const ende = t.wand === 'oben' || t.wand === 'unten' ? r.x + r.b : r.y + r.t;
+              const fern =
+                t.wand === 'oben' ? (t.op === 'add' ? r.y : r.y + r.t) : t.wand === 'unten' ? (t.op === 'add' ? r.y + r.t : r.y) : t.wand === 'links' ? (t.op === 'add' ? r.x : r.x + r.b) : t.op === 'add' ? r.x + r.b : r.x;
+              const [cx, cy] = t.wand === 'oben' || t.wand === 'unten' ? [ende, fern] : [fern, ende];
+              return (
+                <g key={`teil-${i}`} className="plan-griff plan-teil-griff" onPointerDown={(e) => anfassen(e, 'teil', String(i))}>
+                  <circle cx={cx} cy={cy} r={griffTreffer} className="plan-tippflaeche" />
+                  <circle cx={cx} cy={cy} r={griffR} className="plan-griff-punkt" />
+                </g>
+              );
+            })}
 
           {oeffnungen.map((o) => (
             <Oeffnung
@@ -579,6 +649,7 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
           })}
 
           {gewaehltesModul &&
+            form?.rechteck !== false &&
             wandAbstaende(modulRechteck(gewaehltesModul), L, B).map((a) => {
               const waagerecht = a.wand === 'links' || a.wand === 'rechts';
               const mx = (a.von.x + a.bis.x) / 2;
@@ -636,7 +707,8 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
       )}
       {waermeAnzeige && <WaermeLegende ergebnis={waermeAnzeige} skala={waermeSkala!} zeiger={zeiger} />}
       <p className="leise klein-text">
-        {zahl(L)} × {zahl(B)} m{regeln.wand_m !== null && ` · gestrichelt: Wandabstand ${zahl(regeln.wand_m * 100, 0)} cm`} · Raster 5 cm · antippen =
+        {form && !form.rechteck ? `Raumform ${zahl(form.flaeche_m2)} m² (Hauptrechteck ${zahl(L)} × ${zahl(B)} m, Ecke anfassen = Teil ändern)` : `${zahl(L)} × ${zahl(B)} m`}
+        {regeln.wand_m !== null && ` · gestrichelt: Wandabstand ${zahl(regeln.wand_m * 100, 0)} cm`} · Raster 5 cm · antippen =
         auswählen, ziehen = verschieben{!gesperrt && ', Eckpunkte ziehen = Größe ändern'}
       </p>
       {neueOeffnung && (
@@ -656,9 +728,11 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
                 Modul {module.indexOf(gewaehltesModul) + 1}: {gewaehltesModul.artikel_nr} ({watt(gewaehltesModul.leistung_w)})
               </strong>
               <span className="leise">
-                {wandAbstaende(modulRechteck(gewaehltesModul), L, B)
-                  .map((a) => `Wand ${a.wand} ${m(a.abstand)}`)
-                  .join(' · ')}
+                {form && !form.rechteck
+                  ? `nächste Wand ${m(wandAbstand(form, modulRechteck(gewaehltesModul)))}`
+                  : wandAbstaende(modulRechteck(gewaehltesModul), L, B)
+                      .map((a) => `Wand ${a.wand} ${m(a.abstand)}`)
+                      .join(' · ')}
               </span>
               <button className="knopf-zweit" onClick={() => modulAendern({ gedreht: !gewaehltesModul.gedreht })}>
                 Drehen
@@ -740,6 +814,37 @@ export function Deckenplan({ raum, ergebnis, vorgaben, gesperrt, aendern }: Prop
 
       <PlanErgebnis planung={planung} module={module} />
     </div>
+  );
+}
+
+/** SVG-Pfad des Umrisses (alle Linienzüge) */
+export function umrissPfad(form: Pick<Raumform, 'umriss'>): string {
+  return form.umriss.map((ring) => `M${ring.map((p) => `${p.x},${p.y}`).join('L')}Z`).join(' ');
+}
+
+/** Bemaßung aller Wandsegmente einer Raumform: Länge außen neben jedem Segment */
+function SegmentBemassung({ form, abstand, schrift }: { form: Raumform; abstand: number; schrift: number }) {
+  return (
+    <g className="plan-bemassung">
+      {form.segmente.map((sg, i) => {
+        const mx = (sg.x1 + sg.x2) / 2 - sg.innen.x * abstand;
+        const my = (sg.y1 + sg.y2) / 2 - sg.innen.y * abstand;
+        const senkrecht = sg.x1 === sg.x2;
+        return (
+          <text
+            key={i}
+            x={mx}
+            y={my}
+            fontSize={schrift}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            transform={senkrecht ? `rotate(-90 ${mx} ${my})` : undefined}
+          >
+            {zahl(sg.laenge)} m
+          </text>
+        );
+      })}
+    </g>
   );
 }
 
@@ -1121,10 +1226,12 @@ export function PlanVorschau({ raum }: { raum: Raum }) {
   const L = raum.laenge_m ?? 0;
   const B = raum.breite_m ?? 0;
   if (L <= 0 || B <= 0) return null;
-  const rand = 0.15 * Math.max(L, B);
+  const form = formVonRaum({ laenge_m: L, breite_m: B, geometrie: raum.geometrie ?? null });
+  const bb = form?.bbox ?? { x0: 0, y0: 0, x1: L, y1: B };
+  const rand = 0.15 * Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0);
   return (
-    <svg className="plan-vorschau" viewBox={`${-rand} ${-rand} ${L + 2 * rand} ${B + 2 * rand}`} aria-hidden="true">
-      <rect x={0} y={0} width={L} height={B} className="plan-raum" />
+    <svg className="plan-vorschau" viewBox={`${bb.x0 - rand} ${bb.y0 - rand} ${bb.x1 - bb.x0 + 2 * rand} ${bb.y1 - bb.y0 + 2 * rand}`} aria-hidden="true">
+      {form && !form.rechteck ? <path d={umrissPfad(form)} className="plan-raum" /> : <rect x={0} y={0} width={L} height={B} className="plan-raum" />}
       {(raum.tueren_fenster ?? []).map((o) => {
         const [a, e] = oeffnungStrecke(o, L, B);
         return <line key={o.id} x1={a.x} y1={a.y} x2={e.x} y2={e.y} className={`vorschau-${o.art}`} />;

@@ -200,6 +200,15 @@ Nur Deckenmontage und vorerst nur rechteckige Räume. Rechenregeln im Rechenkern
   - Beides geht einzeln oder in der Sammelansicht „Vorgaben-Abgleich“ (Spalte „Anlass: Moduldaten“).
   - Freigegebene Projekte bleiben unverändert.
 
+### Raumform aus Rechtecken (Festlegung 02.11.2026, Paket M2)
+
+- Raum = Hauptrechteck (Länge × Breite aus der Schnellerfassung) plus Anbauten bzw. minus Ausschnitte. Jedes Teil sitzt an einer Wand des Hauptrechtecks: Versatz vom Wandanfang (oben/unten von links, links/rechts von oben), Länge entlang der Wand, Tiefe quer dazu (Anbau nach außen, Ausschnitt nach innen). Vorlagen: Rechteck, L-Form, U-Form, Erker (vorbelegt, anpassbar). Nicht Teil: freie Polygone, Dachschrägen-Geometrie, Planimport.
+- Rechenkern (`raumform.ts`): Alle Rechteckkanten spannen ein Raster auf, je Zelle wird in der Reihenfolge der Teile vereinigt bzw. abgezogen. Daraus: Fläche, Umfang, Wandsegmente, Umriss.
+- Heizlast wie bisher je Raumtyp aus der **Gesamtfläche** der Form; Volumen = Fläche × Höhe.
+- Modulprüfung: Ein Modul muss ganz im Raum liegen („ragt über den Raum hinaus“, z. B. über einem Einsprung) und den Wandabstand zu **jedem** Wandsegment einhalten, gemessen als kürzeste euklidische Entfernung – an Innenecken zählt die Ecke. Die automatische Platzierung beachtet dasselbe.
+- Wärmeverteilung nur innerhalb der Form; Deckenplan mit Bemaßung jedes Wandsegments.
+- Türen, Fenster und Dachschrägen-Streifen beziehen sich weiter auf die Wände des Hauptrechtecks.
+
 ### Objekte im Raum: Objektbibliothek (Festlegung 01.11.2026)
 
 Die festen Sperrflächen-Typen sind durch eine **Objektbibliothek** ersetzt. Sie gehört zu den Fachvorgaben: Fachprüfer und Admins pflegen sie (Seite „Fachvorgaben“, Karte „Objektbibliothek“, Bearbeiten im Dialog), jede Änderung wird protokolliert. Jedes Projekt rechnet mit seiner **eingefrorenen Kopie** (wie Regeln und Raumtypen). Zentrale Änderungen erscheinen im Projekt als Unterschied (Bereich „Objektbibliothek“) und laufen über die verfeinerte Sperre: ohne Auswirkung still übernommen, mit Auswirkung wartet das Projekt auf den Fachprüfer.

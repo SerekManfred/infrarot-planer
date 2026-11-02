@@ -17,6 +17,8 @@
 // Punkte (Deckeneinbauten wie Leuchten) werden nie überdeckt, ihr Abstand zählt zur nächsten Modulkante.
 
 /** Frühere feste Sperrflächen-Typen (bis 01.11.2026); ihre Schlüssel sind zugleich Schlüssel der Objektbibliothek */
+import { enthaeltRechteck, rechteckForm, wandAbstand, type Raumform } from './raumform';
+
 export type SperrTyp = 'sitzplatz' | 'bett' | 'hochschrank' | 'dachschraege' | 'dusche' | 'sonstiges' | 'leuchte' | 'rauchmelder';
 export type Wand = 'oben' | 'unten' | 'links' | 'rechts';
 
@@ -154,6 +156,13 @@ export interface PlatzierungsRaum {
   breite_m: number;
   hoehe_m: number | null;
   ist_bad: boolean;
+  /** zusammengesetzte Raumform (Paket M2); fehlt sie, gilt das Rechteck Länge × Breite */
+  form?: Raumform | null;
+}
+
+/** Raumform für Prüfung und Platzierung: angegebene Form oder Rechteck */
+function formVon(raum: PlatzierungsRaum): Raumform {
+  return raum.form ?? rechteckForm(raum.laenge_m, raum.breite_m);
 }
 
 const EPS = 1e-6;
@@ -291,8 +300,7 @@ function modulName(module: PlatziertesModul[], i: number): string {
 export function pruefeModule(raum: PlatzierungsRaum, sperr: Sperrflaeche[], module: PlatziertesModul[], r: Regeln): Pruefung {
   const verstoesse: Record<string, string[]> = {};
   const hinweise = new Set<string>();
-  const L = raum.laenge_m;
-  const B = raum.breite_m;
+  const form = formVon(raum);
   const zuNiedrig = r.mindesthoehe_m !== null && raum.hoehe_m !== null && raum.hoehe_m < r.mindesthoehe_m - EPS;
   if (module.length > 0) {
     if (r.wand_m === null) hinweise.add(`${fehlt(r, 'abstand_wand_cm', 'Mindestabstand Modul – Wand')} – nicht geprüft`);
@@ -307,10 +315,10 @@ export function pruefeModule(raum: PlatzierungsRaum, sperr: Sperrflaeche[], modu
   module.forEach((m, i) => {
     const liste: string[] = [];
     const a = modulRechteck(m);
-    if (a.x < -EPS || a.y < -EPS || a.x + a.b > L + EPS || a.y + a.t > B + EPS) {
+    if (!enthaeltRechteck(form, a)) {
       liste.push('ragt über den Raum hinaus');
     } else if (r.wand_m !== null) {
-      const zurWand = Math.min(a.x, a.y, L - (a.x + a.b), B - (a.y + a.t));
+      const zurWand = wandAbstand(form, a);
       if (zurWand < r.wand_m - EPS) liste.push(`Abstand zur Wand ${cm(zurWand)} (mind. ${cm(r.wand_m)})`);
     }
     for (const s of sperr) {
@@ -439,16 +447,20 @@ export function fehlendeRegelnFuerPlanung(sperr: Sperrflaeche[], r: Regeln): str
 
 function kandidaten(raum: PlatzierungsRaum, sperr: Sperrflaeche[], r: Regeln, w: number, h: number): Kandidat[] {
   const wand = r.wand_m ?? 0;
+  const form = formVon(raum);
+  const { x0, y0, x1, y1 } = form.bbox;
   const liste: Kandidat[] = [];
-  const nx = Math.floor((raum.laenge_m - 2 * wand - w) / RASTER_M + EPS);
-  const ny = Math.floor((raum.breite_m - 2 * wand - h) / RASTER_M + EPS);
+  const nx = Math.floor((x1 - x0 - 2 * wand - w) / RASTER_M + EPS);
+  const ny = Math.floor((y1 - y0 - 2 * wand - h) / RASTER_M + EPS);
   if (nx < 0 || ny < 0) return liste;
   // Rest gleichmäßig verteilen, damit das Raster mittig sitzt
-  const rx = (raum.laenge_m - 2 * wand - w - nx * RASTER_M) / 2;
-  const ry = (raum.breite_m - 2 * wand - h - ny * RASTER_M) / 2;
+  const rx = (x1 - x0 - 2 * wand - w - nx * RASTER_M) / 2;
+  const ry = (y1 - y0 - 2 * wand - h - ny * RASTER_M) / 2;
   for (let i = 0; i <= nx; i++) {
     for (let j = 0; j <= ny; j++) {
-      const a = { x: wand + rx + i * RASTER_M, y: wand + ry + j * RASTER_M, b: w, t: h };
+      const a = { x: x0 + wand + rx + i * RASTER_M, y: y0 + wand + ry + j * RASTER_M, b: w, t: h };
+      // nicht rechteckige Räume: ganz im Raum und mit Wandabstand zu allen Wandsegmenten (auch Innenecken)
+      if (!form.rechteck && (!enthaeltRechteck(form, a) || wandAbstand(form, a) < wand - EPS)) continue;
       let frei = Infinity;
       let ok = true;
       for (const s of sperr) {
