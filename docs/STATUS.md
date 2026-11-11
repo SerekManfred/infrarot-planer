@@ -22,7 +22,7 @@ Ausrichtung: Vor-Ort-Planung von Infrarot-Deckenmodulen durch den Außendienst d
 - Sicherung des Caddyfile: `/opt/schulung/Caddyfile.bak-2026-10-12`. Rückweg: `sudo bash betrieb/caddy_einrichten.sh rueckbau`.
 - Die Infrarot-Ports bleiben nur an 127.0.0.1 gebunden.
 
-**Daten (18.10.2026):** ein Konto, serek.manfred@googlemail.com, mit den Rollen **Admin + Fachprüfer**.
+**Daten (18.10.2026):** ein Konto (Auftraggeber) mit den Rollen **Admin + Fachprüfer**.
 - Zwei Testprojekte des Auftraggebers, „Test1“ und „Test2“: neue Vorgaben am 18.10.2026 übernommen (Kommandozeile, protokolliert).
   - Heizlast unverändert: 2 040 W bzw. 3 140 W. Betroffen waren sie trotzdem, weil mit den Regeln jetzt eine benötigte Leistung gilt (Leistungsreserve).
   - Beide stehen auf „Vor-Ort-Entwurf“. Test2 war „fachlich geprüft“; eine Übernahme mit Auswirkung setzt die Prüfung zurück.
@@ -219,7 +219,7 @@ Regeln im Detail: `docs/FACHKONZEPT.md`, Abschnitt „Modulplanung“ → „Kat
    - Der Server prüft das bei jedem Zugriff: Liste, Projekt- und Raumdaten, Auswertung, Berechnungen, Offline-Paket, Auschecken, Synchronisierung. Fremde Projekte gelten als „nicht gefunden“.
    - Die Sammelansicht ist ohnehin nur für Fachprüfer.
 2. **Zuweisung:** Admins wählen im Projektkopf unter „Zuständig (Außendienst)“ einen anderen aktiven Außendienst-Benutzer, z. B. als Urlaubsvertretung. Das wird protokolliert. Die Projektliste zeigt eine Spalte „Zuständig“.
-3. **Test1–Test3** gehörten bereits dem Admin-Konto serek.manfred@googlemail.com. Das Außendienst-Konto hsteber@web.de sieht sie nicht mehr; bei Bedarf zuweisen.
+3. **Test1–Test3** gehörten bereits dem Admin-Konto. Das Außendienst-Konto sieht sie nicht mehr; bei Bedarf zuweisen.
 4. **Projektnummer:**
    - wird beim Anlegen automatisch vergeben, fortlaufend je Jahr (2026-0001, 2026-0002 …);
    - im Formular nicht mehr eintippbar, nur Admins ändern sie im Projektkopf;
@@ -245,7 +245,7 @@ Regeln im Detail: `docs/FACHKONZEPT.md`, Abschnitt „Modulplanung“ → „Kat
    - Hinweis: Geräte hinter demselben Internetanschluss (z. B. im Büro) teilen sich eine IP-Adresse und damit den Zähler.
    - Abwägung: Ohne Zählung je Konto kann ein Angreifer mit vielen IP-Adressen mehr Passwörter ausprobieren. Dagegen helfen die Mindestlänge von 12 Zeichen und die langsame Passwortprüfung (Argon2).
 3. **Benutzerverwaltung → „Anmeldesperren“:** Geräte ab 5 Fehlversuchen mit den dort versuchten Konten. „Sperre lösen“ wirkt sofort und wird protokolliert. Kommandozeile: `sperre-loesen --email … | --ip …`.
-4. Die Sperre für serek.manfred@googlemail.com (5 Fehlversuche um 15:25–15:26 Uhr von 45.155.118.168) wurde am 31.10.2026 um 15:35 Uhr aufgehoben (protokolliert).
+4. Die Sperre für das Admin-Konto (5 Fehlversuche um 15:25–15:26 Uhr von einer externen IP-Adresse) wurde am 31.10.2026 um 15:35 Uhr aufgehoben (protokolliert).
 
 ## Korrektur: Auswahl im Deckenplan, App-Aktualisierung (31.10.2026)
 
